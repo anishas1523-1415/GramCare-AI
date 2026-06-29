@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { Mic, MicOff, Video, VideoOff, PhoneOff, Activity, FileText } from 'lucide-react';
 
-const SERVER_URL = 'http://localhost:4000'; // Node.js Signaling Server
+const SERVER_URL = process.env.NEXT_PUBLIC_WS_URL || 'http://localhost:4000'; // Node.js Signaling Server
 
 export default function ConsultationRoom({ onEndCall, roomId = "emergency_room_1", patientName = "P1" }: { onEndCall: () => void, roomId?: string, patientName?: string }) {
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);

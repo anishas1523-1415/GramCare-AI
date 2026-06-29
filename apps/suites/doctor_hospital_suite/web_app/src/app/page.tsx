@@ -124,7 +124,8 @@ function PatientHistoryView() {
 
   const fetchRecords = () => {
     setLoading(true);
-    fetch('http://localhost:8000/api/v1/ehr/patient/P1')
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+    fetch(`${API_URL}/api/v1/ehr/patient/P1`)
       .then(res => res.json())
       .then(data => {
         setRecords(data);
@@ -146,7 +147,8 @@ function PatientHistoryView() {
     
     setIsSubmitting(true);
     try {
-      const res = await fetch('http://localhost:8000/api/v1/ehr/issue_prescription', {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+      const res = await fetch(`${API_URL}/api/v1/ehr/issue_prescription`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

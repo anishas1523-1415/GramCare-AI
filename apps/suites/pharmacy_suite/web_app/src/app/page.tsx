@@ -4,9 +4,10 @@ import { Pill, Package, FileText, AlertCircle, Search, Settings, Truck } from 'l
 export default function PharmacyDashboard() {
   const [inventory, setInventory] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
   useEffect(() => {
-    fetch('http://localhost:8000/api/v1/pharmacy/stock')
+    fetch(`${API_URL}/api/v1/pharmacy/stock`)
       .then(res => res.json())
       .then(data => {
         setInventory(data);

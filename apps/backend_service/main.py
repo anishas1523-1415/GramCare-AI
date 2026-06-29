@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from modules.ai_triage.router import router as ai_triage_router
 from modules.ehr_sync.router import router as ehr_sync_router
 from modules.pharmacy_inventory.router import router as pharmacy_router
+from modules.payments.router import router as payments_router
 import models
 from database import engine
 
@@ -31,6 +32,7 @@ app.include_router(auth_router, prefix="/api/v1/auth", tags=["Authentication"])
 app.include_router(ai_triage_router, prefix="/api/v1/triage", tags=["AI Triage"])
 app.include_router(ehr_sync_router, prefix="/api/v1/ehr", tags=["EHR Sync"])
 app.include_router(pharmacy_router, prefix="/api/v1/pharmacy", tags=["Pharmacy Inventory"])
+app.include_router(payments_router, prefix="/api/v1/payments", tags=["Payment Gateway"])
 
 @app.get("/")
 def read_root():

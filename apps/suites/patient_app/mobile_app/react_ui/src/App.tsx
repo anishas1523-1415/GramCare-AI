@@ -91,6 +91,8 @@ function LoginScreen({ onLogin }: { onLogin: (t: string) => void }) {
   const [password, setPassword] = useState('password123');
   const [loading, setLoading] = useState(false);
 
+  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -98,7 +100,7 @@ function LoginScreen({ onLogin }: { onLogin: (t: string) => void }) {
     formData.append('username', username);
     formData.append('password', password);
 
-    fetch('http://localhost:8000/api/v1/auth/login', {
+    fetch(`${API_URL}/api/v1/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: formData.toString()
@@ -171,11 +173,35 @@ function LoginScreen({ onLogin }: { onLogin: (t: string) => void }) {
 // ----------------------------------------------------------------------
 
 function VideoCallScreen({ onEndCall }: { onEndCall: () => void }) {
-// [Truncated existing code logic]
   const localVideoRef = React.useRef<HTMLVideoElement>(null);
   const [callActive, setCallActive] = useState(false);
+  const [paymentComplete, setPaymentComplete] = useState(false);
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
+  const handlePayment = () => {
+    setIsProcessingPayment(true);
+    fetch(`${API_URL}/api/v1/payments/checkout`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        patient_id: "P1",
+        amount: 500.0,
+        card_token: "tok_visa_mock"
+      })
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.status === "SUCCESS") {
+        setPaymentComplete(true);
+      }
+      setIsProcessingPayment(false);
+    })
+    .catch(() => setIsProcessingPayment(false));
+  };
 
   useEffect(() => {
+    if (!paymentComplete) return;
     navigator.mediaDevices.getUserMedia({ video: true, audio: true })
       .then((stream) => {
         if (localVideoRef.current) localVideoRef.current.srcObject = stream;
@@ -189,7 +215,34 @@ function VideoCallScreen({ onEndCall }: { onEndCall: () => void }) {
         stream.getTracks().forEach(track => track.stop());
       }
     };
-  }, []);
+  }, [paymentComplete]);
+
+  if (!paymentComplete) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center p-6 bg-gradient-to-b from-blue-50 to-white">
+        <div className="bg-white p-8 rounded-3xl shadow-xl w-full max-w-md text-center border border-gray-100">
+          <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4">
+            <span className="text-2xl font-bold">₹</span>
+          </div>
+          <h2 className="text-2xl font-bold text-gray-800 mb-2">Telehealth Consultation</h2>
+          <p className="text-gray-500 mb-8">Consultation fee for Dr. Sarah Jenkins</p>
+          <div className="bg-gray-50 rounded-2xl p-4 mb-8">
+            <div className="flex justify-between text-lg font-bold text-gray-800">
+              <span>Total Amount</span>
+              <span>₹500.00</span>
+            </div>
+          </div>
+          <button 
+            onClick={handlePayment}
+            disabled={isProcessingPayment}
+            className="w-full py-4 bg-blue-600 text-white rounded-2xl font-bold shadow-lg shadow-blue-200 hover:bg-blue-700 active:scale-95 transition-all"
+          >
+            {isProcessingPayment ? "Processing..." : "Pay securely via Stripe"}
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="w-full h-full bg-black relative flex flex-col">
@@ -226,19 +279,16 @@ function TriageScreen({ onStartCall }: { onStartCall?: () => void }) {
   const [showTelehealthBtn, setShowTelehealthBtn] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   
-  // Phase 16: Voice AI State
   const [isListening, setIsListening] = useState(false);
   const recognitionRef = React.useRef<any>(null);
+  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
   useEffect(() => {
-    // Initialize Web Speech API
     if ('webkitSpeechRecognition' in window) {
       const SpeechRecognition = (window as any).webkitSpeechRecognition;
       recognitionRef.current = new SpeechRecognition();
       recognitionRef.current.continuous = false;
       recognitionRef.current.interimResults = false;
-      // Allow multi-language by not strictly binding it, or defaulting to an Indian language locale 
-      // but Gemini handles auto-detect, so we just capture raw speech.
       recognitionRef.current.lang = 'en-IN'; 
 
       recognitionRef.current.onresult = (event: any) => {
@@ -279,7 +329,7 @@ function TriageScreen({ onStartCall }: { onStartCall?: () => void }) {
       }
     ]);
     if (type === 'voice') {
-       setTimeout(() => toggleListening(), 500); // Start listening automatically
+       setTimeout(() => toggleListening(), 500);
     }
   };
 
@@ -290,14 +340,13 @@ function TriageScreen({ onStartCall }: { onStartCall?: () => void }) {
     setInputText("");
     setIsProcessing(true);
     
-    // Call real Backend AI Triage Endpoint
-    fetch('http://localhost:8000/api/v1/triage/analyze', {
+    fetch(`${API_URL}/api/v1/triage/analyze`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         symptoms_text: newMsg.content,
-        patient_id: "P1", // Hardcoded for now
-        age: 35 // Hardcoded for MVP
+        patient_id: "P1",
+        age: 35
       })
     })
     .then(res => res.json())
@@ -438,9 +487,9 @@ function WalletScreen({ token }: { token: string }) {
   const [loading, setLoading] = useState(true);
   const [isOffline, setIsOffline] = useState(false);
   const [ocrResult, setOcrResult] = useState<any>(null);
+  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
   useEffect(() => {
-    // 1. First, try to load cached data to show immediately
     localforage.getItem('ehr_records').then((cachedData) => {
       if (cachedData) {
         setRecords(cachedData as any[]);
@@ -448,8 +497,7 @@ function WalletScreen({ token }: { token: string }) {
       }
     });
 
-    // 2. Fetch fresh data from backend
-    fetch('http://localhost:8000/api/v1/ehr/patient/P1', {
+    fetch(`${API_URL}/api/v1/ehr/patient/P1`, {
       headers: {
         'Authorization': `Bearer ${token}`
       }
@@ -460,7 +508,7 @@ function WalletScreen({ token }: { token: string }) {
       })
       .then(data => {
         setRecords(data);
-        localforage.setItem('ehr_records', data); // Cache the fresh data
+        localforage.setItem('ehr_records', data);
         setLoading(false);
         setIsOffline(false);
       })
@@ -475,8 +523,7 @@ function WalletScreen({ token }: { token: string }) {
     setOcrScanning(true);
     setOcrResult(null);
     
-    // Call the real backend OCR endpoint
-    fetch('http://localhost:8000/api/v1/triage/ocr', {
+    fetch(`${API_URL}/api/v1/triage/ocr`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ image_base64: "dummy_base64_data_representing_image" })
@@ -484,7 +531,6 @@ function WalletScreen({ token }: { token: string }) {
     .then(res => res.json())
     .then(data => {
       setOcrResult(data);
-      // Automatically add it to the UI (In a real app, we'd confirm first)
       const newRecord = {
         medicines: data.medicines_parsed.join(', '),
         doctor_id: "AI Extracted (Unverified)",
@@ -589,9 +635,9 @@ function NavBtn({ icon, label, active, onClick }: any) {
 }
 
 function EmergencyOverlay({ onClose }: { onClose: () => void }) {
+  const WS_URL = import.meta.env.VITE_WS_URL || 'http://localhost:4000';
   useEffect(() => {
-    // Phase 4: Trigger the real Node.js Backend SOS alert
-    fetch('http://localhost:4000/api/v1/sos/trigger', {
+    fetch(`${WS_URL}/api/v1/sos/trigger`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ patient_id: "GC-8842", location: "Salem, Tamil Nadu" })
@@ -620,10 +666,12 @@ function VitalsScreen() {
   const [spO2, setSpO2] = useState(98);
   const [isSyncing, setIsSyncing] = useState(false);
   const socketRef = React.useRef<any>(null);
+  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+  const WS_URL = import.meta.env.VITE_WS_URL || 'http://localhost:4000';
 
   useEffect(() => {
     import('socket.io-client').then(({ io }) => {
-      socketRef.current = io('http://localhost:4000');
+      socketRef.current = io(WS_URL);
     });
 
     return () => {
@@ -638,25 +686,22 @@ function VitalsScreen() {
     }
     
     setIsSyncing(true);
-    // Simulate live vitals changing every 2 seconds
     const interval = setInterval(() => {
       setHeartRate(prev => {
         const newHR = prev + (Math.random() > 0.5 ? 2 : -2);
         const newSpO2 = 98 - Math.floor(Math.random() * 3);
         setSpO2(newSpO2);
         
-        // Broadcast via Socket.io
         if (socketRef.current) {
           socketRef.current.emit("vitals_update", {
             patientId: "GC-8842",
-            roomId: "emergency_room_1", // Hardcoded for this demo
+            roomId: "emergency_room_1",
             heartRate: newHR,
             spO2: newSpO2
           });
         }
         
-        // Also sync to FastAPI backend (Mock)
-        fetch('http://localhost:8000/api/v1/ehr/vitals', {
+        fetch(`${API_URL}/api/v1/ehr/vitals`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

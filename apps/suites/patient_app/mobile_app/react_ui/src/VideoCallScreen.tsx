@@ -3,7 +3,7 @@ import { io, Socket } from 'socket.io-client';
 import { Mic, MicOff, Video, VideoOff, PhoneOff } from 'lucide-react';
 import { motion } from 'framer-motion';
 
-const SERVER_URL = 'http://localhost:4000'; // Node.js Signaling Server
+const SERVER_URL = import.meta.env.VITE_WS_URL || 'http://localhost:4000'; // Node.js Signaling Server
 
 export default function VideoCallScreen({ onEndCall, roomId = "emergency_room_1" }: { onEndCall: () => void, roomId?: string }) {
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
