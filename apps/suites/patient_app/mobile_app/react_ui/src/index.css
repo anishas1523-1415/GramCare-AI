@@ -1,0 +1,24 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-neo-bg text-gray-800 antialiased overflow-hidden select-none touch-manipulation;
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+}
+
+@layer utilities {
+  .neo-glass {
+    @apply bg-glass-gradient shadow-glass backdrop-blur-md border border-white/20 rounded-3xl;
+  }
+  
+  .neo-button {
+    @apply bg-neo-bg shadow-neo-out rounded-2xl active:shadow-neo-in transition-all duration-300;
+  }
+
+  .neo-input {
+    @apply bg-neo-bg shadow-neo-in rounded-2xl outline-none focus:ring-2 ring-neo-primary/50 transition-all;
+  }
+}

@@ -1,0 +1,12 @@
+node_modules/
+__pycache__/
+*.pyc
+.env
+.venv
+venv/
+dist/
+build/
+.DS_Store
+gramcare.db
+*.sqlite3
+.svelte-kit/

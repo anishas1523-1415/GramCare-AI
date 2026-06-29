@@ -1,0 +1,88 @@
+@import "tailwindcss";
+
+:root {
+  /* Neumorphism Base Colors (Light Mode) */
+  --background: #e0e5ec;
+  --foreground: #2d3748;
+  
+  --primary: #4f46e5;
+  --primary-foreground: #ffffff;
+  
+  /* Glassmorphism Variables */
+  --glass-bg: rgba(255, 255, 255, 0.25);
+  --glass-border: rgba(255, 255, 255, 0.4);
+  --glass-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.1);
+  
+  /* Neumorphism Shadow Colors */
+  --neu-light: #ffffff;
+  --neu-dark: #a3b1c6;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  
+  --color-glass: var(--glass-bg);
+  
+  /* Tailwind Custom Shadows */
+  --shadow-neu-flat: 8px 8px 16px var(--neu-dark), -8px -8px 16px var(--neu-light);
+  --shadow-neu-pressed: inset 8px 8px 16px var(--neu-dark), inset -8px -8px 16px var(--neu-light);
+  --shadow-glass: var(--glass-shadow);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* Neumorphism Base Colors (Dark Mode) */
+    --background: #1e1e24;
+    --foreground: #e2e8f0;
+    
+    /* Glassmorphism Variables (Dark Mode) */
+    --glass-bg: rgba(16, 18, 27, 0.4);
+    --glass-border: rgba(255, 255, 255, 0.1);
+    --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+    
+    /* Neumorphism Shadow Colors (Dark Mode) */
+    --neu-light: #2c2c35;
+    --neu-dark: #101013;
+  }
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+}
+
+/* Base Utility Classes for the Neo-Glass UI Engine */
+
+.glass-panel {
+  background: var(--glass-bg);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+  border-radius: 1.5rem;
+}
+
+.neu-panel {
+  background: var(--background);
+  box-shadow: var(--shadow-neu-flat);
+  border-radius: 1.5rem;
+}
+
+.neu-button {
+  background: var(--background);
+  box-shadow: var(--shadow-neu-flat);
+  border-radius: 0.75rem;
+  transition: all 0.2s ease-in-out;
+  cursor: pointer;
+}
+
+.neu-button:active {
+  box-shadow: var(--shadow-neu-pressed);
+}

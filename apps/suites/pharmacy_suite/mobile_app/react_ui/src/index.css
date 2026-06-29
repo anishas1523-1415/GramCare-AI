@@ -1,0 +1,22 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer utilities {
+  .neo-bg {
+    @apply bg-[#E8F0F2];
+  }
+  .shadow-neo-out {
+    box-shadow: 12px 12px 24px #d1d9db, -12px -12px 24px #ffffff;
+  }
+  .shadow-neo-in {
+    box-shadow: inset 8px 8px 16px #d1d9db, inset -8px -8px 16px #ffffff;
+  }
+}
+
+@keyframes scan {
+  0% { transform: translateY(-100%); opacity: 0; }
+  10% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { transform: translateY(800%); opacity: 0; }
+}

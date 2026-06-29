@@ -1,0 +1,46 @@
+version: '3.8'
+
+services:
+  # Next.js Web Portal
+  web_portal:
+    build:
+      context: ./apps/web_portal
+      dockerfile: Dockerfile
+    container_name: gramcare_web_portal
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+    depends_on:
+      - python_ai
+
+  # Vite React Dashboard
+  react_dashboard:
+    build:
+      context: ./apps/react_dashboard
+      dockerfile: Dockerfile
+    container_name: gramcare_react_dashboard
+    ports:
+      - "80:80"
+    restart: unless-stopped
+
+  # Node.js Realtime Data Engine
+  node_api:
+    build:
+      context: ./backend/node_api
+      dockerfile: Dockerfile
+    container_name: gramcare_node_api
+    ports:
+      - "4000:4000"
+    restart: unless-stopped
+
+  # Python AI Symptom Checker Engine
+  python_ai:
+    build:
+      context: ./backend/python_ai
+      dockerfile: Dockerfile
+    container_name: gramcare_python_ai
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./backend/python_ai/.env.example
+    restart: unless-stopped
