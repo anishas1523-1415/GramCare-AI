@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Mic, Activity, FileText, CreditCard, Camera, Phone, User, Settings, ArrowRight, HeartPulse, Moon, Zap, AlertTriangle, X, MapPin } from 'lucide-react';
+import { Mic, Activity, FileText, CreditCard, Camera, Phone, User, Settings, ArrowRight, HeartPulse, Moon, Zap, AlertTriangle, X, MapPin, Video } from 'lucide-react';
 import './index.css';
+import VideoCallScreen from './VideoCallScreen';
 
 export default function App() {
   const [token, setToken] = useState<string | null>(localStorage.getItem('jwt_token'));

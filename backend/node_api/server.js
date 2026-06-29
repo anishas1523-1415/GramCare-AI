@@ -55,8 +55,32 @@ io.on("connection", (socket) => {
     }
   });
 
+  // --- WEBRTC SIGNALING LOGIC ---
+  
+  socket.on("join_call", (roomId) => {
+    socket.join(roomId);
+    console.log(`Socket ${socket.id} joined video call room: ${roomId}`);
+    // Notify others in the room that a user connected
+    socket.to(roomId).emit("user_joined", socket.id);
+  });
+
+  socket.on("offer", (payload) => {
+    io.to(payload.target).emit("offer", payload);
+  });
+
+  socket.on("answer", (payload) => {
+    io.to(payload.target).emit("answer", payload);
+  });
+
+  socket.on("ice-candidate", (incoming) => {
+    io.to(incoming.target).emit("ice-candidate", incoming.candidate);
+  });
+  
+  // -----------------------------
+
   socket.on("disconnect", () => {
     console.log("User disconnected:", socket.id);
+    // Note: socket.io automatically removes the socket from all rooms on disconnect.
   });
 });
 

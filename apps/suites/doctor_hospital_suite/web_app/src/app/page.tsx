@@ -1,9 +1,27 @@
 "use client";
 import React, { useState, useEffect } from 'react';
-import { Activity, Users, Calendar, AlertTriangle, Search, Bell, FileText, Plus } from 'lucide-react';
+import { Activity, Users, Calendar, AlertTriangle, Search, Bell, FileText, Plus, Video, PhoneCall } from 'lucide-react';
+import ConsultationRoom from '../ConsultationRoom';
 
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState("Dashboard");
+  const [inVideoCall, setInVideoCall] = useState(false);
+
+  if (inVideoCall) {
+    return (
+      <div className="w-full h-screen bg-gray-50 flex flex-col font-sans">
+        <header className="h-16 bg-white border-b border-gray-200 flex justify-between items-center px-6">
+          <div className="flex items-center gap-2">
+            <Video className="text-red-500" />
+            <h1 className="text-xl font-black text-gray-800 tracking-tight">Active Emergency Consultation</h1>
+          </div>
+        </header>
+        <div className="flex-1 overflow-hidden">
+           <ConsultationRoom onEndCall={() => setInVideoCall(false)} patientName="Mrs. Lakshmi" />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen bg-[#f0f4f8] text-gray-800 font-sans">
@@ -54,7 +72,7 @@ export default function Dashboard() {
 
         {/* Dashboard Content */}
         <div className="flex-1 overflow-y-auto p-8">
-          {activeTab === "Dashboard" && <DashboardView />}
+          {activeTab === "Dashboard" && <DashboardView onAcceptCall={() => setInVideoCall(true)} />}
           {activeTab === "Patient History" && <PatientHistoryView />}
         </div>
       </main>
@@ -65,7 +83,7 @@ export default function Dashboard() {
 // -----------------------------------------------------
 // DASHBOARD VIEW
 // -----------------------------------------------------
-function DashboardView() {
+function DashboardView({ onAcceptCall }: { onAcceptCall: () => void }) {
   return (
     <>
       <h2 className="text-3xl font-bold text-gray-800 mb-8">Clinic Overview</h2>
@@ -83,9 +101,9 @@ function DashboardView() {
           <Activity className="text-red-500" /> Live AI Triage Feed
         </h3>
         <div className="space-y-4">
-          <TriageRow patient="Ramesh K." symptom="Severe Chest Pain" severity="92%" time="2 mins ago" status="Critical" />
-          <TriageRow patient="Lakshmi S." symptom="High Fever (103F)" severity="75%" time="15 mins ago" status="Warning" />
-          <TriageRow patient="Velu M." symptom="Skin Rash" severity="30%" time="1 hour ago" status="Normal" />
+          <TriageRow patient="Ramesh K." symptom="Severe Chest Pain" severity="92%" time="2 mins ago" status="Critical" onAcceptCall={onAcceptCall} />
+          <TriageRow patient="Lakshmi S." symptom="High Fever (103F)" severity="75%" time="15 mins ago" status="Warning" onAcceptCall={onAcceptCall} />
+          <TriageRow patient="Velu M." symptom="Skin Rash" severity="30%" time="1 hour ago" status="Normal" onAcceptCall={onAcceptCall} />
         </div>
       </div>
     </>
@@ -254,7 +272,7 @@ function StatCard({ title, value, icon, trend, color, alert = false }: any) {
   );
 }
 
-function TriageRow({ patient, symptom, severity, time, status }: any) {
+function TriageRow({ patient, symptom, severity, time, status, onAcceptCall }: any) {
   const getStatusColor = () => {
     if (status === 'Critical') return 'bg-red-100 text-red-600 border-red-200';
     if (status === 'Warning') return 'bg-orange-100 text-orange-600 border-orange-200';
@@ -268,13 +286,16 @@ function TriageRow({ patient, symptom, severity, time, status }: any) {
         <p className="text-sm text-gray-500">{symptom} • {time}</p>
       </div>
       <div className="flex items-center gap-4">
-        <div className="text-right">
+        <div className="text-right hidden md:block">
           <p className="text-xs text-gray-400">Severity</p>
           <p className="font-bold text-gray-800">{severity}</p>
         </div>
         <div className={`px-4 py-1.5 rounded-full border text-sm font-bold ${getStatusColor()}`}>
           {status}
         </div>
+        <button onClick={onAcceptCall} className="p-2 bg-blue-600 text-white rounded-xl shadow-md hover:bg-blue-700 transition-colors">
+          <PhoneCall size={18} />
+        </button>
       </div>
     </div>
   );
