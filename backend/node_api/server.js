@@ -76,6 +76,16 @@ io.on("connection", (socket) => {
     io.to(incoming.target).emit("ice-candidate", incoming.candidate);
   });
   
+  // --- IOT VITALS STREAMING (PHASE 15) ---
+  socket.on("vitals_update", (vitalsData) => {
+    // vitalsData: { patientId, roomId, heartRate, spO2 }
+    console.log(`Vitals update from ${vitalsData.patientId}: HR ${vitalsData.heartRate}, SpO2 ${vitalsData.spO2}`);
+    // Broadcast vitals to the specific room (Doctor)
+    if (vitalsData.roomId) {
+      socket.to(vitalsData.roomId).emit("live_vitals", vitalsData);
+    }
+  });
+
   // -----------------------------
 
   socket.on("disconnect", () => {

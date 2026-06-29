@@ -34,3 +34,14 @@ class User(Base):
     role = Column(String) # 'PATIENT', 'DOCTOR', 'PHARMACIST', 'ADMIN'
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+class IoTVitals(Base):
+    __tablename__ = "iot_vitals"
+
+    id = Column(Integer, primary_key=True, index=True)
+    patient_id = Column(String, index=True)
+    device_id = Column(String)
+    heart_rate = Column(Integer)
+    spo2 = Column(Integer)
+    temperature = Column(Float)
+    timestamp = Column(DateTime, default=datetime.utcnow)

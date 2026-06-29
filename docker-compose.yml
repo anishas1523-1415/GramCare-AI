@@ -1,54 +1,60 @@
 version: '3.8'
 
 services:
-  # Next.js Web Portal
-  web_portal:
+  # 1. Patient App (React UI for Web & Mobile Webviews)
+  patient_app:
     build:
-      context: ./apps/web_portal
+      context: ./apps/suites/patient_app/mobile_app/react_ui
       dockerfile: Dockerfile
-    container_name: gramcare_web_portal
+    container_name: gramcare_patient_app
+    ports:
+      - "80:80"
+    restart: unless-stopped
+    depends_on:
+      - fastapi_backend
+      - node_signaling
+
+  # 2. Doctor Portal (Next.js)
+  doctor_portal:
+    build:
+      context: ./apps/suites/doctor_hospital_suite/web_app
+      dockerfile: Dockerfile
+    container_name: gramcare_doctor_portal
     ports:
       - "3000:3000"
     restart: unless-stopped
     depends_on:
-      - python_ai
+      - fastapi_backend
+      - node_signaling
 
-  # Vite React Dashboard
-  react_dashboard:
-    build:
-      context: ./apps/react_dashboard
-      dockerfile: Dockerfile
-    container_name: gramcare_react_dashboard
-    ports:
-      - "80:80"
-    restart: unless-stopped
-
-  # Node.js Realtime Data Engine
-  node_api:
+  # 3. Node.js Realtime Data & Signaling Engine (Socket.io WebRTC / Vitals)
+  node_signaling:
     build:
       context: ./backend/node_api
       dockerfile: Dockerfile
-    container_name: gramcare_node_api
+    container_name: gramcare_node_signaling
     ports:
       - "4000:4000"
     restart: unless-stopped
 
-  # Python AI Symptom Checker Engine
-  python_ai:
+  # 4. FastAPI Backend (AI Triage, EHR, Pharmacy, Auth)
+  fastapi_backend:
     build:
-      context: ./backend/python_ai
+      context: ./apps/backend_service
       dockerfile: Dockerfile
-    container_name: gramcare_python_ai
+    container_name: gramcare_fastapi
     ports:
       - "8000:8000"
-    env_file:
-      - ./backend/python_ai/.env.example
+    environment:
+      - DATABASE_URL=postgresql://gramcare_user:securepassword123@postgres_db:5432/gramcare_db
+      - SECRET_KEY=gramcare_super_secret_jwt_key_2026
+      # Note: For production, GEMINI_API_KEY should be passed here or loaded from secret manager
     restart: unless-stopped
     depends_on:
-      - postgres
+      - postgres_db
 
-  # PostgreSQL Database
-  postgres:
+  # 5. PostgreSQL Database
+  postgres_db:
     image: postgres:15-alpine
     container_name: gramcare_postgres
     environment:

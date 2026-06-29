@@ -1,7 +1,26 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Pill, Package, FileText, AlertCircle, Search, Settings, Truck } from 'lucide-react';
 
 export default function PharmacyDashboard() {
+  const [inventory, setInventory] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    fetch('http://localhost:8000/api/v1/pharmacy/stock')
+      .then(res => res.json())
+      .then(data => {
+        setInventory(data);
+        setIsLoading(false);
+      })
+      .catch(err => {
+        console.error("Error fetching pharmacy stock:", err);
+        setIsLoading(false);
+      });
+  }, []);
+
+  const totalMedicines = inventory.length > 0 ? inventory.reduce((acc, curr) => acc + curr.stock_quantity, 0) : 0;
+  const lowStockCount = inventory.filter(i => i.status === 'Low' || i.status === 'Out of Stock').length;
+
   return (
     <div className="flex h-screen bg-[#f2fcf5] text-gray-800 font-sans">
       
@@ -54,9 +73,9 @@ export default function PharmacyDashboard() {
           
           {/* Stats Grid */}
           <div className="grid grid-cols-3 gap-6 mb-8">
-            <StatCard title="Total Medicines in Stock" value="12,450" icon={<Package />} trend="Optimal" color="text-green-500" />
-            <StatCard title="Pending Digital Prescriptions" value="45" icon={<FileText />} trend="+12 today" color="text-blue-500" />
-            <StatCard title="Low Stock Alerts" value="8" icon={<AlertCircle />} trend="Requires Action" color="text-orange-500" alert />
+            <StatCard title="Total Medicines in Stock" value={isLoading ? '...' : totalMedicines.toLocaleString()} icon={<Package />} trend="Live DB" color="text-green-500" />
+            <StatCard title="Pending Digital Prescriptions" value="2" icon={<FileText />} trend="EHR Sync" color="text-blue-500" />
+            <StatCard title="Low Stock Alerts" value={isLoading ? '...' : lowStockCount} icon={<AlertCircle />} trend="Requires Action" color="text-orange-500" alert={lowStockCount > 0} />
           </div>
 
           <div className="grid grid-cols-2 gap-8">
@@ -66,21 +85,29 @@ export default function PharmacyDashboard() {
                 <FileText className="text-blue-500" /> Incoming Doctor Orders
               </h3>
               <div className="space-y-4">
-                <OrderRow patient="Ramesh K." doctor="Dr. Sarah J." items="3 Medicines" time="Just now" status="Pending" />
-                <OrderRow patient="Lakshmi S." doctor="Dr. Ram" items="1 Medicine" time="10 mins ago" status="Packing" />
-                <OrderRow patient="Velu M." doctor="Dr. Sarah J." items="2 Medicines" time="1 hour ago" status="Ready" />
+                <OrderRow patient="patient1 (Ramesh)" doctor="dr.sarah" items="Paracetamol, Amoxicillin" time="Just now" status="Pending" />
               </div>
             </div>
 
             {/* Low Stock Inventory Alerts */}
             <div className="bg-white/70 backdrop-blur-xl border border-orange-100/50 rounded-3xl p-6 shadow-[0_8px_32px_rgba(249,115,22,0.04)]">
               <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-                <AlertCircle className="text-orange-500" /> Inventory Shortage Alerts
+                <AlertCircle className="text-orange-500" /> Live Inventory (FastAPI)
               </h3>
               <div className="space-y-4">
-                <InventoryRow medicine="Paracetamol 500mg" stock="45 Tablets" minimum="100" status="Low" />
-                <InventoryRow medicine="Amoxicillin 250mg" stock="12 Strips" minimum="50" status="Low" />
-                <InventoryRow medicine="Insulin Glargine" stock="0 Vials" minimum="20" status="Out of Stock" />
+                {isLoading ? (
+                  <p className="text-gray-500">Loading stock from database...</p>
+                ) : (
+                  inventory.map((item: any) => (
+                    <InventoryRow 
+                      key={item.id}
+                      medicine={item.name} 
+                      stock={item.stock_quantity > 0 ? `${item.stock_quantity} Units` : '0 Units'} 
+                      minimum={item.minimum_threshold} 
+                      status={item.status} 
+                    />
+                  ))
+                )}
               </div>
             </div>
           </div>

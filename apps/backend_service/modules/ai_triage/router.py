@@ -60,17 +60,23 @@ async def analyze_symptoms(request: TriageRequest):
     
     Symptoms: {request.symptoms_text}
     
+    MULTI-LANGUAGE INSTRUCTION (PHASE 16): 
+    The symptoms may be spoken or typed in a regional language (like Tamil, Hindi) or in English. 
+    1. Auto-detect the language of the symptoms.
+    2. Analyze the medical condition deeply.
+    3. You must translate and write your final response (predicted_condition, home_remedies, doctor_recommendation, explanation) IN THE SAME LANGUAGE the user spoke in (or default to English if unclear). 
+    
     You must output your analysis purely in JSON format. Do not include markdown blocks or any other text.
     The JSON structure MUST exactly match this:
     {{
         "severity_score": <int between 0 and 100, 100 being most critical>,
-        "predicted_condition": "<Short description, e.g. 'Possible Cardiac Event'>",
-        "home_remedies": "<Safe home remedies or 'Do not attempt home remedies' if critical>",
-        "doctor_recommendation": "<Recommendation on when/how to see a doctor>",
-        "recovery_time": "<Estimated time, e.g. '3-5 Days'>",
-        "status": "<'Normal', 'Warning', or 'Critical'>",
+        "predicted_condition": "<Short description in user's language>",
+        "home_remedies": "<Safe home remedies in user's language>",
+        "doctor_recommendation": "<Recommendation in user's language>",
+        "recovery_time": "<Estimated time in user's language>",
+        "status": "<'Normal', 'Warning', or 'Critical' in English>",
         "confidence_score": <float between 0.0 and 1.0 representing your confidence>,
-        "explanation": "<A clear, explainable AI reasoning on WHY you made this prediction based on the symptoms and age.>"
+        "explanation": "<A clear, explainable AI reasoning on WHY you made this prediction based on the symptoms and age, written in the user's language.>"
     }}
     """
     

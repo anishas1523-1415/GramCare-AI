@@ -66,3 +66,26 @@ async def get_patient_records(patient_id: str, db: Session = Depends(get_db), cu
             "timestamp": r.created_at
         })
     return responses
+
+class VitalsPayload(BaseModel):
+    patient_id: str
+    device_id: str
+    heart_rate: int
+    spo2: int
+    temperature: float
+
+@router.post("/vitals")
+async def store_vitals(payload: VitalsPayload, db: Session = Depends(get_db)):
+    """
+    Called by the Patient App to persist streaming IoT vitals.
+    """
+    db_vital = models.IoTVitals(
+        patient_id=payload.patient_id,
+        device_id=payload.device_id,
+        heart_rate=payload.heart_rate,
+        spo2=payload.spo2,
+        temperature=payload.temperature
+    )
+    db.add(db_vital)
+    db.commit()
+    return {"status": "success"}

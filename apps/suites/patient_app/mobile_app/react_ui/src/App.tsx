@@ -225,6 +225,48 @@ function TriageScreen({ onStartCall }: { onStartCall?: () => void }) {
   const [inputText, setInputText] = useState("");
   const [showTelehealthBtn, setShowTelehealthBtn] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  
+  // Phase 16: Voice AI State
+  const [isListening, setIsListening] = useState(false);
+  const recognitionRef = React.useRef<any>(null);
+
+  useEffect(() => {
+    // Initialize Web Speech API
+    if ('webkitSpeechRecognition' in window) {
+      const SpeechRecognition = (window as any).webkitSpeechRecognition;
+      recognitionRef.current = new SpeechRecognition();
+      recognitionRef.current.continuous = false;
+      recognitionRef.current.interimResults = false;
+      // Allow multi-language by not strictly binding it, or defaulting to an Indian language locale 
+      // but Gemini handles auto-detect, so we just capture raw speech.
+      recognitionRef.current.lang = 'en-IN'; 
+
+      recognitionRef.current.onresult = (event: any) => {
+        const transcript = event.results[0][0].transcript;
+        setInputText(prev => prev + " " + transcript);
+        setIsListening(false);
+      };
+
+      recognitionRef.current.onerror = (event: any) => {
+        console.error("Speech recognition error", event.error);
+        setIsListening(false);
+      };
+
+      recognitionRef.current.onend = () => {
+        setIsListening(false);
+      };
+    }
+  }, []);
+
+  const toggleListening = () => {
+    if (isListening) {
+      recognitionRef.current?.stop();
+      setIsListening(false);
+    } else {
+      recognitionRef.current?.start();
+      setIsListening(true);
+    }
+  };
 
   const startChat = (type: string) => {
     setIsChatting(true);
@@ -236,6 +278,9 @@ function TriageScreen({ onStartCall }: { onStartCall?: () => void }) {
         disclaimer: "DISCLAIMER: This is an AI assessment tool, not a substitute for professional medical advice. Call emergency services immediately if you are experiencing a medical emergency."
       }
     ]);
+    if (type === 'voice') {
+       setTimeout(() => toggleListening(), 500); // Start listening automatically
+    }
   };
 
   const handleSend = () => {
@@ -355,7 +400,13 @@ function TriageScreen({ onStartCall }: { onStartCall?: () => void }) {
             )}
             
             <div className="pt-2 flex gap-2 relative z-10">
-              <input type="text" value={inputText} onChange={(e) => setInputText(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && handleSend()} placeholder="Type your symptoms..." className="flex-1 neo-bg rounded-full px-6 py-4 shadow-neo-in border-none outline-none text-gray-700" disabled={isProcessing} />
+              <button 
+                onClick={toggleListening} 
+                className={`w-14 h-14 rounded-full flex items-center justify-center transition-colors ${isListening ? 'bg-red-500 text-white animate-pulse' : 'bg-white border border-gray-200 text-gray-500'}`}
+              >
+                <Mic size={24} />
+              </button>
+              <input type="text" value={inputText} onChange={(e) => setInputText(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && handleSend()} placeholder="Type or speak symptoms..." className="flex-1 neo-bg rounded-full px-6 py-4 shadow-neo-in border-none outline-none text-gray-700" disabled={isProcessing} />
               <button onClick={handleSend} disabled={isProcessing} className="w-14 h-14 rounded-full bg-blue-600 text-white flex items-center justify-center shadow-[0_4px_12px_rgba(37,99,235,0.3)] disabled:opacity-50"><ArrowRight size={24} /></button>
             </div>
           </motion.div>
@@ -534,5 +585,137 @@ function NavBtn({ icon, label, active, onClick }: any) {
       </div>
       <span className={`text-[10px] font-bold ${active ? 'text-blue-600' : 'text-gray-400'}`}>{label}</span>
     </button>
+  );
+}
+
+function EmergencyOverlay({ onClose }: { onClose: () => void }) {
+  useEffect(() => {
+    // Phase 4: Trigger the real Node.js Backend SOS alert
+    fetch('http://localhost:4000/api/v1/sos/trigger', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ patient_id: "GC-8842", location: "Salem, Tamil Nadu" })
+    }).catch(err => console.error("SOS Trigger failed", err));
+  }, []);
+
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 z-50 flex items-center justify-center bg-red-600/90 backdrop-blur-sm p-6">
+      <div className="bg-white rounded-[40px] p-8 flex flex-col items-center text-center shadow-2xl relative w-full max-w-sm">
+        <button onClick={onClose} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"><X size={24} /></button>
+        <div className="w-24 h-24 bg-red-100 rounded-full flex items-center justify-center mb-6 animate-pulse border-4 border-red-500">
+          <AlertTriangle size={48} className="text-red-500" />
+        </div>
+        <h2 className="text-3xl font-black text-gray-900 mb-2">SOS Activated</h2>
+        <p className="text-gray-600 font-medium mb-8">Emergency services and nearby doctors have been alerted with your location.</p>
+        <div className="w-full space-y-3">
+          <button className="w-full py-4 bg-gray-900 text-white rounded-2xl font-bold flex items-center justify-center gap-2"><Phone size={20} /> Call Ambulance (108)</button>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+function VitalsScreen() {
+  const [heartRate, setHeartRate] = useState(72);
+  const [spO2, setSpO2] = useState(98);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const socketRef = React.useRef<any>(null);
+
+  useEffect(() => {
+    import('socket.io-client').then(({ io }) => {
+      socketRef.current = io('http://localhost:4000');
+    });
+
+    return () => {
+      if (socketRef.current) socketRef.current.disconnect();
+    };
+  }, []);
+
+  const toggleSync = () => {
+    if (isSyncing) {
+      setIsSyncing(false);
+      return;
+    }
+    
+    setIsSyncing(true);
+    // Simulate live vitals changing every 2 seconds
+    const interval = setInterval(() => {
+      setHeartRate(prev => {
+        const newHR = prev + (Math.random() > 0.5 ? 2 : -2);
+        const newSpO2 = 98 - Math.floor(Math.random() * 3);
+        setSpO2(newSpO2);
+        
+        // Broadcast via Socket.io
+        if (socketRef.current) {
+          socketRef.current.emit("vitals_update", {
+            patientId: "GC-8842",
+            roomId: "emergency_room_1", // Hardcoded for this demo
+            heartRate: newHR,
+            spO2: newSpO2
+          });
+        }
+        
+        // Also sync to FastAPI backend (Mock)
+        fetch('http://localhost:8000/api/v1/ehr/vitals', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            patient_id: "GC-8842",
+            device_id: "APPLE_WATCH_7",
+            heart_rate: newHR,
+            spo2: newSpO2,
+            temperature: 98.6
+          })
+        }).catch(() => {});
+
+        return newHR;
+      });
+    }, 2000);
+
+    // Stop after 30 seconds for demo safety
+    setTimeout(() => {
+      clearInterval(interval);
+      setIsSyncing(false);
+    }, 30000);
+  };
+
+  return (
+    <div className="p-6">
+      <h2 className="text-3xl font-black text-gray-800 mb-6 flex items-center gap-2">
+        <HeartPulse className="text-red-500" /> IoT Vitals
+      </h2>
+      
+      <div className={`neo-bg p-6 rounded-3xl shadow-neo-out border mb-6 transition-colors ${isSyncing ? 'border-red-400 bg-red-50' : 'border-white/60'}`}>
+        <div className="flex justify-between items-start mb-4">
+          <p className="text-gray-500 text-sm font-bold uppercase tracking-wider">Smartwatch Sync</p>
+          {isSyncing && <span className="flex h-3 w-3"><span className="animate-ping absolute inline-flex h-3 w-3 rounded-full bg-red-400 opacity-75"></span><span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span></span>}
+        </div>
+        
+        <div className="grid grid-cols-2 gap-4 mb-6">
+          <div className="bg-white/70 p-4 rounded-2xl border border-white/80 shadow-sm">
+            <p className="text-xs text-gray-500 font-bold mb-1">Heart Rate</p>
+            <p className={`text-3xl font-black ${isSyncing ? 'text-red-600' : 'text-gray-800'}`}>{isSyncing ? heartRate : '--'} <span className="text-sm font-medium">BPM</span></p>
+          </div>
+          <div className="bg-white/70 p-4 rounded-2xl border border-white/80 shadow-sm">
+            <p className="text-xs text-gray-500 font-bold mb-1">SpO2</p>
+            <p className={`text-3xl font-black ${isSyncing ? 'text-blue-600' : 'text-gray-800'}`}>{isSyncing ? spO2 : '--'} <span className="text-sm font-medium">%</span></p>
+          </div>
+        </div>
+
+        <button 
+          onClick={toggleSync}
+          className={`w-full py-4 rounded-2xl font-black text-lg shadow-lg transition-all ${isSyncing ? 'bg-red-600 text-white shadow-red-500/30' : 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-blue-500/30'}`}
+        >
+          {isSyncing ? 'Stop Streaming' : 'Start IoT Sync'}
+        </button>
+      </div>
+      
+      <div className="bg-white/50 border border-gray-200 rounded-3xl p-6 shadow-sm">
+        <h3 className="font-bold text-gray-700 mb-2">How it works</h3>
+        <p className="text-sm text-gray-500 leading-relaxed">
+          In Phase 15, we've integrated IoT Vitals. When you start syncing, GramCare AI pulls your real-time heart rate and blood oxygen from your connected smartwatch and streams it directly to your doctor's dashboard during a WebRTC video call.
+        </p>
+      </div>
+    </div>
   );
 }

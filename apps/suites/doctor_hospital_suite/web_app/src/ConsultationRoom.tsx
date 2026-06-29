@@ -10,6 +10,10 @@ export default function ConsultationRoom({ onEndCall, roomId = "emergency_room_1
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(false);
   
+  // Phase 15: IoT Vitals State
+  const [vitals, setVitals] = useState({ heartRate: '--', spO2: '--' });
+  const [vitalsActive, setVitalsActive] = useState(false);
+  
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const socketRef = useRef<Socket | null>(null);
@@ -28,6 +32,12 @@ export default function ConsultationRoom({ onEndCall, roomId = "emergency_room_1
         }
 
         socket.emit("join_call", roomId);
+
+        // Phase 15: Listen for Live Vitals
+        socket.on("live_vitals", (data) => {
+          setVitals({ heartRate: data.heartRate, spO2: data.spO2 });
+          setVitalsActive(true);
+        });
 
         const peer = new RTCPeerConnection({
           iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
@@ -162,24 +172,28 @@ export default function ConsultationRoom({ onEndCall, roomId = "emergency_room_1
       {/* Side Panel for EHR & Live Vitals */}
       <div className="w-96 flex flex-col gap-6">
         {/* Live Vitals Panel (Phase 15 placeholder) */}
-        <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-100 flex-1">
-          <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2"><Activity size={20} className="text-blue-500"/> Live Vitals (IoT)</h3>
+        <div className={`rounded-3xl p-6 shadow-sm border flex-1 transition-colors ${vitalsActive ? 'bg-red-50 border-red-100' : 'bg-white border-gray-100'}`}>
+          <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
+            <Activity size={20} className={vitalsActive ? "text-red-500 animate-pulse" : "text-blue-500"}/> 
+            Live Vitals (IoT)
+          </h3>
           <div className="space-y-4">
-            <div className="bg-gray-50 rounded-2xl p-4 border border-gray-100 flex justify-between items-center">
+            <div className="bg-white rounded-2xl p-4 border border-gray-100 flex justify-between items-center shadow-sm">
               <div>
                 <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Heart Rate</p>
-                <p className="text-2xl font-black text-gray-800">-- <span className="text-sm font-medium text-gray-500">BPM</span></p>
+                <p className="text-3xl font-black text-gray-800">{vitals.heartRate} <span className="text-sm font-medium text-gray-500">BPM</span></p>
               </div>
-              <Activity size={32} className="text-red-400 opacity-50" />
+              <Activity size={32} className={`opacity-50 ${vitalsActive ? 'text-red-500' : 'text-red-400'}`} />
             </div>
-            <div className="bg-gray-50 rounded-2xl p-4 border border-gray-100 flex justify-between items-center">
+            <div className="bg-white rounded-2xl p-4 border border-gray-100 flex justify-between items-center shadow-sm">
               <div>
                 <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">SpO2</p>
-                <p className="text-2xl font-black text-gray-800">-- <span className="text-sm font-medium text-gray-500">%</span></p>
+                <p className="text-3xl font-black text-gray-800">{vitals.spO2} <span className="text-sm font-medium text-gray-500">%</span></p>
               </div>
-              <Activity size={32} className="text-blue-400 opacity-50" />
+              <Activity size={32} className={`opacity-50 ${vitalsActive ? 'text-blue-500' : 'text-blue-400'}`} />
             </div>
-            <div className="text-xs text-gray-400 text-center mt-4">IoT streaming pending (Phase 15)</div>
+            {!vitalsActive && <div className="text-xs text-gray-400 text-center mt-4">Waiting for Smartwatch Sync...</div>}
+            {vitalsActive && <div className="text-xs text-red-500 font-bold text-center mt-4 flex items-center justify-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span> Streaming Live via Socket.io</div>}
           </div>
         </div>
 
