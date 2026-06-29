@@ -22,3 +22,15 @@ class PharmacyItem(Base):
     price = Column(Float, default=0.0)
     requires_prescription = Column(Boolean, default=False)
     last_updated = Column(DateTime, default=datetime.utcnow)
+
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String, unique=True, index=True)
+    email = Column(String, unique=True, index=True)
+    hashed_password = Column(String)
+    full_name = Column(String)
+    role = Column(String) # 'PATIENT', 'DOCTOR', 'PHARMACIST', 'ADMIN'
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)

@@ -44,3 +44,22 @@ services:
     env_file:
       - ./backend/python_ai/.env.example
     restart: unless-stopped
+    depends_on:
+      - postgres
+
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: gramcare_postgres
+    environment:
+      POSTGRES_USER: gramcare_user
+      POSTGRES_PASSWORD: securepassword123
+      POSTGRES_DB: gramcare_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+
+volumes:
+  pgdata:

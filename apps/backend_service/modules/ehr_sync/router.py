@@ -5,6 +5,7 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 import models
 from database import get_db
+from modules.auth.router import get_current_user
 
 router = APIRouter()
 
@@ -22,7 +23,7 @@ class PrescriptionResponse(Prescription):
         orm_mode = True
 
 @router.post("/issue_prescription", response_model=PrescriptionResponse)
-async def issue_prescription(prescription: Prescription, db: Session = Depends(get_db)):
+async def issue_prescription(prescription: Prescription, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     """
     Called by the Doctor Suite.
     Saves the prescription to the persistent EHR database.
@@ -47,7 +48,7 @@ async def issue_prescription(prescription: Prescription, db: Session = Depends(g
     }
 
 @router.get("/patient/{patient_id}", response_model=List[PrescriptionResponse])
-async def get_patient_records(patient_id: str, db: Session = Depends(get_db)):
+async def get_patient_records(patient_id: str, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     """
     Called by the Patient App (Health Wallet).
     Retrieves all records for a specific patient.

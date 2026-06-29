@@ -25,6 +25,9 @@ app.add_middleware(
 )
 
 # Include Routers
+from modules.auth.router import router as auth_router
+
+app.include_router(auth_router, prefix="/api/v1/auth", tags=["Authentication"])
 app.include_router(ai_triage_router, prefix="/api/v1/triage", tags=["AI Triage"])
 app.include_router(ehr_sync_router, prefix="/api/v1/ehr", tags=["EHR Sync"])
 app.include_router(pharmacy_router, prefix="/api/v1/pharmacy", tags=["Pharmacy Inventory"])

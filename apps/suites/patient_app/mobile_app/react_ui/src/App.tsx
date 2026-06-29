@@ -4,9 +4,14 @@ import { Mic, Activity, FileText, CreditCard, Camera, Phone, User, Settings, Arr
 import './index.css';
 
 export default function App() {
+  const [token, setToken] = useState<string | null>(localStorage.getItem('jwt_token'));
   const [activeTab, setActiveTab] = useState('triage');
   const [sosActive, setSosActive] = useState(false);
   const [inVideoCall, setInVideoCall] = useState(false);
+
+  if (!token) {
+    return <LoginScreen onLogin={(t) => setToken(t)} />;
+  }
 
   return (
     <div className="w-full h-screen bg-[#F8FAFC] overflow-hidden flex flex-col font-sans relative">
@@ -26,9 +31,9 @@ export default function App() {
           >
             <AlertTriangle size={24} strokeWidth={2.5} />
           </button>
-          <div className="w-12 h-12 rounded-full neo-bg flex items-center justify-center shadow-neo-out border border-white/60">
+          <button onClick={() => { localStorage.removeItem('jwt_token'); setToken(null); }} className="w-12 h-12 rounded-full neo-bg flex items-center justify-center shadow-neo-out border border-white/60">
             <User size={24} className="text-gray-600" />
-          </div>
+          </button>
         </div>
       </header>
 
@@ -53,7 +58,7 @@ export default function App() {
           )}
           {!inVideoCall && activeTab === 'wallet' && (
             <motion.div key="wallet" initial={{opacity: 0, x: -20}} animate={{opacity: 1, x: 0}} exit={{opacity: 0, x: 20}} className="h-full">
-              <WalletScreen />
+              <WalletScreen token={token} />
             </motion.div>
           )}
           {!inVideoCall && activeTab === 'payments' && (
@@ -80,25 +85,104 @@ export default function App() {
   );
 }
 
+function LoginScreen({ onLogin }: { onLogin: (t: string) => void }) {
+  const [username, setUsername] = useState('P1');
+  const [password, setPassword] = useState('password123');
+  const [loading, setLoading] = useState(false);
+
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    const formData = new URLSearchParams();
+    formData.append('username', username);
+    formData.append('password', password);
+
+    fetch('http://localhost:8000/api/v1/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: formData.toString()
+    })
+    .then(res => res.json())
+    .then(data => {
+      setLoading(false);
+      if (data.access_token) {
+        localStorage.setItem('jwt_token', data.access_token);
+        onLogin(data.access_token);
+      } else {
+        alert("Login failed: " + (data.detail || "Unknown error"));
+      }
+    })
+    .catch(err => {
+      setLoading(false);
+      alert("Failed to connect to backend: " + err);
+    });
+  };
+
+  return (
+    <div className="w-full h-screen bg-[#F8FAFC] flex flex-col justify-center px-8 relative overflow-hidden">
+      <div className="absolute top-[-100px] right-[-100px] w-64 h-64 bg-blue-400 rounded-full blur-[100px] opacity-40"></div>
+      <div className="absolute bottom-[-100px] left-[-100px] w-64 h-64 bg-green-400 rounded-full blur-[100px] opacity-30"></div>
+      
+      <div className="mb-12 relative z-10">
+        <h1 className="text-4xl font-black text-gray-800 tracking-tight flex items-center gap-2 mb-2">
+          GramCare <span className="text-blue-500">AI</span>
+        </h1>
+        <p className="text-gray-500 font-medium">Secure Telemedicine Portal</p>
+      </div>
+
+      <form onSubmit={handleLogin} className="neo-bg p-8 rounded-[40px] shadow-neo-out border border-white/60 relative z-10">
+        <h2 className="text-2xl font-bold text-gray-800 mb-6">Patient Login</h2>
+        
+        <div className="mb-4">
+          <label className="block text-sm font-bold text-gray-500 mb-2">Patient ID (Username)</label>
+          <input 
+            type="text" 
+            value={username}
+            onChange={e => setUsername(e.target.value)}
+            className="w-full bg-white/50 border border-white/80 rounded-2xl p-4 text-gray-800 shadow-neo-in outline-none focus:ring-2 focus:ring-blue-400"
+          />
+        </div>
+
+        <div className="mb-8">
+          <label className="block text-sm font-bold text-gray-500 mb-2">Password</label>
+          <input 
+            type="password" 
+            value={password}
+            onChange={e => setPassword(e.target.value)}
+            className="w-full bg-white/50 border border-white/80 rounded-2xl p-4 text-gray-800 shadow-neo-in outline-none focus:ring-2 focus:ring-blue-400"
+          />
+        </div>
+
+        <button 
+          disabled={loading}
+          type="submit" 
+          className="w-full py-4 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-2xl font-black text-lg shadow-[0_8px_24px_rgba(59,130,246,0.3)] active:scale-95 transition-transform disabled:opacity-50"
+        >
+          {loading ? 'Authenticating...' : 'Secure Login'}
+        </button>
+      </form>
+    </div>
+  );
+}
+
+// ----------------------------------------------------------------------
+// Screens
+// ----------------------------------------------------------------------
+
 function VideoCallScreen({ onEndCall }: { onEndCall: () => void }) {
+// [Truncated existing code logic]
   const localVideoRef = React.useRef<HTMLVideoElement>(null);
   const [callActive, setCallActive] = useState(false);
 
   useEffect(() => {
-    // Start WebRTC Local Stream
     navigator.mediaDevices.getUserMedia({ video: true, audio: true })
       .then((stream) => {
-        if (localVideoRef.current) {
-          localVideoRef.current.srcObject = stream;
-        }
+        if (localVideoRef.current) localVideoRef.current.srcObject = stream;
         setCallActive(true);
       })
-      .catch((err) => {
-        console.error("Failed to access camera", err);
-      });
+      .catch((err) => console.error("Failed to access camera", err));
 
     return () => {
-      // Cleanup WebRTC Stream
       if (localVideoRef.current && localVideoRef.current.srcObject) {
         const stream = localVideoRef.current.srcObject as MediaStream;
         stream.getTracks().forEach(track => track.stop());
@@ -114,8 +198,6 @@ function VideoCallScreen({ onEndCall }: { onEndCall: () => void }) {
           <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span> Connected securely
         </p>
       </div>
-
-      {/* Remote Video (Mocked as dark grey for now since no peer connection) */}
       <div className="flex-1 bg-gray-800 flex items-center justify-center">
         {callActive ? (
           <p className="text-gray-500 font-bold">Waiting for Dr. Sarah to turn on camera...</p>
@@ -123,37 +205,17 @@ function VideoCallScreen({ onEndCall }: { onEndCall: () => void }) {
           <p className="text-gray-500 font-bold animate-pulse">Connecting to GramCare WebRTC Server...</p>
         )}
       </div>
-
-      {/* Local Video Stream (REAL Camera Feed via WebRTC) */}
       <div className="absolute bottom-32 right-6 w-32 h-48 bg-gray-900 rounded-2xl overflow-hidden border-2 border-white/20 shadow-2xl">
-        <video 
-          ref={localVideoRef} 
-          autoPlay 
-          playsInline 
-          muted 
-          className="w-full h-full object-cover transform scale-x-[-1]" 
-        />
+        <video ref={localVideoRef} autoPlay playsInline muted className="w-full h-full object-cover transform scale-x-[-1]" />
       </div>
-
-      {/* Call Controls */}
       <div className="absolute bottom-12 w-full flex justify-center gap-6">
-        <button className="w-14 h-14 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center text-white border border-white/30">
-          <Mic size={24} />
-        </button>
-        <button onClick={onEndCall} className="w-16 h-16 rounded-full bg-red-600 flex items-center justify-center text-white shadow-[0_4px_16px_rgba(220,38,38,0.4)]">
-          <Phone size={28} className="transform rotate-[135deg]" />
-        </button>
-        <button className="w-14 h-14 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center text-white border border-white/30">
-          <Camera size={24} />
-        </button>
+        <button className="w-14 h-14 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center text-white border border-white/30"><Mic size={24} /></button>
+        <button onClick={onEndCall} className="w-16 h-16 rounded-full bg-red-600 flex items-center justify-center text-white shadow-[0_4px_16px_rgba(220,38,38,0.4)]"><Phone size={28} className="transform rotate-[135deg]" /></button>
+        <button className="w-14 h-14 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center text-white border border-white/30"><Camera size={24} /></button>
       </div>
     </div>
   );
 }
-
-// ----------------------------------------------------------------------
-// Existing Screens from Phase 1/2 (Kept intact to ensure the app compiles and works)
-// ----------------------------------------------------------------------
 
 function TriageScreen({ onStartCall }: { onStartCall?: () => void }) {
   const [scanning, setScanning] = useState(false);
@@ -161,43 +223,62 @@ function TriageScreen({ onStartCall }: { onStartCall?: () => void }) {
   const [messages, setMessages] = useState<any[]>([]);
   const [inputText, setInputText] = useState("");
   const [showTelehealthBtn, setShowTelehealthBtn] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   const startChat = (type: string) => {
-    if (type === 'photo') {
-      setScanning(true);
-      setTimeout(() => {
-        setScanning(false);
-        setIsChatting(true);
-        setMessages([
-          { type: 'user', content: 'Uploaded an image of a skin rash.', isImage: true },
-          { type: 'bot', content: 'I understand you are feeling concerned about this rash. It looks uncomfortable, but please do not worry, I am here to help you figure this out.', isEmpathetic: true },
-          { type: 'bot', content: 'Based on the visual analysis, this appears to be mild Contact Dermatitis.', isExplainable: true, explanation: "AI identified redness and localized inflammation typical of allergic reactions (88% confidence). No signs of severe infection." }
-        ]);
-        setShowTelehealthBtn(true);
-      }, 3000);
-    } else {
-      setIsChatting(true);
-      setMessages([
-        { type: 'bot', content: 'Hello! I am GramCare AI. How are you feeling today? Please tell me your symptoms.', isEmpathetic: true }
-      ]);
-    }
+    setIsChatting(true);
+    setMessages([
+      { 
+        type: 'bot', 
+        content: 'Hello! I am GramCare AI. How are you feeling today? Please describe your symptoms.', 
+        isDisclaimer: true,
+        disclaimer: "DISCLAIMER: This is an AI assessment tool, not a substitute for professional medical advice. Call emergency services immediately if you are experiencing a medical emergency."
+      }
+    ]);
   };
 
   const handleSend = () => {
     if (!inputText.trim()) return;
     const newMsg = { type: 'user', content: inputText };
-    setMessages([...messages, newMsg]);
+    setMessages(prev => [...prev, newMsg]);
     setInputText("");
+    setIsProcessing(true);
     
-    // Mock bot response
-    setTimeout(() => {
-      setMessages(prev => [
-        ...prev, 
-        { type: 'bot', content: 'I am so sorry you are experiencing chest pain. That sounds really frightening, but you are doing the right thing by checking.', isEmpathetic: true },
-        { type: 'bot', content: 'You need to see a doctor immediately. Please use the SOS button or go to the nearest ER.', isExplainable: true, explanation: "Explainable AI: Chest pain combined with your profile age is a critical indicator for potential cardiac events. Triage Level: RED (Immediate)." }
-      ]);
-      setShowTelehealthBtn(true);
-    }, 1500);
+    // Call real Backend AI Triage Endpoint
+    fetch('http://localhost:8000/api/v1/triage/analyze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        symptoms_text: newMsg.content,
+        patient_id: "P1", // Hardcoded for now
+        age: 35 // Hardcoded for MVP
+      })
+    })
+    .then(res => res.json())
+    .then(data => {
+      setIsProcessing(false);
+      
+      const botResponse = { 
+        type: 'bot', 
+        content: `Based on your symptoms, this could be: **${data.predicted_condition}**.\n\n` + 
+                 `${data.doctor_recommendation}\n\n` +
+                 `Suggested Care: ${data.home_remedies}`,
+        isExplainable: true, 
+        explanation: data.explanation,
+        confidence: data.confidence_score,
+        severity: data.severity_score
+      };
+      
+      setMessages(prev => [...prev, botResponse]);
+      
+      if (data.severity_score >= 50) {
+        setShowTelehealthBtn(true);
+      }
+    })
+    .catch(err => {
+      setIsProcessing(false);
+      setMessages(prev => [...prev, { type: 'bot', content: 'Sorry, I am currently unable to reach the AI Engine. Please try again or contact a doctor directly.' }]);
+    });
   };
 
   return (
@@ -220,21 +301,50 @@ function TriageScreen({ onStartCall }: { onStartCall?: () => void }) {
               {messages.map((msg, idx) => (
                 <div key={idx} className={`flex ${msg.type === 'user' ? 'justify-end' : 'justify-start'}`}>
                   <div className={`max-w-[85%] rounded-3xl p-4 ${msg.type === 'user' ? 'bg-blue-600 text-white rounded-br-sm shadow-[0_4px_16px_rgba(37,99,235,0.3)]' : 'bg-white border border-white/60 text-gray-800 rounded-bl-sm shadow-neo-out'}`}>
-                    {msg.isImage && <div className="w-full h-32 bg-blue-400/20 rounded-xl mb-2 flex items-center justify-center"><Camera size={24} /></div>}
                     
-                    {msg.isEmpathetic && <div className="text-xs font-bold text-pink-500 mb-1 flex items-center gap-1"><HeartPulse size={12}/> Empathetic Response</div>}
-                    <p className={msg.isEmpathetic ? 'text-gray-700 font-medium' : ''}>{msg.content}</p>
+                    {msg.isDisclaimer && (
+                      <div className="mb-3 p-3 bg-red-50/80 rounded-2xl border border-red-100 flex items-start gap-2">
+                        <AlertTriangle size={16} className="text-red-500 mt-0.5 flex-shrink-0" />
+                        <p className="text-[10px] font-bold text-red-600 leading-tight">{msg.disclaimer}</p>
+                      </div>
+                    )}
+                    
+                    <p className="text-gray-700 font-medium whitespace-pre-wrap">{msg.content}</p>
                     
                     {msg.isExplainable && (
-                      <div className="mt-3 p-3 bg-blue-50/50 rounded-2xl border border-blue-100">
-                        <div className="text-[10px] font-black text-blue-600 mb-1 tracking-wider uppercase">Explainable AI Reasoning</div>
-                        <p className="text-xs text-gray-500 font-medium">{msg.explanation}</p>
+                      <div className="mt-4 pt-3 border-t border-gray-100">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="text-[10px] font-black text-blue-600 tracking-wider uppercase flex items-center gap-1">
+                            <Zap size={12} /> Explainable AI
+                          </div>
+                          <div className={`text-[10px] font-bold px-2 py-1 rounded-full ${msg.severity >= 75 ? 'bg-red-100 text-red-700' : msg.severity >= 50 ? 'bg-orange-100 text-orange-700' : 'bg-green-100 text-green-700'}`}>
+                            Severity: {msg.severity}/100
+                          </div>
+                        </div>
+                        <p className="text-xs text-gray-500 font-medium italic mb-2">"{msg.explanation}"</p>
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] text-gray-400 font-bold">Confidence Score</span>
+                          <span className="text-[10px] text-gray-600 font-black">{(msg.confidence * 100).toFixed(1)}%</span>
+                        </div>
+                        <div className="w-full bg-gray-100 h-1.5 rounded-full mt-1 overflow-hidden">
+                          <div className="bg-blue-500 h-full rounded-full" style={{width: `${msg.confidence * 100}%`}}></div>
+                        </div>
                       </div>
                     )}
                   </div>
                 </div>
               ))}
+              {isProcessing && (
+                <div className="flex justify-start">
+                  <div className="bg-white border border-white/60 rounded-3xl rounded-bl-sm p-4 shadow-neo-out flex items-center gap-2">
+                    <span className="w-2 h-2 bg-blue-400 rounded-full animate-bounce"></span>
+                    <span className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{animationDelay: '150ms'}}></span>
+                    <span className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{animationDelay: '300ms'}}></span>
+                  </div>
+                </div>
+              )}
             </div>
+            
             {showTelehealthBtn && (
               <div className="pb-4">
                 <button onClick={onStartCall} className="w-full py-4 bg-green-500 text-white rounded-2xl font-bold shadow-[0_8px_24px_rgba(34,197,94,0.3)] flex items-center justify-center gap-2 animate-bounce">
@@ -242,38 +352,23 @@ function TriageScreen({ onStartCall }: { onStartCall?: () => void }) {
                 </button>
               </div>
             )}
+            
             <div className="pt-2 flex gap-2 relative z-10">
-              <input 
-                type="text" 
-                value={inputText}
-                onChange={(e) => setInputText(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && handleSend()}
-                placeholder="Type your symptoms..." 
-                className="flex-1 neo-bg rounded-full px-6 py-4 shadow-neo-in border-none outline-none text-gray-700"
-              />
-              <button onClick={handleSend} className="w-14 h-14 rounded-full bg-blue-600 text-white flex items-center justify-center shadow-[0_4px_12px_rgba(37,99,235,0.3)]">
-                <ArrowRight size={24} />
-              </button>
+              <input type="text" value={inputText} onChange={(e) => setInputText(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && handleSend()} placeholder="Type your symptoms..." className="flex-1 neo-bg rounded-full px-6 py-4 shadow-neo-in border-none outline-none text-gray-700" disabled={isProcessing} />
+              <button onClick={handleSend} disabled={isProcessing} className="w-14 h-14 rounded-full bg-blue-600 text-white flex items-center justify-center shadow-[0_4px_12px_rgba(37,99,235,0.3)] disabled:opacity-50"><ArrowRight size={24} /></button>
             </div>
           </motion.div>
         ) : (
           <motion.div key="home" className="h-full flex flex-col items-center justify-center">
             <div className="w-full neo-bg rounded-[40px] p-8 shadow-neo-out border border-white/60 flex flex-col items-center">
               <h2 className="text-2xl font-bold text-gray-800 mb-2">How can I help?</h2>
-              <p className="text-gray-500 text-center mb-10">Tap to speak or upload a photo of your symptom.</p>
-              
+              <p className="text-gray-500 text-center mb-10">Tap to speak or type your symptoms.</p>
               <button onClick={() => startChat('voice')} className="w-32 h-32 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center shadow-[0_12px_32px_rgba(59,130,246,0.4)] relative mb-8 active:scale-95 transition-transform">
                 <div className="absolute inset-0 rounded-full border-[6px] border-blue-400/30 animate-ping"></div>
                 <Mic size={48} className="text-white" />
               </button>
-              
               <div className="flex w-full gap-4">
-                <button onClick={() => startChat('photo')} className="flex-1 py-4 neo-bg rounded-2xl shadow-neo-out border border-white/60 font-bold text-gray-700 flex items-center justify-center gap-2 active:shadow-neo-in transition-all">
-                  <Camera size={20} className="text-blue-500" /> Photo
-                </button>
-                <button onClick={() => startChat('text')} className="flex-1 py-4 neo-bg rounded-2xl shadow-neo-out border border-white/60 font-bold text-gray-700 flex items-center justify-center gap-2 active:shadow-neo-in transition-all">
-                  <FileText size={20} className="text-blue-500" /> Type
-                </button>
+                <button onClick={() => startChat('text')} className="flex-1 py-4 neo-bg rounded-2xl shadow-neo-out border border-white/60 font-bold text-gray-700 flex items-center justify-center gap-2 active:shadow-neo-in transition-all"><FileText size={20} className="text-blue-500" /> Type Symptoms</button>
               </div>
             </div>
           </motion.div>
@@ -285,7 +380,7 @@ function TriageScreen({ onStartCall }: { onStartCall?: () => void }) {
 
 import localforage from 'localforage';
 
-function WalletScreen() {
+function WalletScreen({ token }: { token: string }) {
   const [ocrScanning, setOcrScanning] = useState(false);
   const [records, setRecords] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -302,8 +397,15 @@ function WalletScreen() {
     });
 
     // 2. Fetch fresh data from backend
-    fetch('http://localhost:8000/api/v1/ehr/patient/P1')
-      .then(res => res.json())
+    fetch('http://localhost:8000/api/v1/ehr/patient/P1', {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    })
+      .then(res => {
+        if (!res.ok) throw new Error("Unauthorized or Network Error");
+        return res.json();
+      })
       .then(data => {
         setRecords(data);
         localforage.setItem('ehr_records', data); // Cache the fresh data
@@ -315,7 +417,7 @@ function WalletScreen() {
         setIsOffline(true);
         setLoading(false);
       });
-  }, []);
+  }, [token]);
 
   const handleScan = () => {
     setOcrScanning(true);
