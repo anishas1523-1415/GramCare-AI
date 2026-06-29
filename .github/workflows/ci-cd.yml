@@ -1,0 +1,61 @@
+name: GramCare AI CI/CD Pipeline
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  test-backend:
+    name: Lint & Test FastAPI Backend
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python 3.10
+      uses: actions/setup-python@v4
+      with:
+        python-version: "3.10"
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install flake8 pytest
+        if [ -f apps/backend_service/requirements.txt ]; then pip install -r apps/backend_service/requirements.txt; fi
+        
+    - name: Run PyTest
+      env:
+        DATABASE_URL: sqlite:///./test.db
+      run: |
+        cd apps/backend_service
+        pytest
+
+  build-frontends:
+    name: Build React & Next.js Apps
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Use Node.js 18
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+        
+    - name: Build Patient App (Vite/React)
+      run: |
+        cd apps/suites/patient_app/mobile_app/react_ui
+        npm install
+        npm run build
+        
+    - name: Build Doctor Portal (Next.js)
+      run: |
+        cd apps/suites/doctor_hospital_suite/web_app
+        npm install
+        npm run build
+
+    - name: Build Pharmacy Portal (Next.js)
+      run: |
+        cd apps/suites/pharmacy_suite/web_app
+        npm install
+        npm run build
