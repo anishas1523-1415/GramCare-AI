@@ -1,0 +1,28 @@
+services:
+  # 1. FastAPI Backend
+  - type: web
+    name: gramcare-fastapi
+    env: python
+    rootDir: apps/backend_service
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: DATABASE_URL
+        sync: false # You will enter this manually in the Render dashboard
+      - key: GEMINI_API_KEY
+        sync: false # You will enter this manually in the Render dashboard
+      - key: JWT_SECRET_KEY
+        generateValue: true
+      - key: NODE_SIGNALING_URL
+        value: "https://gramcare-signaling.onrender.com"
+
+  # 2. Node.js Realtime Signaling Server
+  - type: web
+    name: gramcare-signaling
+    env: node
+    rootDir: backend/node_api
+    buildCommand: npm install
+    startCommand: node server.js
+    envVars:
+      - key: FASTAPI_URL
+        value: "https://gramcare-fastapi.onrender.com"
