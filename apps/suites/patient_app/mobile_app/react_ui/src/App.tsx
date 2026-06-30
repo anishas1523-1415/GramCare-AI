@@ -43,7 +43,7 @@ export default function App() {
         <AnimatePresence mode="wait">
           {inVideoCall && (
             <motion.div key="videoCall" initial={{opacity: 0, scale: 0.9}} animate={{opacity: 1, scale: 1}} exit={{opacity: 0, scale: 0.9}} className="absolute inset-0 z-40 bg-gray-900">
-               <VideoCallScreen onEndCall={() => setInVideoCall(false)} />
+               <TelehealthFlow onEndCall={() => setInVideoCall(false)} />
             </motion.div>
           )}
 
@@ -172,9 +172,7 @@ function LoginScreen({ onLogin }: { onLogin: (t: string) => void }) {
 // Screens
 // ----------------------------------------------------------------------
 
-function VideoCallScreen({ onEndCall }: { onEndCall: () => void }) {
-  const localVideoRef = React.useRef<HTMLVideoElement>(null);
-  const [callActive, setCallActive] = useState(false);
+function TelehealthFlow({ onEndCall }: { onEndCall: () => void }) {
   const [paymentComplete, setPaymentComplete] = useState(false);
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
   const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
@@ -200,26 +198,9 @@ function VideoCallScreen({ onEndCall }: { onEndCall: () => void }) {
     .catch(() => setIsProcessingPayment(false));
   };
 
-  useEffect(() => {
-    if (!paymentComplete) return;
-    navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-      .then((stream) => {
-        if (localVideoRef.current) localVideoRef.current.srcObject = stream;
-        setCallActive(true);
-      })
-      .catch((err) => console.error("Failed to access camera", err));
-
-    return () => {
-      if (localVideoRef.current && localVideoRef.current.srcObject) {
-        const stream = localVideoRef.current.srcObject as MediaStream;
-        stream.getTracks().forEach(track => track.stop());
-      }
-    };
-  }, [paymentComplete]);
-
   if (!paymentComplete) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center p-6 bg-gradient-to-b from-blue-50 to-white">
+      <div className="flex-1 flex flex-col items-center justify-center p-6 bg-gradient-to-b from-blue-50 to-white h-full">
         <div className="bg-white p-8 rounded-3xl shadow-xl w-full max-w-md text-center border border-gray-100">
           <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4">
             <span className="text-2xl font-bold">₹</span>
@@ -244,31 +225,7 @@ function VideoCallScreen({ onEndCall }: { onEndCall: () => void }) {
     );
   }
 
-  return (
-    <div className="w-full h-full bg-black relative flex flex-col">
-      <div className="absolute top-12 left-6 z-10">
-        <p className="text-white font-bold drop-shadow-md">Dr. Sarah Jenkins</p>
-        <p className="text-green-400 text-sm font-bold flex items-center gap-1">
-          <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span> Connected securely
-        </p>
-      </div>
-      <div className="flex-1 bg-gray-800 flex items-center justify-center">
-        {callActive ? (
-          <p className="text-gray-500 font-bold">Waiting for Dr. Sarah to turn on camera...</p>
-        ) : (
-          <p className="text-gray-500 font-bold animate-pulse">Connecting to GramCare WebRTC Server...</p>
-        )}
-      </div>
-      <div className="absolute bottom-32 right-6 w-32 h-48 bg-gray-900 rounded-2xl overflow-hidden border-2 border-white/20 shadow-2xl">
-        <video ref={localVideoRef} autoPlay playsInline muted className="w-full h-full object-cover transform scale-x-[-1]" />
-      </div>
-      <div className="absolute bottom-12 w-full flex justify-center gap-6">
-        <button className="w-14 h-14 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center text-white border border-white/30"><Mic size={24} /></button>
-        <button onClick={onEndCall} className="w-16 h-16 rounded-full bg-red-600 flex items-center justify-center text-white shadow-[0_4px_16px_rgba(220,38,38,0.4)]"><Phone size={28} className="transform rotate-[135deg]" /></button>
-        <button className="w-14 h-14 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center text-white border border-white/30"><Camera size={24} /></button>
-      </div>
-    </div>
-  );
+  return <VideoCallScreen onEndCall={onEndCall} />;
 }
 
 function TriageScreen({ onStartCall }: { onStartCall?: () => void }) {

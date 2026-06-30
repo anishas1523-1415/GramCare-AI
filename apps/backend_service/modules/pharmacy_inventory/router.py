@@ -14,8 +14,7 @@ class Medicine(BaseModel):
     minimum_threshold: int = 50
     status: str = "Optimal"
     
-    class Config:
-        orm_mode = True
+    model_config = {"from_attributes": True}
 
 @router.get("/stock", response_model=List[Medicine])
 async def get_inventory_status(db: Session = Depends(get_db)):

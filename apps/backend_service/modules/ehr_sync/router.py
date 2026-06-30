@@ -19,8 +19,7 @@ class PrescriptionResponse(Prescription):
     id: int
     timestamp: datetime
 
-    class Config:
-        orm_mode = True
+    model_config = {"from_attributes": True}
 
 @router.post("/issue_prescription", response_model=PrescriptionResponse)
 async def issue_prescription(prescription: Prescription, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):

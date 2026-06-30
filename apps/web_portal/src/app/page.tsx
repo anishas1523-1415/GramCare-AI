@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import { Activity, ShieldAlert, Radio } from "lucide-react";
 import { useState, useEffect } from "react";
 import { io } from "socket.io-client";
+import api from "../lib/api";
 
 export default function Home() {
   const [symptoms, setSymptoms] = useState("");
@@ -15,9 +16,11 @@ export default function Home() {
   const [alerts, setAlerts] = useState<any[]>([]);
   const [socketConnected, setSocketConnected] = useState(false);
 
+  const WS_URL_EFFECT = process.env.NEXT_PUBLIC_WS_URL || "http://localhost:4000";
+
   useEffect(() => {
     // Connect to Node.js Realtime Server
-    const socket = io("http://localhost:4000");
+    const socket = io(WS_URL_EFFECT);
 
     socket.on("connect", () => {
       setSocketConnected(true);
@@ -43,6 +46,9 @@ export default function Home() {
     };
   }, []);
 
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "http://localhost:4000";
+
   const analyzeSymptoms = async () => {
     if (!symptoms.trim()) return;
     
@@ -51,30 +57,39 @@ export default function Home() {
     setTriageResult(null);
 
     try {
-      const formData = new FormData();
-      formData.append("symptoms", symptoms);
-
-      // Connect to the local Python AI Engine
-      const res = await fetch("http://localhost:8000/api/triage", {
-        method: "POST",
-        body: formData,
+      // Connect to the FastAPI Backend (unified API)
+      const res = await api.post("/triage/analyze", {
+        symptoms_text: symptoms,
+        patient_id: "GUEST",
+        age: 30,
       });
 
-      if (!res.ok) throw new Error("Failed to connect to AI Engine");
+      const data = res.data;
       
-      const data = await res.json();
-      setTriageResult(data);
+      // Map backend response to UI format
+      const severityLabel = data.severity_score >= 75 ? "CRITICAL" 
+        : data.severity_score >= 50 ? "HIGH" 
+        : data.severity_score >= 25 ? "MODERATE" 
+        : "LOW";
       
-      // Simulate emitting a triage alert to the WebSocket server for the Doctor Portal
-      // We would normally do this from the backend, but for this demo we'll emit from client 
-      // just to see the UI update instantly.
-      const socket = io("http://localhost:4000");
+      setTriageResult({
+        severity: severityLabel,
+        severity_score: data.severity_score,
+        department: data.predicted_condition,
+        recommendation: data.doctor_recommendation,
+        home_remedies: data.home_remedies,
+        confidence: data.confidence_score,
+        explanation: data.explanation,
+      });
+      
+      // Emit triage alert to the WebSocket server for the Doctor Portal live feed
+      const socket = io(WS_URL);
       socket.emit("new_triage_alert", {
         id: Math.random().toString(36).substring(7),
         time: new Date().toLocaleTimeString(),
-        severity: data.severity,
-        department: data.department,
-        symptoms: symptoms.substring(0, 30) + "..."
+        severity: severityLabel,
+        department: data.predicted_condition,
+        symptoms: symptoms.substring(0, 50) + (symptoms.length > 50 ? "..." : ""),
       });
       setTimeout(() => socket.disconnect(), 1000);
 

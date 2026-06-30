@@ -37,6 +37,9 @@ dependencies:
   hive: ^2.2.3
   hive_flutter: ^1.1.0
   path_provider: ^2.1.6
+  dio: ^5.10.0
+  shared_preferences: ^2.5.5
+  go_router: ^17.3.0
 
 dev_dependencies:
   flutter_test:

@@ -1,33 +1,45 @@
 version: '3.8'
 
 services:
-  # 1. Patient App (React UI for Web & Mobile Webviews)
-  patient_app:
+  # 1. Unified Web Portal (Next.js for Patient Suite & Doctor Portal)
+  web_portal:
     build:
-      context: ./apps/suites/patient_app/mobile_app/react_ui
+      context: ./apps/web_portal
       dockerfile: Dockerfile
-    container_name: gramcare_patient_app
-    ports:
-      - "80:80"
-    restart: unless-stopped
-    depends_on:
-      - fastapi_backend
-      - node_signaling
-
-  # 2. Doctor Portal (Next.js)
-  doctor_portal:
-    build:
-      context: ./apps/suites/doctor_hospital_suite/web_app
-      dockerfile: Dockerfile
-    container_name: gramcare_doctor_portal
+    container_name: gramcare_web_portal
     ports:
       - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - NEXT_PUBLIC_WS_URL=http://localhost:4000
+      - NEXT_PUBLIC_RAZORPAY_KEY_ID=${RAZORPAY_KEY_ID}
     restart: unless-stopped
     depends_on:
-      - fastapi_backend
-      - node_signaling
+      fastapi_backend:
+        condition: service_healthy
+      node_signaling:
+        condition: service_healthy
+    networks:
+      - gramcare_net
 
-  # 3. Node.js Realtime Data & Signaling Engine (Socket.io WebRTC / Vitals)
+  # 2. Pharmacy Portal (Vite/React Dashboard)
+  pharmacy_portal:
+    build:
+      context: ./apps/react_dashboard
+      dockerfile: Dockerfile
+    container_name: gramcare_pharmacy_portal
+    ports:
+      - "80:80"
+    environment:
+      - VITE_API_URL=http://localhost:8000
+    restart: unless-stopped
+    depends_on:
+      fastapi_backend:
+        condition: service_healthy
+    networks:
+      - gramcare_net
+
+  # 3. Node.js Realtime Signaling Engine (Socket.io + WebRTC)
   node_signaling:
     build:
       context: ./backend/node_api
@@ -35,9 +47,21 @@ services:
     container_name: gramcare_node_signaling
     ports:
       - "4000:4000"
+    environment:
+      - PORT=4000
+      - FASTAPI_URL=http://fastapi_backend:8000
+      - SECRET_KEY=${SECRET_KEY:-super-secret-key}
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:4000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     restart: unless-stopped
+    networks:
+      - gramcare_net
 
-  # 4. FastAPI Backend (AI Triage, EHR, Pharmacy, Auth)
+  # 4. FastAPI Backend
   fastapi_backend:
     build:
       context: ./apps/backend_service
@@ -45,13 +69,22 @@ services:
     container_name: gramcare_fastapi
     ports:
       - "8000:8000"
+    env_file:
+      - ./apps/backend_service/.env
     environment:
       - DATABASE_URL=postgresql://gramcare_user:securepassword123@postgres_db:5432/gramcare_db
-      - SECRET_KEY=gramcare_super_secret_jwt_key_2026
-      # Note: For production, GEMINI_API_KEY should be passed here or loaded from secret manager
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/')"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
     restart: unless-stopped
     depends_on:
-      - postgres_db
+      postgres_db:
+        condition: service_healthy
+    networks:
+      - gramcare_net
 
   # 5. PostgreSQL Database
   postgres_db:
@@ -65,7 +98,19 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gramcare_user -d gramcare_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     restart: unless-stopped
+    networks:
+      - gramcare_net
 
 volumes:
   pgdata:
+
+networks:
+  gramcare_net:
+    driver: bridge

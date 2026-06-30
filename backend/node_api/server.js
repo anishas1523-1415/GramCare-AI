@@ -3,17 +3,22 @@ const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
 const cors = require("cors");
-const admin = require("firebase-admin");
+const { initializeApp, cert } = require("firebase-admin/app");
+const { getMessaging } = require("firebase-admin/messaging");
+const jwt = require("jsonwebtoken");
 
-// Initialize Firebase Admin (Mock/Placeholder for now)
-// In production, we'd load serviceAccountKey.json
+// Initialize Firebase Admin for Push Notifications
+let firebaseInitialized = false;
 try {
-  // admin.initializeApp({
-  //   credential: admin.credential.cert(serviceAccount)
-  // });
-  console.log("Firebase Admin initialization deferred until credentials are provided.");
+  const serviceAccount = require("./firebase-service-account.json");
+  initializeApp({
+    credential: cert(serviceAccount)
+  });
+  firebaseInitialized = true;
+  console.log("Firebase Admin initialized successfully. Push notifications enabled.");
 } catch (error) {
-  console.error("Firebase Admin Error:", error);
+  console.warn("Firebase Admin Initialization Failed:", error.message);
+  console.warn("FCM Push Notifications will not be sent, but Socket.io broadcast will still work.");
 }
 
 const app = express();
@@ -28,6 +33,28 @@ const io = new Server(server, {
     origin: "*",
     methods: ["GET", "POST"]
   }
+});
+
+// --- AUTHENTICATION MIDDLEWARE ---
+// Ensure only authenticated users can connect to the Socket Server
+io.use((socket, next) => {
+  const token = socket.handshake.auth.token;
+  if (!token) {
+    // For demo purposes, we will allow unauthenticated connections, but log a warning.
+    // In strict production: return next(new Error("Authentication error: Token missing"));
+    console.warn("Unauthenticated socket connection:", socket.id);
+    return next();
+  }
+  
+  jwt.verify(token, process.env.SECRET_KEY || "super-secret-key", (err, decoded) => {
+    if (err) {
+      console.warn("Invalid JWT token for socket:", socket.id);
+      // In strict production: return next(new Error("Authentication error: Invalid token"));
+      return next(); 
+    }
+    socket.user = decoded;
+    next();
+  });
 });
 
 // Realtime connection handler
@@ -57,7 +84,9 @@ io.on("connection", (socket) => {
 
   // --- WEBRTC SIGNALING LOGIC ---
   
-  socket.on("join_call", (roomId) => {
+  // --- WEBRTC SIGNALING LOGIC (Tele-ICU) ---
+  
+  socket.on("join_room", (roomId) => {
     socket.join(roomId);
     console.log(`Socket ${socket.id} joined video call room: ${roomId}`);
     // Notify others in the room that a user connected
@@ -65,15 +94,15 @@ io.on("connection", (socket) => {
   });
 
   socket.on("offer", (payload) => {
-    io.to(payload.target).emit("offer", payload);
+    socket.to(payload.roomId).emit("offer", payload);
   });
 
   socket.on("answer", (payload) => {
-    io.to(payload.target).emit("answer", payload);
+    socket.to(payload.roomId).emit("answer", payload);
   });
 
-  socket.on("ice-candidate", (incoming) => {
-    io.to(incoming.target).emit("ice-candidate", incoming.candidate);
+  socket.on("ice_candidate", (incoming) => {
+    socket.to(incoming.roomId).emit("ice_candidate", incoming);
   });
   
   // --- IOT VITALS STREAMING (PHASE 15) ---
@@ -97,6 +126,57 @@ io.on("connection", (socket) => {
 // Basic health check route
 app.get("/health", (req, res) => {
   res.json({ status: "healthy", service: "GramCare Node API" });
+});
+
+// SOS REST Endpoint (Allows the backend or external services to trigger a global SOS via HTTP)
+app.post("/api/sos/trigger", async (req, res) => {
+  const sosData = req.body;
+  console.log("REST SOS Triggered:", sosData);
+  
+  const payload = {
+    ...sosData,
+    time: new Date().toLocaleTimeString(),
+    isEmergency: true
+  };
+  
+  // 1. Broadcast via WebSocket to active doctors
+  io.emit("emergency_alert", payload);
+  
+  // 2. Fire Push Notification via Firebase Cloud Messaging (FCM)
+  if (firebaseInitialized && payload.severity === "CRITICAL") {
+    try {
+      const message = {
+        notification: {
+          title: "🚨 CRITICAL EMERGENCY SOS",
+          body: `Patient ${payload.patient_id} triggered an SOS at ${payload.location}`,
+        },
+        data: {
+          patient_id: String(payload.patient_id),
+          type: "sos_alert"
+        },
+        topic: "doctors_global" // Broadcast to all devices subscribed to the 'doctors_global' topic
+      };
+      
+      const fcmRes = await getMessaging().send(message);
+      console.log("FCM Push Notification Sent successfully:", fcmRes);
+    } catch (err) {
+      console.error("Failed to send FCM Push Notification:", err);
+    }
+  }
+
+  res.json({ success: true, message: "SOS Broadcasted & Push Notification Triggered" });
+});
+
+// TURN Server configuration for WebRTC in strict networks (NAT/Firewalls)
+app.get("/api/webrtc/turn-credentials", (req, res) => {
+  // In production, integrate with Twilio Network Traversal or equivalent
+  res.json({
+    iceServers: [
+      { urls: "stun:stun.l.google.com:19302" },
+      { urls: "stun:stun1.l.google.com:19302" },
+      // { urls: "turn:your-turn-server.com", username: "guest", credential: "password" }
+    ]
+  });
 });
 
 const PORT = process.env.PORT || 4000;

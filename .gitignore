@@ -10,3 +10,5 @@ build/
 gramcare.db
 *.sqlite3
 .svelte-kit/
+*firebase-adminsdk*.json
+firebase-service-account.json

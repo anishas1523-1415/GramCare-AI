@@ -1,4 +1,4 @@
-name: GramCare AI CI/CD
+name: GramCare AI CI/CD Pipeline
 
 on:
   push:
@@ -7,52 +7,99 @@ on:
     branches: [ "main" ]
 
 jobs:
-  backend-tests:
+  test-backend:
     runs-on: ubuntu-latest
     
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: gramcare_user
+          POSTGRES_PASSWORD: securepassword123
+          POSTGRES_DB: gramcare_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     
     - name: Set up Python 3.11
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: "3.11"
+        cache: 'pip'
         
-    - name: Install Backend Dependencies
+    - name: Install Dependencies
+      working-directory: ./apps/backend_service
       run: |
         python -m pip install --upgrade pip
-        pip install -r apps/backend_service/requirements.txt
-        pip install pytest httpx
+        pip install -r requirements.txt
+        pip install pytest pytest-asyncio httpx
         
-    - name: Lint with Flake8
+    - name: Run Backend Tests
+      working-directory: ./apps/backend_service
+      env:
+        DATABASE_URL: postgresql://gramcare_user:securepassword123@localhost:5432/gramcare_db
+        SECRET_KEY: test-secret-key
+        GEMINI_API_KEY: mock-api-key
       run: |
-        pip install flake8
-        # stop the build if there are Python syntax errors or undefined names
-        flake8 apps/backend_service --count --select=E9,F63,F7,F82 --show-source --statistics
-        
-    - name: Run Pytest (Mocked)
-      run: |
-        echo "Running backend unit tests (TODO: Implement test suite in Phase 13)"
+        pytest tests/
 
-  frontend-build:
+  build-web-portal:
     runs-on: ubuntu-latest
-    
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     
-    - name: Set up Node.js 20
-      uses: actions/setup-node@v3
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
       with:
         node-version: '20'
+        cache: 'npm'
+        cache-dependency-path: './apps/web_portal/package-lock.json'
         
-    - name: Patient App Build Test
+    - name: Install & Build
+      working-directory: ./apps/web_portal
       run: |
-        cd apps/suites/patient_app/mobile_app/react_ui
-        npm install
+        npm ci
+        npm run build
+        
+  build-pharmacy-portal:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        cache-dependency-path: './apps/react_dashboard/package-lock.json'
+        
+    - name: Install & Build
+      working-directory: ./apps/react_dashboard
+      run: |
+        npm ci
         npm run build
 
-    - name: Doctor App Build Test
+  build-mobile-app:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup Flutter
+      uses: subosito/flutter-action@v2
+      with:
+        channel: 'stable'
+        flutter-version: '3.19.0'
+        cache: true
+        
+    - name: Install & Analyze
+      working-directory: ./apps/mobile_app
       run: |
-        cd apps/suites/doctor_hospital_suite/web_app
-        npm install
-        npm run build
+        flutter pub get
+        flutter analyze

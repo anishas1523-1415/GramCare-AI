@@ -1,2 +1,38 @@
-pytest
-httpx
+# ============================================================
+# GramCare AI — Backend Service Dependencies
+# ============================================================
+
+# Core Framework
+fastapi==0.115.12
+uvicorn[standard]==0.34.3
+pydantic==2.11.7
+python-multipart==0.0.20
+
+# Database
+sqlalchemy==2.0.41
+alembic==1.16.2
+psycopg[binary]>=3.2.1
+
+# Authentication
+passlib[bcrypt]==1.7.4
+python-jose[cryptography]==3.4.0
+bcrypt==4.3.0
+
+# AI & ML
+google-genai>=1.65.0
+
+# Payments (Razorpay for Indian market)
+razorpay==1.4.2
+
+# Image Processing & OCR
+Pillow
+
+# Environment
+python-dotenv==1.1.1
+
+# Testing
+pytest==8.4.1
+httpx==0.28.1
+
+# Utilities
+aiofiles==24.1.0
