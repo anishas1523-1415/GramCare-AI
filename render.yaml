@@ -3,6 +3,7 @@ services:
   - type: web
     name: gramcare-fastapi
     env: python
+    plan: free
     rootDir: apps/backend_service
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
@@ -20,6 +21,7 @@ services:
   - type: web
     name: gramcare-signaling
     env: node
+    plan: free
     rootDir: backend/node_api
     buildCommand: npm install
     startCommand: node server.js
