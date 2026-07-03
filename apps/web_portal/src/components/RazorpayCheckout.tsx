@@ -3,17 +3,20 @@
 import React, { useState } from 'react';
 import Script from 'next/script';
 import api from '../lib/api';
+import { useAuth } from '../contexts/AuthContext';
 
 interface RazorpayCheckoutProps {
   amount: number; // in INR
-  patientId: number;
-  onSuccess: (paymentId: string) => void;
+  /** Called with the ORDER id after successful verification — the booking
+   * API requires this order id as proof of payment (server-enforced). */
+  onSuccess: (orderId: string) => void;
   onError: (error: string) => void;
 }
 
-export default function RazorpayCheckout({ amount, patientId, onSuccess, onError }: RazorpayCheckoutProps) {
+export default function RazorpayCheckout({ amount, onSuccess, onError }: RazorpayCheckoutProps) {
   const [loading, setLoading] = useState(false);
   const [isScriptLoaded, setIsScriptLoaded] = useState(false);
+  const { user } = useAuth();
 
   const handlePayment = async () => {
     if (!isScriptLoaded) {
@@ -24,22 +27,23 @@ export default function RazorpayCheckout({ amount, patientId, onSuccess, onError
     setLoading(true);
 
     try {
-      // 1. Create Order on Backend
-      const { data: order } = await api.post('/payments/create-order', {
-        amount,
-        patient_id: patientId,
-      });
+      // 1. Create Order on Backend (always for the authenticated caller —
+      // the old client-supplied patient_id field was an impersonation hole)
+      const { data: order } = await api.post('/payments/create-order', { amount });
 
       if (order.is_mock) {
-        // Handle mock payment directly without opening Razorpay modal
+        // Handle mock payment directly without opening Razorpay modal.
+        // The mock signature must now be derived from the order id (backend
+        // no longer accepts a bare "mock_sig_valid" for any order — see
+        // apps/backend_service/modules/payments/router.py verify_payment).
         const { data: verifyData } = await api.post('/payments/verify', {
           razorpay_order_id: order.order_id,
           razorpay_payment_id: "mock_pay_" + Math.random().toString(36).substring(7),
-          razorpay_signature: "mock_sig_valid"
+          razorpay_signature: `mock_sig_${order.order_id}_valid`
         });
         
         if (verifyData.status === "SUCCESS") {
-          onSuccess("mock_payment_id");
+          onSuccess(order.order_id);
         } else {
           onError("Mock verification failed");
         }
@@ -65,7 +69,7 @@ export default function RazorpayCheckout({ amount, patientId, onSuccess, onError
             });
 
             if (verifyData.status === "SUCCESS") {
-              onSuccess(response.razorpay_payment_id);
+              onSuccess(response.razorpay_order_id);
             } else {
               onError("Payment verification failed.");
             }
@@ -73,9 +77,16 @@ export default function RazorpayCheckout({ amount, patientId, onSuccess, onError
             onError(err.response?.data?.detail || "Payment verification failed.");
           }
         },
+        // Previously hardcoded placeholder values ("Patient Name",
+        // patient@example.com) regardless of who was actually paying — real
+        // payment records/receipts would show fake customer info. Now
+        // sourced from the authenticated user; contact number still falls
+        // back to a placeholder since phone number isn't currently part of
+        // the User model (schemas.UserCreate has no phone field either) —
+        // tracked as a follow-up.
         prefill: {
-          name: "Patient Name", // Typically fetched from AuthContext
-          email: "patient@example.com",
+          name: user?.full_name || user?.username || "Patient",
+          email: user?.email || "",
           contact: "9999999999"
         },
         theme: {

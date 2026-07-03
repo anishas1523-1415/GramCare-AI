@@ -1,14 +1,17 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { use, useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Mic, MicOff, Video, VideoOff, PhoneOff, MonitorUp, Activity } from 'lucide-react';
 import { io, Socket } from 'socket.io-client';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 
-export default function ConsultationRoom({ params }: { params: { id: string } }) {
-  const roomId = params.id;
+// See doctor/prescription/[appointmentId]/page.tsx for why `params` must be
+// unwrapped with `use()` on this Next.js version rather than destructured
+// synchronously.
+export default function ConsultationRoom({ params }: { params: Promise<{ id: string }> }) {
+  const { id: roomId } = use(params);
   const { user } = useAuth();
   const router = useRouter();
 
@@ -24,9 +27,13 @@ export default function ConsultationRoom({ params }: { params: { id: string } })
   const localStreamRef = useRef<MediaStream | null>(null);
 
   useEffect(() => {
-    // Connect to Signaling Server
+    // Connect to Signaling Server. join_room/offer/answer/ice_candidate now
+    // require an authenticated socket on the server side, so pass the same
+    // access token used for REST calls.
     const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "http://localhost:4000";
-    socketRef.current = io(WS_URL);
+    socketRef.current = io(WS_URL, {
+      auth: { token: localStorage.getItem('access_token') },
+    });
 
     // Initialize Media
     const startMedia = async () => {
@@ -111,18 +118,29 @@ export default function ConsultationRoom({ params }: { params: { id: string } })
     };
   }, [roomId]);
 
+  // Previously read `isMuted`/`isVideoOff` (the state BEFORE this toggle) to
+  // set `.enabled`, then flipped the state after — it happened to produce
+  // the right result only because of a double-negative coincidence
+  // (enabled = wasMuted, then isMuted = !wasMuted, so enabled ends up ==
+  // !isMutedNew). It also had no guard: if getAudioTracks()/getVideoTracks()
+  // returned an empty array (mic/camera permission denied, or an
+  // audio-only/video-only stream), `[0]` was undefined and `.enabled = ...`
+  // threw. Now computes the new state first and guards against missing
+  // tracks.
   const toggleMute = () => {
-    if (localStreamRef.current) {
-      localStreamRef.current.getAudioTracks()[0].enabled = isMuted;
-      setIsMuted(!isMuted);
-    }
+    const track = localStreamRef.current?.getAudioTracks()[0];
+    if (!track) return;
+    const nextMuted = !isMuted;
+    track.enabled = !nextMuted;
+    setIsMuted(nextMuted);
   };
 
   const toggleVideo = () => {
-    if (localStreamRef.current) {
-      localStreamRef.current.getVideoTracks()[0].enabled = isVideoOff;
-      setIsVideoOff(!isVideoOff);
-    }
+    const track = localStreamRef.current?.getVideoTracks()[0];
+    if (!track) return;
+    const nextVideoOff = !isVideoOff;
+    track.enabled = !nextVideoOff;
+    setIsVideoOff(nextVideoOff);
   };
 
   const endCall = () => {

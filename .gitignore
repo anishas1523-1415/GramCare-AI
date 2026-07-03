@@ -2,13 +2,27 @@ node_modules/
 __pycache__/
 *.pyc
 .env
+.env.*
+!.env.example
 .venv
 venv/
 dist/
 build/
 .DS_Store
-gramcare.db
+# Previously only gramcare.db and *.sqlite3 were excluded. database.py's
+# fallback path writes to gramcare_local.db specifically (see
+# ALLOW_SQLITE_FALLBACK in apps/backend_service/database.py) — that file,
+# and any other stray local DB file, was NOT covered, risking real local
+# patient/appointment data ending up committed.
+*.db
 *.sqlite3
 .svelte-kit/
 *firebase-adminsdk*.json
 firebase-service-account.json
+.pytest_cache/
+.next/
+coverage/
+.vscode/
+.idea/
+*.log
+npm-debug.log*

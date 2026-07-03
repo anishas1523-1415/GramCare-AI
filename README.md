@@ -9,7 +9,7 @@ GramCare AI provides a complete suite of tools for Patients, Doctors, and Pharma
 The platform is composed of 5 core microservices:
 
 1. **Patient Suite & Doctor Portal (`apps/web_portal`)**
-   - Built with Next.js 14 and TailwindCSS.
+   - Built with Next.js 16 and TailwindCSS.
    - Serves as the unified web interface for both patients (AI Triage, Appointment Booking, Family Profiles) and doctors (Live Queue, WebRTC Tele-ICU, E-Prescriptions).
 
 2. **Pharmacy Network (`apps/react_dashboard`)**
@@ -45,7 +45,7 @@ The entire ecosystem is containerized for easy deployment.
 1. **Configure Environment Variables:**
    Copy the example environment file and fill in your keys (Gemini API, Razorpay):
    ```bash
-   cp apps/backend_service/.env.example apps/backend_service/.env
+   cp .env.example apps/backend_service/.env
    ```
 
 2. **Launch with Docker Compose:**

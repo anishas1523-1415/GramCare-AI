@@ -1,13 +1,27 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { use, useState } from 'react';
 import { motion } from 'framer-motion';
 import { FileText, Plus, Trash2, Printer } from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import api from '../../../../lib/api';
 
-export default function PrescriptionWriter({ params }: { params: { appointmentId: string } }) {
+// Next.js 15+ (this project is on Next 16.2.9) passes `params` as a Promise
+// on page components, not a plain object. The previous synchronous
+// destructuring (`{ params }: { params: { appointmentId: string } }`)
+// worked on older Next.js but throws/warns on this version — must unwrap
+// with `use()`.
+export default function PrescriptionWriter({ params }: { params: Promise<{ appointmentId: string }> }) {
+  const { appointmentId } = use(params);
   const router = useRouter();
+  const searchParams = useSearchParams();
+  // Previously hardcoded to patient_id: 1 on submit regardless of which
+  // patient the appointment was actually for. The doctor dashboard now
+  // passes the real patient_id as a query param when linking here (see
+  // doctor/dashboard/page.tsx), since there is no GET /appointments/{id}
+  // single-fetch endpoint to look it up from appointmentId alone.
+  const patientIdParam = searchParams.get('patient_id');
+  const patientId = patientIdParam ? parseInt(patientIdParam, 10) : null;
   const [loading, setLoading] = useState(false);
   const [diagnosis, setDiagnosis] = useState('');
   const [notes, setNotes] = useState('');
@@ -29,14 +43,25 @@ export default function PrescriptionWriter({ params }: { params: { appointmentId
     setMedicines(updated);
   };
 
+  const [submitError, setSubmitError] = useState('');
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSubmitError('');
+
+    if (!patientId) {
+      setSubmitError(
+        'Missing patient information for this appointment. Please return to the dashboard and reopen this prescription from the patient queue.'
+      );
+      return;
+    }
+
     setLoading(true);
 
     try {
       await api.post('/ehr/issue_prescription', {
-        appointment_id: parseInt(params.appointmentId),
-        patient_id: 1, // Usually extracted from appointment details
+        appointment_id: parseInt(appointmentId, 10),
+        patient_id: patientId,
         medicines: medicines,
         diagnosis,
         notes,
@@ -44,8 +69,8 @@ export default function PrescriptionWriter({ params }: { params: { appointmentId
       });
       alert("Prescription saved and sent to pharmacy!");
       router.push('/doctor/dashboard');
-    } catch (error) {
-      alert("Failed to issue prescription.");
+    } catch (error: any) {
+      setSubmitError(error?.response?.data?.detail || "Failed to issue prescription.");
     } finally {
       setLoading(false);
     }
@@ -59,7 +84,7 @@ export default function PrescriptionWriter({ params }: { params: { appointmentId
         <header className="flex justify-between items-center mb-8">
           <div>
             <h1 className="text-3xl font-bold flex items-center gap-3"><FileText className="text-indigo-500" /> Digital Prescription</h1>
-            <p className="text-gray-500 mt-1">Appointment #{params.appointmentId}</p>
+            <p className="text-gray-500 mt-1">Appointment #{appointmentId}</p>
           </div>
           <button className="neu-button px-4 py-2 flex items-center gap-2 font-bold text-gray-700 dark:text-gray-200">
             <Printer size={18} /> Print
@@ -176,9 +201,13 @@ export default function PrescriptionWriter({ params }: { params: { appointmentId
             </div>
           </div>
 
+          {submitError && (
+            <p role="alert" className="text-red-500 text-sm font-semibold text-right">{submitError}</p>
+          )}
+
           <div className="flex justify-end pt-4">
-            <button 
-              type="submit" 
+            <button
+              type="submit"
               disabled={loading}
               className="neu-button px-10 py-4 bg-teal-500 text-white font-bold rounded-xl text-lg disabled:opacity-50 flex items-center gap-2"
             >

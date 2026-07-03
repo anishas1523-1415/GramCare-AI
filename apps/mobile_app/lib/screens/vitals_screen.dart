@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
 import 'dart:math';
+
+import '../services/api_service.dart';
+import '../services/profile_service.dart';
 
 class VitalsScreen extends StatefulWidget {
   const VitalsScreen({super.key});
@@ -12,8 +16,9 @@ class VitalsScreen extends StatefulWidget {
 class _VitalsScreenState extends State<VitalsScreen> {
   final TextEditingController _heartRateController = TextEditingController();
   final TextEditingController _spO2Controller = TextEditingController();
-  
+
   bool _isStreaming = false;
+  bool _saving = false;
 
   void _simulateBLEConnection() {
     setState(() {
@@ -21,24 +26,64 @@ class _VitalsScreenState extends State<VitalsScreen> {
       _heartRateController.text = (60 + Random().nextInt(40)).toString();
       _spO2Controller.text = (95 + Random().nextInt(5)).toString();
     });
-    
+
+    // Honest labelling: real wearable integration is deliberately on hold
+    // per the planning discussion ("IoT டிவைஸ் ஃபியூச்சர்ல பார்த்துக்கலாம்").
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('Connected to Smartwatch (BLE Simulation)'),
-        backgroundColor: Color(0xFF10B981),
-      )
+        content: Text('Demo values filled (real smartwatch pairing coming later)'),
+        backgroundColor: Color(0xFF3B82F6),
+      ),
     );
   }
 
-  void _submitVitals() {
-    // In production, we push to the offline sync queue or transmit via Socket.io
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Vitals recorded successfully.'),
-        backgroundColor: Color(0xFF10B981),
-      )
-    );
-    context.pop();
+  Future<void> _submitVitals() async {
+    final hr = int.tryParse(_heartRateController.text);
+    final spo2 = int.tryParse(_spO2Controller.text);
+    if (hr == null || hr <= 0 || hr >= 300 || spo2 == null || spo2 < 0 || spo2 > 100) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Enter a valid heart rate (1–299) and SpO2 (0–100).'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    setState(() => _saving = true);
+    final active = context.read<ProfileService>().active;
+    try {
+      // Previously this button showed a success message without persisting
+      // anything. Now it actually writes to the authenticated vitals API,
+      // scoped to the selected family member.
+      await ApiService().client.post('/ehr/vitals', data: {
+        'device_id': 'manual-entry',
+        'family_profile_id': active?.id,
+        'heart_rate': hr,
+        'spo2': spo2,
+        'temperature': 36.8, // manual UI captures HR/SpO2 only
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Vitals recorded successfully.'),
+            backgroundColor: Color(0xFF10B981),
+          ),
+        );
+        context.pop();
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not save vitals. Are you online?'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
   }
 
   @override
@@ -152,7 +197,7 @@ class _VitalsScreenState extends State<VitalsScreen> {
 
               // Submit Button
               GestureDetector(
-                onTap: _submitVitals,
+                onTap: _saving ? null : _submitVitals,
                 child: Container(
                   width: double.infinity,
                   padding: const EdgeInsets.symmetric(vertical: 20),

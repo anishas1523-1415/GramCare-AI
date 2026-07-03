@@ -1,43 +1,52 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { Search, Filter, User, Clock, ShieldAlert, ChevronRight } from 'lucide-react';
-import { useAuth } from '../../../contexts/AuthContext';
-import { useRouter } from 'next/navigation';
+import { Search, Filter, ChevronRight } from 'lucide-react';
 import api from '../../../lib/api';
+import type { EHRRecord } from '../../../types';
+
+interface DirectoryEntry {
+  patientId: number;
+  lastVisit: string;
+  lastTitle: string;
+  lastType: string;
+  recordCount: number;
+}
 
 export default function PatientDirectory() {
-  const { user } = useAuth();
-  const router = useRouter();
-  
-  const [patients, setPatients] = useState<any[]>([]);
+  const [patients, setPatients] = useState<DirectoryEntry[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     const fetchPatients = async () => {
       try {
-        // In a real implementation, we'd hit /patients/all
-        // Since we are mocking the UI for the directory, we'll hit EHR endpoint and extract unique patients
-        const res = await api.get('/ehr/records');
-        
-        // Group by patient name (simplified)
-        const uniquePatientsMap = new Map();
-        res.data.forEach((record: any) => {
-          if (!uniquePatientsMap.has(record.patient_name)) {
-            uniquePatientsMap.set(record.patient_name, {
-              id: record.id,
-              name: record.patient_name,
-              last_visit: record.timestamp,
-              last_symptoms: record.symptoms,
-              severity: record.ai_severity
+        // GET /ehr/records (doctor-only) — previously this page called a
+        // route that didn't exist, so it always failed. Group the recent
+        // records feed by patient.
+        const res = await api.get<EHRRecord[]>('/ehr/records');
+
+        const byPatient = new Map<number, DirectoryEntry>();
+        res.data.forEach((record) => {
+          const existing = byPatient.get(record.patient_id);
+          if (existing) {
+            existing.recordCount += 1;
+          } else {
+            byPatient.set(record.patient_id, {
+              patientId: record.patient_id,
+              lastVisit: record.record_date || record.created_at,
+              lastTitle: record.title || record.content.slice(0, 80),
+              lastType: record.record_type,
+              recordCount: 1,
             });
           }
         });
-        
-        setPatients(Array.from(uniquePatientsMap.values()));
+
+        setPatients(Array.from(byPatient.values()));
       } catch (e) {
         console.error("Failed to fetch patients", e);
+        setError('Could not load the directory (doctors only).');
       } finally {
         setLoading(false);
       }
@@ -45,8 +54,8 @@ export default function PatientDirectory() {
     fetchPatients();
   }, []);
 
-  const filteredPatients = patients.filter(p => 
-    p.name.toLowerCase().includes(search.toLowerCase())
+  const filteredPatients = patients.filter(p =>
+    String(p.patientId).includes(search) || p.lastTitle.toLowerCase().includes(search.toLowerCase())
   );
 
   return (
@@ -74,39 +83,38 @@ export default function PatientDirectory() {
         </button>
       </div>
 
+      {error && <p role="alert" className="text-red-500 font-semibold mb-6">{error}</p>}
+
       {loading ? (
         <div className="text-center py-20 text-gray-500">Loading patients...</div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredPatients.map(patient => (
-            <div key={patient.id} className="glass-panel hover:scale-[1.02] transition-transform cursor-pointer" onClick={() => alert("Navigate to full EHR view")}>
+            <div key={patient.patientId} className="glass-panel p-6 hover:scale-[1.02] transition-transform">
               <div className="flex justify-between items-start mb-4">
                 <div className="flex items-center gap-3">
                   <div className="w-12 h-12 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center font-bold text-xl">
-                    {patient.name.charAt(0)}
+                    #{patient.patientId}
                   </div>
                   <div>
-                    <h3 className="font-bold text-gray-800 text-lg">{patient.name}</h3>
-                    <p className="text-sm text-gray-500">ID: PT-{1000 + patient.id}</p>
+                    <h3 className="font-bold text-gray-800 text-lg">Patient #{patient.patientId}</h3>
+                    <p className="text-sm text-gray-500">{patient.recordCount} record{patient.recordCount === 1 ? '' : 's'}</p>
                   </div>
                 </div>
-                {patient.severity === 'CRITICAL' && (
-                  <ShieldAlert className="text-red-500" />
-                )}
               </div>
-              
+
               <div className="bg-gray-50 rounded-lg p-3 mb-4">
-                <p className="text-sm text-gray-600"><span className="font-bold">Last Visit:</span> {new Date(patient.last_visit).toLocaleDateString()}</p>
-                <p className="text-sm text-gray-600 truncate"><span className="font-bold">Reason:</span> {patient.last_symptoms}</p>
+                <p className="text-sm text-gray-600"><span className="font-bold">Last record:</span> {new Date(patient.lastVisit).toLocaleDateString()}</p>
+                <p className="text-sm text-gray-600 truncate"><span className="font-bold">{patient.lastType}:</span> {patient.lastTitle}</p>
               </div>
 
               <div className="flex justify-between items-center text-indigo-600 font-semibold text-sm">
-                <span>View Full EHR</span>
+                <span>Latest activity</span>
                 <ChevronRight size={16} />
               </div>
             </div>
           ))}
-          
+
           {filteredPatients.length === 0 && (
             <div className="col-span-full text-center py-10 text-gray-500">
               No patients found matching your search.

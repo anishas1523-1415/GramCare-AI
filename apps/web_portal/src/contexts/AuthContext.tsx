@@ -5,8 +5,15 @@ import { useRouter } from 'next/navigation';
 import api from '../lib/api';
 
 interface User {
+  id?: number;
   username: string;
   role: string;
+  // Previously this interface only had username/role even though
+  // GET /auth/me returns email and full_name too — consumers that needed
+  // real user details (e.g. Razorpay checkout prefill) had no typed way to
+  // get them and fell back to hardcoded placeholder strings instead.
+  email?: string;
+  full_name?: string;
 }
 
 interface AuthContextType {

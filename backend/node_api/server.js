@@ -21,98 +21,160 @@ try {
   console.warn("FCM Push Notifications will not be sent, but Socket.io broadcast will still work.");
 }
 
+// Shared JWT secret. MUST match apps/backend_service's JWT_SECRET_KEY so tokens
+// minted by the FastAPI service validate here too. (Previously this file read a
+// different env var, SECRET_KEY, with a different default, which meant tokens
+// silently failed to validate across the two services.)
+const JWT_SECRET =
+  process.env.JWT_SECRET_KEY ||
+  process.env.SECRET_KEY ||
+  "gramcare_jwt_secret_change_this_in_production_2026";
+
+// Allowed origins for both REST (Express) and Socket.io. Defaults cover local
+// dev for web_portal (3000), react_dashboard (80 in Docker / 5173 in dev).
+// In production this MUST be set explicitly via ALLOWED_ORIGINS.
+const ALLOWED_ORIGINS = (
+  process.env.ALLOWED_ORIGINS ||
+  "http://localhost:3000,http://localhost:5173,http://localhost:80,http://localhost"
+)
+  .split(",")
+  .map((o) => o.trim())
+  .filter(Boolean);
+
+const corsOptions = {
+  origin: (origin, callback) => {
+    // Allow non-browser tools (curl, health checks) which send no Origin header.
+    if (!origin || ALLOWED_ORIGINS.includes(origin)) {
+      return callback(null, true);
+    }
+    console.warn(`Blocked CORS request from disallowed origin: ${origin}`);
+    return callback(new Error("Not allowed by CORS"));
+  },
+  methods: ["GET", "POST", "PUT"]
+};
+
 const app = express();
-app.use(cors());
+app.use(cors(corsOptions));
 app.use(express.json());
 
 const server = http.createServer(app);
 
 // Initialize Socket.io for Realtime Doctor Portal Synchronization
 const io = new Server(server, {
-  cors: {
-    origin: "*",
-    methods: ["GET", "POST"]
-  }
+  cors: corsOptions
 });
 
 // --- AUTHENTICATION MIDDLEWARE ---
-// Ensure only authenticated users can connect to the Socket Server
+// Design note: the connection itself stays open to unauthenticated sockets,
+// because the public "guest symptom checker" on the web portal legitimately
+// broadcasts a triage alert (new_triage_alert) before a user logs in. What
+// changed vs. before: sockets are now explicitly tagged authenticated/not,
+// and every SENSITIVE action (joining a call room, WebRTC signaling,
+// department joins) is gated on socket.authenticated below, instead of auth
+// being decorative and unenforced everywhere. If a valid token is supplied,
+// it is verified — an invalid (not just missing) token is still rejected.
 io.use((socket, next) => {
-  const token = socket.handshake.auth.token;
+  const token = socket.handshake.auth?.token;
+  socket.authenticated = false;
+
   if (!token) {
-    // For demo purposes, we will allow unauthenticated connections, but log a warning.
-    // In strict production: return next(new Error("Authentication error: Token missing"));
-    console.warn("Unauthenticated socket connection:", socket.id);
+    console.warn("Unauthenticated socket connection (guest mode):", socket.id);
     return next();
   }
-  
-  jwt.verify(token, process.env.SECRET_KEY || "super-secret-key", (err, decoded) => {
+
+  jwt.verify(token, JWT_SECRET, (err, decoded) => {
     if (err) {
-      console.warn("Invalid JWT token for socket:", socket.id);
-      // In strict production: return next(new Error("Authentication error: Invalid token"));
-      return next(); 
+      console.warn("Rejected socket connection with invalid JWT:", socket.id, err.message);
+      return next(new Error("Authentication error: invalid token"));
     }
     socket.user = decoded;
+    socket.authenticated = true;
     next();
   });
 });
 
+// Helper: reject an event from an unauthenticated socket with a clear error
+// event back to the client, instead of silently processing or silently
+// dropping it (both of which make client-side debugging painful).
+function requireAuth(socket, eventName) {
+  if (!socket.authenticated) {
+    console.warn(`Blocked unauthenticated "${eventName}" from socket ${socket.id}`);
+    socket.emit("error", { event: eventName, message: "Authentication required" });
+    return false;
+  }
+  return true;
+}
+
 // Realtime connection handler
 io.on("connection", (socket) => {
-  console.log("A user connected to the socket:", socket.id);
+  console.log(`A user connected to the socket: ${socket.id} (authenticated: ${socket.authenticated})`);
 
-  // Doctors can join specific department rooms
+  // Doctors can join specific department rooms — requires auth, since this
+  // controls which triage/emergency alerts a client receives.
   socket.on("join_department", (department) => {
+    if (!requireAuth(socket, "join_department")) return;
+    if (typeof department !== "string" || !department.trim()) return;
     socket.join(department);
     console.log(`Socket ${socket.id} joined department: ${department}`);
   });
 
-  // Handle incoming emergency triage alerts and broadcast to doctors
+  // Handle incoming emergency triage alerts and broadcast to doctors.
+  // Left open to unauthenticated sockets intentionally: the public "guest"
+  // symptom checker on the web portal broadcasts this before login, and a
+  // CRITICAL result must still reach doctors even for a not-yet-logged-in
+  // user (planning doc: "Critical Risk -> Emergency SOS activated").
   socket.on("new_triage_alert", (alertData) => {
+    if (!alertData || typeof alertData !== "object") return;
     console.log("New Triage Alert Received:", alertData);
-    
-    // Broadcast to the specific department room
-    if (alertData.department) {
+
+    if (alertData.department && typeof alertData.department === "string") {
       io.to(alertData.department).emit("triage_update", alertData);
     }
-    
-    // If it's critical, broadcast globally
+
     if (alertData.severity === "CRITICAL") {
       io.emit("emergency_alert", alertData);
     }
   });
 
-  // --- WEBRTC SIGNALING LOGIC ---
-  
   // --- WEBRTC SIGNALING LOGIC (Tele-ICU) ---
-  
+  // All signaling actions require auth: an unauthenticated caller has no
+  // business joining or injecting messages into a private consultation room.
+
   socket.on("join_room", (roomId) => {
+    if (!requireAuth(socket, "join_room")) return;
+    if (typeof roomId !== "string" || !roomId.trim()) return;
     socket.join(roomId);
     console.log(`Socket ${socket.id} joined video call room: ${roomId}`);
-    // Notify others in the room that a user connected
     socket.to(roomId).emit("user_joined", socket.id);
   });
 
-  socket.on("offer", (payload) => {
-    socket.to(payload.roomId).emit("offer", payload);
-  });
+  // Relay helper: only forward signaling payloads to a room the sender has
+  // actually joined. Previously any socket could emit "offer"/"answer" with
+  // an arbitrary roomId and inject signaling into a session it never joined —
+  // this closes that gap without requiring clients to change their payload
+  // shape (they still just send { roomId, ...sdp/ice }).
+  function relayToRoom(eventName, payload) {
+    if (!requireAuth(socket, eventName)) return;
+    const roomId = payload?.roomId;
+    if (typeof roomId !== "string" || !socket.rooms.has(roomId)) {
+      console.warn(`Blocked "${eventName}" from ${socket.id}: not a member of room ${roomId}`);
+      return;
+    }
+    socket.to(roomId).emit(eventName, payload);
+  }
 
-  socket.on("answer", (payload) => {
-    socket.to(payload.roomId).emit("answer", payload);
-  });
+  socket.on("offer", (payload) => relayToRoom("offer", payload));
+  socket.on("answer", (payload) => relayToRoom("answer", payload));
+  socket.on("ice_candidate", (incoming) => relayToRoom("ice_candidate", incoming));
 
-  socket.on("ice_candidate", (incoming) => {
-    socket.to(incoming.roomId).emit("ice_candidate", incoming);
-  });
-  
   // --- IOT VITALS STREAMING (PHASE 15) ---
   socket.on("vitals_update", (vitalsData) => {
-    // vitalsData: { patientId, roomId, heartRate, spO2 }
-    console.log(`Vitals update from ${vitalsData.patientId}: HR ${vitalsData.heartRate}, SpO2 ${vitalsData.spO2}`);
-    // Broadcast vitals to the specific room (Doctor)
-    if (vitalsData.roomId) {
-      socket.to(vitalsData.roomId).emit("live_vitals", vitalsData);
+    if (!requireAuth(socket, "vitals_update")) return;
+    if (!vitalsData || typeof vitalsData.roomId !== "string" || !socket.rooms.has(vitalsData.roomId)) {
+      return;
     }
+    console.log(`Vitals update from ${vitalsData.patientId}: HR ${vitalsData.heartRate}, SpO2 ${vitalsData.spO2}`);
+    socket.to(vitalsData.roomId).emit("live_vitals", vitalsData);
   });
 
   // -----------------------------
@@ -121,6 +183,10 @@ io.on("connection", (socket) => {
     console.log("User disconnected:", socket.id);
     // Note: socket.io automatically removes the socket from all rooms on disconnect.
   });
+
+  socket.on("error", (err) => {
+    console.error(`Socket error on ${socket.id}:`, err?.message || err);
+  });
 });
 
 // Basic health check route
@@ -128,43 +194,113 @@ app.get("/health", (req, res) => {
   res.json({ status: "healthy", service: "GramCare Node API" });
 });
 
-// SOS REST Endpoint (Allows the backend or external services to trigger a global SOS via HTTP)
-app.post("/api/sos/trigger", async (req, res) => {
-  const sosData = req.body;
-  console.log("REST SOS Triggered:", sosData);
-  
-  const payload = {
-    ...sosData,
-    time: new Date().toLocaleTimeString(),
-    isEmergency: true
-  };
-  
-  // 1. Broadcast via WebSocket to active doctors
-  io.emit("emergency_alert", payload);
-  
-  // 2. Fire Push Notification via Firebase Cloud Messaging (FCM)
-  if (firebaseInitialized && payload.severity === "CRITICAL") {
-    try {
-      const message = {
-        notification: {
-          title: "🚨 CRITICAL EMERGENCY SOS",
-          body: `Patient ${payload.patient_id} triggered an SOS at ${payload.location}`,
-        },
-        data: {
-          patient_id: String(payload.patient_id),
-          type: "sos_alert"
-        },
-        topic: "doctors_global" // Broadcast to all devices subscribed to the 'doctors_global' topic
-      };
-      
-      const fcmRes = await getMessaging().send(message);
-      console.log("FCM Push Notification Sent successfully:", fcmRes);
-    } catch (err) {
-      console.error("Failed to send FCM Push Notification:", err);
-    }
-  }
+// --- Minimal in-memory rate limiter for the SOS endpoint ---
+// No new npm dependency introduced (this environment currently cannot run
+// `npm install` to verify a new package resolves), so this is a small
+// hand-rolled fixed-window limiter: max SOS_MAX_REQUESTS triggers per
+// SOS_WINDOW_MS per patient_id. Good enough to stop trivial spam; for a real
+// multi-instance production deployment this should move to a shared store
+// (e.g. Redis) since this in-memory map won't be consistent across replicas.
+const SOS_WINDOW_MS = 60 * 1000;
+const SOS_MAX_REQUESTS = 3;
+const sosRateLimitLog = new Map(); // patient_id -> [timestamps]
 
-  res.json({ success: true, message: "SOS Broadcasted & Push Notification Triggered" });
+function isRateLimited(patientId) {
+  const now = Date.now();
+  const timestamps = (sosRateLimitLog.get(patientId) || []).filter(
+    (t) => now - t < SOS_WINDOW_MS
+  );
+  timestamps.push(now);
+  sosRateLimitLog.set(patientId, timestamps);
+  return timestamps.length > SOS_MAX_REQUESTS;
+}
+
+// Simple Bearer-token auth guard for REST routes (mirrors the Socket.io check).
+function requireJwtAuth(req, res, next) {
+  const header = req.headers.authorization || "";
+  const token = header.startsWith("Bearer ") ? header.slice(7) : null;
+  if (!token) {
+    return res.status(401).json({ error: "Authentication required" });
+  }
+  jwt.verify(token, JWT_SECRET, (err, decoded) => {
+    if (err) {
+      return res.status(401).json({ error: "Invalid or expired token" });
+    }
+    req.user = decoded;
+    next();
+  });
+}
+
+// SOS REST Endpoint. Previously this was fully unauthenticated with no
+// payload validation and no rate limiting, meaning anyone who could reach
+// the API could broadcast fake CRITICAL emergency alerts to every connected
+// doctor/responder, drowning out real emergencies. Now: requires a valid
+// JWT, validates the minimum required fields, and rate-limits per patient.
+app.post("/api/sos/trigger", requireJwtAuth, async (req, res) => {
+  try {
+    const sosData = req.body || {};
+    const patientId = sosData.patient_id;
+
+    if (!patientId || typeof patientId !== "string" && typeof patientId !== "number") {
+      return res.status(400).json({ error: "patient_id is required" });
+    }
+    if (!sosData.location) {
+      return res.status(400).json({ error: "location is required" });
+    }
+    const allowedSeverities = ["LOW", "MODERATE", "HIGH", "CRITICAL"];
+    if (sosData.severity && !allowedSeverities.includes(sosData.severity)) {
+      return res.status(400).json({ error: `severity must be one of ${allowedSeverities.join(", ")}` });
+    }
+
+    if (isRateLimited(String(patientId))) {
+      console.warn(`SOS rate limit exceeded for patient_id=${patientId}`);
+      return res.status(429).json({ error: "Too many SOS requests. Please wait before retrying." });
+    }
+
+    console.log("REST SOS Triggered by user", req.user?.sub || req.user?.id, ":", sosData);
+
+    const payload = {
+      ...sosData,
+      triggered_by: req.user?.sub || req.user?.id || null,
+      time: new Date().toLocaleTimeString(),
+      isEmergency: true
+    };
+
+    // 1. Broadcast via WebSocket to active doctors
+    // NOTE: this still broadcasts globally to every connected socket rather
+    // than a scoped "on-duty responders" room, matching current client
+    // behavior (no client currently joins a responder-specific room). Scoping
+    // this down is tracked as a follow-up once the doctor dashboard joins a
+    // dedicated "emergency_responders" room.
+    io.emit("emergency_alert", payload);
+
+    // 2. Fire Push Notification via Firebase Cloud Messaging (FCM)
+    if (firebaseInitialized && payload.severity === "CRITICAL") {
+      try {
+        const message = {
+          notification: {
+            title: "🚨 CRITICAL EMERGENCY SOS",
+            body: `Patient ${payload.patient_id} triggered an SOS at ${payload.location}`,
+          },
+          data: {
+            patient_id: String(payload.patient_id),
+            type: "sos_alert"
+          },
+          topic: "doctors_global"
+        };
+
+        const fcmRes = await getMessaging().send(message);
+        console.log("FCM Push Notification Sent successfully:", fcmRes);
+      } catch (err) {
+        console.error("Failed to send FCM Push Notification:", err.message);
+      }
+    }
+
+    res.json({ success: true, message: "SOS Broadcasted & Push Notification Triggered" });
+  } catch (err) {
+    console.error("Unhandled error in /api/sos/trigger:", err);
+    res.status(500).json({ error: "Internal server error while processing SOS" });
+  }
 });
 
 // TURN Server configuration for WebRTC in strict networks (NAT/Firewalls)
@@ -177,6 +313,34 @@ app.get("/api/webrtc/turn-credentials", (req, res) => {
       // { urls: "turn:your-turn-server.com", username: "guest", credential: "password" }
     ]
   });
+});
+
+// Express-level error handler: catches CORS rejections (thrown by the
+// corsOptions.origin callback above) and any error passed via next(err) from
+// a route, and returns a clean JSON response instead of the default HTML
+// stack trace / hung connection.
+app.use((err, req, res, next) => {
+  if (err && err.message === "Not allowed by CORS") {
+    return res.status(403).json({ error: "Origin not allowed" });
+  }
+  console.error("Unhandled Express error:", err);
+  res.status(500).json({ error: "Internal server error" });
+});
+
+// Process-level safety net. Previously this service had no
+// uncaughtException/unhandledRejection handlers at all, so a malformed
+// payload or a rejected promise anywhere (e.g. the FCM call, a socket
+// handler) could silently crash the whole signaling server — taking down
+// WebRTC signaling and SOS broadcasting for every connected user at once.
+// We log loudly and keep the process alive rather than exiting, since an
+// abrupt exit here is worse for an emergency-response service than
+// continuing in a degraded state; the underlying bug should still be fixed,
+// this is a backstop, not a substitute for handling errors at the source.
+process.on("uncaughtException", (err) => {
+  console.error("uncaughtException — GramCare Node signaling service:", err);
+});
+process.on("unhandledRejection", (reason) => {
+  console.error("unhandledRejection — GramCare Node signaling service:", reason);
 });
 
 const PORT = process.env.PORT || 4000;

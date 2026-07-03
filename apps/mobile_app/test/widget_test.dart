@@ -1,30 +1,41 @@
-// This is a basic Flutter widget test.
+// Basic smoke test for the real GramCare AI app.
 //
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
+// Pumps the real app and verifies it renders the login screen when no
+// access token is stored — the initial redirect behavior in lib/router.dart.
+// The token now lives in flutter_secure_storage (keystore), so the secure
+// storage platform channel is mocked instead of shared_preferences.
 
 import 'package:flutter/material.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:mobile_app/main.dart';
+import 'package:mobile_app/services/profile_service.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  testWidgets('Shows the login screen on first launch (no stored session)',
+      (WidgetTester tester) async {
+    // Mock both storage channels used during startup/redirect.
+    FlutterSecureStorage.setMockInitialValues({});
+    SharedPreferences.setMockInitialValues({});
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider(create: (_) => ProfileService()),
+        ],
+        child: const GramCareApp(),
+      ),
+    );
+    // Allow the async GoRouter redirect (which awaits SecureStore) to
+    // resolve before asserting on the resulting screen.
+    await tester.pumpAndSettle();
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
-
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    expect(find.text('GramCare AI'), findsOneWidget);
+    // Username/password fields identify this as the login screen rather
+    // than the dashboard.
+    expect(find.byType(TextField), findsNWidgets(2));
   });
 }

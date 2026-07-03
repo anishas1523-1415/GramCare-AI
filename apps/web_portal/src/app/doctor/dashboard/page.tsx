@@ -1,12 +1,121 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { Users, Calendar, ShieldAlert, Video, FileText, CheckCircle } from 'lucide-react';
+import { Users, Calendar, ShieldAlert, Video, FileText, CheckCircle, Clock, Plus, Trash2 } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import api from '../../../lib/api';
 import { io } from 'socket.io-client';
+import type { Slot } from '../../../types';
+
+/** Doctor availability editor — publishes the slots patients book against
+ * (planning doc: bookings only happen inside the doctor's published
+ * calendar). */
+function SlotManager({ doctorId }: { doctorId: number }) {
+  const [slots, setSlots] = useState<Slot[]>([]);
+  const [newStart, setNewStart] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      const res = await api.get<Slot[]>(`/doctors/${doctorId}/slots`, {
+        params: { include_booked: true },
+      });
+      setSlots(res.data);
+    } catch {
+      setError('Could not load your schedule.');
+    }
+  }, [doctorId]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const addSlot = async () => {
+    if (!newStart) return;
+    setBusy(true);
+    setError('');
+    try {
+      const start = new Date(newStart);
+      const end = new Date(start.getTime() + 30 * 60 * 1000); // 30-min consults
+      await api.post('/doctors/me/slots', [
+        { start_time: start.toISOString(), end_time: end.toISOString() },
+      ]);
+      setNewStart('');
+      await load();
+    } catch (err) {
+      const message = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      setError(typeof message === 'string' ? message : 'Could not publish the slot.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const removeSlot = async (id: number) => {
+    try {
+      await api.delete(`/doctors/me/slots/${id}`);
+      await load();
+    } catch (err) {
+      const message = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      setError(typeof message === 'string' ? message : 'Could not remove the slot.');
+    }
+  };
+
+  return (
+    <div className="neu-panel p-6">
+      <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+        <Clock className="text-teal-500" /> My Availability
+      </h2>
+      {error && <p role="alert" className="text-red-500 text-sm font-semibold mb-3">{error}</p>}
+
+      <div className="flex gap-2 mb-4">
+        <input
+          type="datetime-local"
+          value={newStart}
+          onChange={(e) => setNewStart(e.target.value)}
+          aria-label="New slot start time"
+          className="flex-1 p-2 rounded-lg bg-white/50 dark:bg-black/20 border border-white/20 text-sm"
+        />
+        <button
+          onClick={addSlot}
+          disabled={busy || !newStart}
+          aria-label="Publish slot"
+          className="px-3 py-2 bg-teal-500 text-white rounded-lg disabled:opacity-40"
+        >
+          <Plus size={18} />
+        </button>
+      </div>
+
+      <div className="space-y-2 max-h-64 overflow-y-auto">
+        {slots.length === 0 ? (
+          <p className="text-sm text-gray-500">No published slots. Patients cannot book you until you add some.</p>
+        ) : (
+          slots.map((s) => (
+            <div key={s.id} className="flex items-center justify-between p-2 rounded-lg bg-white/40 dark:bg-black/30 text-sm">
+              <span>
+                {new Date(s.start_time).toLocaleString(undefined, {
+                  weekday: 'short', day: 'numeric', month: 'short',
+                  hour: '2-digit', minute: '2-digit',
+                })}
+              </span>
+              {s.is_booked ? (
+                <span className="text-xs font-bold text-indigo-500 bg-indigo-500/10 px-2 py-1 rounded">Booked</span>
+              ) : (
+                <button
+                  onClick={() => removeSlot(s.id)}
+                  aria-label="Remove slot"
+                  className="text-gray-400 hover:text-red-500"
+                >
+                  <Trash2 size={16} />
+                </button>
+              )}
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
 
 export default function DoctorDashboard() {
   const { user, loading: authLoading } = useAuth();
@@ -28,9 +137,14 @@ export default function DoctorDashboard() {
 
     const fetchData = async () => {
       try {
-        // Fetch queue and SOS from actual backend
-        // Temporarily hardcoding doctor ID to 2 for demo purposes if it's not in the token
-        const doctorId = 2; 
+        // Fetch queue and SOS from actual backend.
+        // Previously hardcoded to 2 regardless of who was logged in — the
+        // backend's GET /appointments/doctor/{doctor_id}/queue rejects the
+        // request with 403 for any doctor whose real id isn't 2, so this
+        // was breaking the dashboard for every other doctor account. Now
+        // uses the authenticated doctor's real id (guaranteed non-null here
+        // since the effect already redirects non-doctors above).
+        const doctorId = user!.id;
         const [queueRes, sosRes] = await Promise.all([
           api.get(`/appointments/doctor/${doctorId}/queue`),
           api.get('/sos/active')
@@ -47,9 +161,14 @@ export default function DoctorDashboard() {
 
     fetchData();
 
-    // Setup real-time listeners for new SOS or triage alerts
+    // Setup real-time listeners for new SOS or triage alerts.
+    // The Node signaling server now requires a valid JWT to join a
+    // department room (join_department) — pass the same access token used
+    // for REST calls so this doctor's socket is recognized as authenticated.
     const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "http://localhost:4000";
-    const socket = io(WS_URL);
+    const socket = io(WS_URL, {
+      auth: { token: localStorage.getItem('access_token') },
+    });
 
     socket.on("connect", () => {
       setSocketConnected(true);
@@ -169,8 +288,8 @@ export default function DoctorDashboard() {
                       >
                         <Video size={16} /> Consult
                       </button>
-                      <button 
-                        onClick={() => router.push(`/doctor/prescription/${appt.id}`)}
+                      <button
+                        onClick={() => router.push(`/doctor/prescription/${appt.id}?patient_id=${appt.patient_id}`)}
                         className="flex-1 md:flex-none px-4 py-2 bg-teal-500 text-white rounded-lg flex items-center justify-center gap-2 text-sm font-semibold hover:bg-teal-600 transition-colors"
                       >
                         <FileText size={16} /> Write Rx
@@ -192,13 +311,15 @@ export default function DoctorDashboard() {
 
         {/* Sidebar */}
         <div className="space-y-8">
+          {user?.id != null && <SlotManager doctorId={user.id} />}
+
           <div className="neu-panel p-6">
-            <h2 className="text-xl font-bold mb-6 flex items-center gap-2"><Users className="text-indigo-500" /> Patient Directory</h2>
-            <div className="text-center p-6 bg-[var(--background)] shadow-[var(--shadow-neu-flat)] rounded-xl">
-              <div className="text-3xl font-extrabold text-indigo-500 mb-2">1,245</div>
-              <p className="text-gray-500 text-sm">Total Registered Patients</p>
-            </div>
-            <button className="w-full mt-4 py-3 bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-300 font-bold rounded-xl">
+            <h2 className="text-xl font-bold mb-4 flex items-center gap-2"><Users className="text-indigo-500" /> Patient Directory</h2>
+            <p className="text-sm text-gray-500 mb-4">Recent patient records across the network.</p>
+            <button
+              onClick={() => router.push('/doctor/directory')}
+              className="w-full py-3 bg-indigo-500 text-white font-bold rounded-xl hover:bg-indigo-600 transition-colors"
+            >
               View Directory
             </button>
           </div>

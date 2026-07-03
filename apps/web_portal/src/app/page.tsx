@@ -5,8 +5,10 @@ import { Activity, ShieldAlert, Radio } from "lucide-react";
 import { useState, useEffect } from "react";
 import { io } from "socket.io-client";
 import api from "../lib/api";
+import { useProfile } from "../contexts/ProfileContext";
 
 export default function Home() {
+  const { activeProfile } = useProfile();
   const [symptoms, setSymptoms] = useState("");
   const [triageResult, setTriageResult] = useState<any>(null);
   const [loading, setLoading] = useState(false);
@@ -24,7 +26,12 @@ export default function Home() {
 
     socket.on("connect", () => {
       setSocketConnected(true);
-      // Join General Medicine department for demo
+      // NOTE: this page is reachable by guests (pre-login), so this socket
+      // has no auth token. The signaling server now requires authentication
+      // to join a department room, so this call is intentionally a no-op
+      // for guests — they will still receive global CRITICAL emergency
+      // broadcasts (unauthenticated-safe by design) but not department-
+      // scoped triage_update alerts. That requires being logged in.
       socket.emit("join_department", "General Medicine");
     });
 
@@ -60,8 +67,9 @@ export default function Home() {
       // Connect to the FastAPI Backend (unified API)
       const res = await api.post("/triage/analyze", {
         symptoms_text: symptoms,
-        patient_id: "GUEST",
-        age: 30,
+        patient_id: "GUEST", // attribution happens server-side via the JWT when logged in
+        age: activeProfile?.age ?? 30,
+        family_profile_id: activeProfile?.id ?? null,
       });
 
       const data = res.data;

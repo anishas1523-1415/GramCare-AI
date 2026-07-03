@@ -1,6 +1,11 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Required for API/sync/SOS network calls. Debug builds inherit this
+         from the debug manifest, but RELEASE builds previously had no
+         INTERNET permission at all — the app would ship unable to reach the
+         backend. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <application
-        android:label="mobile_app"
+        android:label="GramCare AI"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

@@ -13,6 +13,8 @@ from modules.pharmacy_inventory.router import router as pharmacy_router
 from modules.payments.router import router as payments_router
 from modules.appointments.router import router as appointments_router
 from modules.emergency.router import router as emergency_router
+from modules.family.router import router as family_router
+from modules.doctors.router import router as doctors_router
 
 app = FastAPI(
     title="GramCare AI Backend",
@@ -39,6 +41,8 @@ app.include_router(pharmacy_router, prefix="/api/v1/pharmacy", tags=["Pharmacy I
 app.include_router(payments_router, prefix="/api/v1/payments", tags=["Payment Gateway"])
 app.include_router(appointments_router, prefix="/api/v1/appointments", tags=["Appointments"])
 app.include_router(emergency_router, prefix="/api/v1/sos", tags=["Emergency SOS"])
+app.include_router(family_router, prefix="/api/v1/family", tags=["Family Profiles"])
+app.include_router(doctors_router, prefix="/api/v1/doctors", tags=["Doctor Directory"])
 
 @app.get("/")
 def read_root():

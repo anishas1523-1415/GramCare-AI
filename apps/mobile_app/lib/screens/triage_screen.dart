@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
+
 import '../services/api_service.dart';
+import '../services/profile_service.dart';
+import '../services/sync_service.dart';
 
 class TriageScreen extends StatefulWidget {
   const TriageScreen({super.key});
@@ -24,19 +28,43 @@ class _TriageScreenState extends State<TriageScreen> {
       _result = null;
     });
 
+    final active = context.read<ProfileService>().active;
+
     try {
       final response = await ApiService().client.post(
         '/triage/analyze',
         data: {
           'symptoms_text': _symptomsController.text,
-          'patient_id': '1', // Hardcoded for demo, normally from token
-          'age': 30,
-        }
+          // Attribution happens server-side from the JWT; this field is
+          // only used for guest flows.
+          'patient_id': 'self',
+          'age': active?.age ?? 30,
+          'family_profile_id': active?.id,
+        },
       );
-      
+
       setState(() {
         _result = response.data;
       });
+
+      // Persist the analysis into the offline Health Wallet (queued for
+      // idempotent /ehr/sync when connectivity allows).
+      final data = response.data as Map<String, dynamic>;
+      final severityScore = (data['severity_score'] as num?)?.toInt() ?? 0;
+      await SyncService().createRecord(
+        patientName: active?.fullName ?? 'Myself',
+        content:
+            'Symptoms: ${_symptomsController.text}\nAI: ${data['predicted_condition']} (severity $severityScore/100)\nAdvice: ${data['doctor_recommendation']}',
+        recordType: 'triage_log',
+        title: data['predicted_condition'] as String?,
+        familyProfileId: active?.id,
+        doctorName: 'GramCare AI',
+        severity: severityScore >= 75
+            ? 'CRITICAL'
+            : severityScore >= 50
+                ? 'HIGH'
+                : 'LOW',
+      );
     } catch (e) {
       setState(() {
         _error = 'Failed to analyze symptoms. Please try again.';

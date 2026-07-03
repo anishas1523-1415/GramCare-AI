@@ -1,6 +1,6 @@
 import os
 import logging
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import declarative_base, sessionmaker
 from sqlalchemy.pool import QueuePool
 from dotenv import load_dotenv
@@ -14,6 +14,26 @@ SQLALCHEMY_DATABASE_URL = os.getenv(
     "DATABASE_URL",
     "sqlite:///./gramcare_local.db"
 )
+
+# Previously, ANY failure to connect to a configured PostgreSQL URL silently
+# fell back to a local SQLite file with only a log-level WARNING — meaning a
+# misconfigured DATABASE_URL (e.g. the literal "[YOUR-PASSWORD]" placeholder
+# that ships in apps/backend_service/.env) would make the whole application
+# run on a throwaway local database with no durability guarantees, with
+# nothing in the logs loud enough to notice before real data went missing.
+#
+# ALLOW_SQLITE_FALLBACK controls this:
+#   - unset / "true"  -> fallback still allowed (keeps local/dev workflows
+#                        working without a running Postgres instance), but
+#                        now logged at CRITICAL with a large, hard-to-miss
+#                        banner instead of a routine warning.
+#   - "false"         -> fail fast: raise instead of silently degrading.
+#     docker-compose.yml now sets this explicitly for the containerized
+#     (production-like) deployment, since a silent SQLite fallback inside a
+#     container is even more dangerous — the file lives inside an ephemeral
+#     container filesystem and is lost on the next `docker compose up --build`.
+ALLOW_SQLITE_FALLBACK = os.getenv("ALLOW_SQLITE_FALLBACK", "true").lower() == "true"
+
 
 def _create_engine(url: str):
     """Create the appropriate SQLAlchemy engine based on URL scheme."""
@@ -45,14 +65,29 @@ def _create_engine(url: str):
             )
             # Test the connection
             with eng.connect() as conn:
-                conn.execute(conn.default_engine.text("SELECT 1") if hasattr(conn, 'default_engine') else __import__('sqlalchemy').text("SELECT 1"))
+                conn.execute(text("SELECT 1"))
             logger.info("PostgreSQL connection verified successfully.")
             return eng
         except Exception as e:
+            if not ALLOW_SQLITE_FALLBACK:
+                logger.critical(
+                    "Failed to connect to PostgreSQL (%s) and ALLOW_SQLITE_FALLBACK=false. "
+                    "Refusing to silently start on SQLite. Fix DATABASE_URL and retry.",
+                    str(e)[:200],
+                )
+                raise RuntimeError(
+                    f"Could not connect to PostgreSQL and SQLite fallback is disabled "
+                    f"(ALLOW_SQLITE_FALLBACK=false). Original error: {e}"
+                ) from e
+
             fallback_url = "sqlite:///./gramcare_local.db"
-            logger.warning(
-                "Failed to connect to PostgreSQL (%s). Falling back to SQLite: %s",
-                str(e)[:100], fallback_url
+            logger.critical(
+                "=" * 70 + "\n"
+                "DATABASE FALLBACK IN EFFECT: could not connect to PostgreSQL (%s).\n"
+                "Running on local SQLite file (%s) instead — data written this\n"
+                "session will NOT be in the real database. Check DATABASE_URL in .env.\n"
+                + "=" * 70,
+                str(e)[:200], fallback_url,
             )
             return create_engine(
                 fallback_url,

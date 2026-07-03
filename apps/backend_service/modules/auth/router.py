@@ -1,15 +1,23 @@
+from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from datetime import timedelta
 
 import models
+import schemas
+from core.ratelimit import rate_limit
 from database import get_db
 from .utils import verify_password, get_password_hash, create_access_token, decode_access_token, ACCESS_TOKEN_EXPIRE_MINUTES
 
 router = APIRouter()
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/v1/auth/login")
+# Variant that does NOT 401 when the header is absent — used by endpoints
+# that serve both guests and logged-in users (e.g. the public symptom
+# checker, which attributes results to the caller only when known).
+oauth2_scheme_optional = OAuth2PasswordBearer(tokenUrl="api/v1/auth/login", auto_error=False)
 
 def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     credentials_exception = HTTPException(
@@ -20,15 +28,27 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
     payload = decode_access_token(token)
     if payload is None:
         raise credentials_exception
-        
+
     username: str = payload.get("sub")
     if username is None:
         raise credentials_exception
-        
+
     user = db.query(models.User).filter(models.User.username == username).first()
     if user is None:
         raise credentials_exception
     return user
+
+def get_current_user_optional(
+    token: Optional[str] = Depends(oauth2_scheme_optional),
+    db: Session = Depends(get_db),
+) -> Optional[models.User]:
+    """Return the authenticated user if a valid token was supplied, None for
+    guests. An *invalid* (as opposed to missing) token is still rejected —
+    silently ignoring bad credentials would mask client bugs."""
+    if token is None:
+        return None
+    return get_current_user(token=token, db=db)
+
 
 def require_role(required_role: str):
     def role_dependency(current_user: models.User = Depends(get_current_user)):
@@ -37,21 +57,20 @@ def require_role(required_role: str):
         return current_user
     return role_dependency
 
-from pydantic import BaseModel
-
-class UserCreate(BaseModel):
-    username: str
-    password: str
-    email: str
-    full_name: str
-    role: str
-
-@router.post("/register")
-def register_user(user: UserCreate, db: Session = Depends(get_db)):
+@router.post("/register", dependencies=[Depends(rate_limit("register", 10, 3600))])
+def register_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
+    # Uses the validated schemas.UserCreate (min password length 8, username
+    # length bounds, role restricted to a known set), so weak passwords,
+    # malformed emails, and arbitrary role strings are rejected with a 422
+    # before ever reaching the database.
     db_user = db.query(models.User).filter(models.User.username == user.username).first()
     if db_user:
         raise HTTPException(status_code=400, detail="Username already registered")
-        
+
+    existing_email = db.query(models.User).filter(models.User.email == user.email).first()
+    if existing_email:
+        raise HTTPException(status_code=400, detail="Email already registered")
+
     hashed_password = get_password_hash(user.password)
     new_user = models.User(
         username=user.username,
@@ -65,7 +84,7 @@ def register_user(user: UserCreate, db: Session = Depends(get_db)):
     db.refresh(new_user)
     return {"message": "User registered successfully", "username": new_user.username}
 
-@router.post("/login")
+@router.post("/login", dependencies=[Depends(rate_limit("login", 15, 300))])
 def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     user = db.query(models.User).filter(models.User.username == form_data.username).first()
     if not user or not verify_password(form_data.password, user.hashed_password):
@@ -83,6 +102,7 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
 @router.get("/me")
 def read_users_me(current_user: models.User = Depends(get_current_user)):
     return {
+        "id": current_user.id,
         "username": current_user.username,
         "email": current_user.email,
         "full_name": current_user.full_name,

@@ -94,8 +94,9 @@ jobs:
     - name: Setup Flutter
       uses: subosito/flutter-action@v2
       with:
+        # No pinned version: pubspec.yaml requires Dart ^3.10 (Flutter 3.38+),
+        # but the previous pin (3.19.0 / Dart 3.3) could never resolve deps.
         channel: 'stable'
-        flutter-version: '3.19.0'
         cache: true
         
     - name: Install & Analyze

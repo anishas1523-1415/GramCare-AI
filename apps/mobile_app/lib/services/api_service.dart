@@ -1,6 +1,8 @@
-import 'package:dio/dio.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:io';
+
+import 'package:dio/dio.dart';
+
+import 'secure_store.dart';
 
 class ApiService {
   static final ApiService _instance = ApiService._internal();
@@ -13,7 +15,13 @@ class ApiService {
   ApiService._internal() {
     // For Android emulator to reach localhost, use 10.0.2.2.
     // For iOS emulator or physical device on same network, use local IP.
-    String baseUrl = Platform.isAndroid ? 'http://10.0.2.2:8000/api/v1' : 'http://localhost:8000/api/v1';
+    // Overridable at build time: flutter build --dart-define=API_BASE_URL=...
+    const configured = String.fromEnvironment('API_BASE_URL');
+    final String baseUrl = configured.isNotEmpty
+        ? configured
+        : (Platform.isAndroid
+            ? 'http://10.0.2.2:8000/api/v1'
+            : 'http://localhost:8000/api/v1');
 
     _dio = Dio(
       BaseOptions(
@@ -29,8 +37,9 @@ class ApiService {
     _dio.interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) async {
-          final prefs = await SharedPreferences.getInstance();
-          final token = prefs.getString('access_token');
+          // Token now comes from the platform keystore (SecureStore), not
+          // plain shared_preferences.
+          final token = await SecureStore().getToken();
           if (token != null) {
             options.headers['Authorization'] = 'Bearer $token';
           }
@@ -38,9 +47,7 @@ class ApiService {
         },
         onError: (DioException error, handler) async {
           if (error.response?.statusCode == 401) {
-            final prefs = await SharedPreferences.getInstance();
-            await prefs.remove('access_token');
-            // Normally trigger a logout callback here or use a stream
+            await SecureStore().clearToken();
           }
           return handler.next(error);
         },

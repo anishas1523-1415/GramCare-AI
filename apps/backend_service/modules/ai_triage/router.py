@@ -2,9 +2,17 @@ import os
 import json
 import re
 import logging
-from fastapi import APIRouter, HTTPException
+from typing import Optional
+
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from dotenv import load_dotenv
+from sqlalchemy.orm import Session
+
+import models
+from core.ratelimit import rate_limit
+from database import get_db
+from modules.auth.router import get_current_user_optional
 
 load_dotenv()
 
@@ -35,8 +43,9 @@ else:
 # ============================================================
 class TriageRequest(BaseModel):
     symptoms_text: str = Field(..., min_length=3, max_length=2000, description="Patient's symptom description")
-    patient_id: str = Field(..., min_length=1, description="Patient identifier")
+    patient_id: str = Field(..., min_length=1, description="Patient identifier ('GUEST' for anonymous use)")
     age: int = Field(..., ge=0, le=150, description="Patient age")
+    family_profile_id: Optional[int] = Field(None, description="Family member this analysis is for")
 
 
 class TriageResponse(BaseModel):
@@ -87,20 +96,60 @@ The JSON structure MUST exactly match this:
 """
 
 
-@router.post("/analyze", response_model=TriageResponse)
-async def analyze_symptoms(request: TriageRequest):
+def _persist_triage_log(
+    db: Session,
+    request: TriageRequest,
+    user: Optional[models.User],
+    data: dict,
+) -> None:
+    """Persist every analysis to TriageLog — the data backbone for the AI
+    Doctor Assistant and Community Health Intelligence (planning doc). The
+    model previously existed but was never written to. Failures here must
+    never break the user-facing analysis, hence the guard."""
+    try:
+        db.add(
+            models.TriageLog(
+                patient_id=user.id if user else None,
+                family_profile_id=request.family_profile_id if user else None,
+                symptoms_text=request.symptoms_text,
+                ai_severity_score=int(data.get("severity_score", 0)),
+                ai_predicted_condition=str(data.get("predicted_condition", ""))[:250],
+                ai_confidence=float(data.get("confidence_score", 0.0)),
+                ai_explanation=str(data.get("explanation", "")),
+                language_detected=data.get("language_detected"),
+            )
+        )
+        db.commit()
+    except Exception as e:  # pragma: no cover - defensive
+        db.rollback()
+        logger.error("Failed to persist triage log: %s", str(e))
+
+
+@router.post(
+    "/analyze",
+    response_model=TriageResponse,
+    # Public (guest symptom checker) but rate-limited: this endpoint spends
+    # real Gemini quota per call and previously had no abuse protection.
+    dependencies=[Depends(rate_limit("triage", 20, 300))],
+)
+async def analyze_symptoms(
+    request: TriageRequest,
+    db: Session = Depends(get_db),
+    current_user: Optional[models.User] = Depends(get_current_user_optional),
+):
     """
     AI Triage Engine using Google Gemini (Explainable AI approach).
-    
+
     - Accepts symptoms in any language (English, Tamil, Hindi, etc.)
     - Returns severity score, predicted condition, home remedies, and doctor recommendation
     - Includes explainable AI reasoning and confidence score
     - Enforces strict medical disclaimer
+    - Persists every analysis to TriageLog (attributed when authenticated)
     """
     if not gemini_client:
         # Fallback Mock Response if no API key
         logger.info("Returning mock triage response (no Gemini client).")
-        return TriageResponse(
+        mock = TriageResponse(
             severity_score=50,
             predicted_condition="Unknown (API Key Not Configured)",
             home_remedies="Rest and hydration.",
@@ -112,6 +161,8 @@ async def analyze_symptoms(request: TriageRequest):
                         "Please set GEMINI_API_KEY in the .env file for real AI analysis.",
             disclaimer=MEDICAL_DISCLAIMER,
         )
+        _persist_triage_log(db, request, current_user, mock.model_dump())
+        return mock
 
     prompt = TRIAGE_PROMPT_TEMPLATE.format(
         age=request.age,
@@ -138,6 +189,7 @@ async def analyze_symptoms(request: TriageRequest):
             data["severity_score"] = max(0, min(100, int(data.get("severity_score", 50))))
             data["confidence_score"] = max(0.0, min(1.0, float(data.get("confidence_score", 0.5))))
 
+            _persist_triage_log(db, request, current_user, data)
             return TriageResponse(**data)
         else:
             logger.error("Failed to parse JSON from Gemini response: %s", response_text[:200])
@@ -190,7 +242,12 @@ Respond in JSON format only, no markdown:
 """
 
 
-@router.post("/ocr", response_model=OCRResponse)
+@router.post(
+    "/ocr",
+    response_model=OCRResponse,
+    # Gemini Vision costs more per call than text triage — tighter window.
+    dependencies=[Depends(rate_limit("ocr", 10, 300))],
+)
 async def extract_prescription_text(request: OCRRequest):
     """
     Extracts text from a prescription image using Gemini Vision.
@@ -216,8 +273,8 @@ async def extract_prescription_text(request: OCRRequest):
     try:
         import base64
 
-        # Decode the base64 image
-        image_bytes = base64.b64decode(request.image_base64)
+        # Decode the base64 image (validates the payload early)
+        base64.b64decode(request.image_base64)
 
         # Use Gemini Vision to analyze the prescription image
         response = gemini_client.models.generate_content(

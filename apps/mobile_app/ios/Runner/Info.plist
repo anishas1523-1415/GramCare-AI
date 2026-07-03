@@ -43,6 +43,10 @@
 	</array>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>GramCare uses the camera to scan prescriptions and lab reports into your Health Wallet.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>GramCare reads photos you choose so the AI can extract prescription details.</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 </dict>

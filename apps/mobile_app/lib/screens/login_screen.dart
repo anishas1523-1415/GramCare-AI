@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:dio/dio.dart';
 import 'package:go_router/go_router.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api_service.dart';
+import '../services/secure_store.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -23,20 +24,34 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     try {
+      // Previously posted to '/auth/token', which does not exist anywhere
+      // in the backend (apps/backend_service/modules/auth/router.py only
+      // defines POST /login and POST /register under the /api/v1/auth
+      // prefix) — every login attempt from this app would 404 against the
+      // real backend. Also, setting only a raw Content-Type header without
+      // `Options(contentType: ...)` does not reliably make Dio form-encode
+      // a Map body; it can still JSON-serialize the body while mislabeling
+      // it as form-urlencoded, which FastAPI's OAuth2PasswordRequestForm
+      // cannot parse. Fixed to hit the real /auth/login route with a
+      // properly form-encoded body.
       final response = await ApiService().client.post(
-        '/auth/token',
+        '/auth/login',
         data: {
           'username': _usernameController.text,
           'password': _passwordController.text,
         },
         options: Options(
-          headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+          contentType: Headers.formUrlEncodedContentType,
         ),
       );
 
       final token = response.data['access_token'];
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('access_token', token);
+      if (token == null) {
+        throw Exception('Login response did not include an access token.');
+      }
+      // Token goes into the platform keystore, not shared_preferences
+      // (clinical-app compliance fix).
+      await SecureStore().setToken(token as String);
 
       if (mounted) context.go('/');
     } catch (e) {
