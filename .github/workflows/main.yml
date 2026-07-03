@@ -65,7 +65,7 @@ jobs:
     - name: Install & Build
       working-directory: ./apps/web_portal
       run: |
-        npm ci
+        npm install
         npm run build
         
   build-pharmacy-portal:
@@ -83,7 +83,7 @@ jobs:
     - name: Install & Build
       working-directory: ./apps/react_dashboard
       run: |
-        npm ci
+        npm install
         npm run build
 
   build-mobile-app:
