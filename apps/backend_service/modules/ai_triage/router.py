@@ -57,6 +57,16 @@ class TriageResponse(BaseModel):
     status: str
     confidence_score: float = Field(..., ge=0.0, le=1.0)
     explanation: str
+    # Planning-doc mandated detail fields ("அது எதனால காஸ் ஆயிருக்கலாம்,
+    # ஃபர்ஸ்ட் எய்ட் என்ன, சைடு எஃபெக்ட்ஸ் என்ன, என்னென்ன ட்ரீட்மென்ட்,
+    # இப்படியே இருந்தா என்ன ஆகும், எந்த ஸ்பெஷலிஸ்ட்").
+    possible_causes: str = ""
+    first_aid: str = ""
+    side_effects: str = ""
+    treatment_options: str = ""
+    untreated_outcome: str = ""
+    specialist_type: str = ""       # e.g. Dermatologist, Cardiologist, General Physician
+    language_detected: str = ""
     disclaimer: str
 
 
@@ -91,7 +101,14 @@ The JSON structure MUST exactly match this:
     "recovery_time": "<Estimated time in user's language>",
     "status": "<'Normal', 'Warning', or 'Critical' in English>",
     "confidence_score": <float between 0.0 and 1.0 representing your confidence>,
-    "explanation": "<A clear, explainable AI reasoning on WHY you made this prediction based on the symptoms and age, written in the user's language.>"
+    "explanation": "<A clear, explainable AI reasoning on WHY you made this prediction based on the symptoms and age, written in the user's language.>",
+    "possible_causes": "<Likely causes, in user's language>",
+    "first_aid": "<Immediate first-aid steps until reaching care, in user's language. NEVER include medicine dosages.>",
+    "side_effects": "<What accompanying symptoms/complications to watch for, in user's language>",
+    "treatment_options": "<Typical treatment approaches a doctor may consider, in user's language, phrased as information not instruction>",
+    "untreated_outcome": "<What may happen if ignored, in user's language, factual not alarmist>",
+    "specialist_type": "<The single most relevant specialist in English, e.g. 'Dermatologist', 'Cardiologist', 'General Physician'>",
+    "language_detected": "<BCP-47 code of the user's language, e.g. 'ta', 'hi', 'en'>"
 }}
 """
 
@@ -159,6 +176,13 @@ async def analyze_symptoms(
             confidence_score=0.0,
             explanation="This is a mock response because the Gemini API key is not configured. "
                         "Please set GEMINI_API_KEY in the .env file for real AI analysis.",
+            possible_causes="Not available in mock mode.",
+            first_aid="Keep the patient comfortable and hydrated.",
+            side_effects="",
+            treatment_options="",
+            untreated_outcome="",
+            specialist_type="General Physician",
+            language_detected="en",
             disclaimer=MEDICAL_DISCLAIMER,
         )
         _persist_triage_log(db, request, current_user, mock.model_dump())

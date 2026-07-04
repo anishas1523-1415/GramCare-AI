@@ -3,19 +3,30 @@ services:
   - type: web
     name: gramcare-fastapi
     env: python
+    # NOTE: the free plan SLEEPS after inactivity — unacceptable for a
+    # platform whose premise is emergency response. Upgrade to a paid plan
+    # before any pilot with real patients.
     plan: free
     rootDir: apps/backend_service
-    buildCommand: pip install --no-cache-dir -r requirements.txt
-    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    buildCommand: pip install -r requirements.txt
+    startCommand: alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: PYTHON_VERSION
         value: "3.11.0"
       - key: DATABASE_URL
-        sync: false # You will enter this manually in the Render dashboard
+        sync: false # Managed Postgres connection string — set in the Render dashboard
       - key: GEMINI_API_KEY
-        sync: false # You will enter this manually in the Render dashboard
+        sync: false # Set in the Render dashboard
+      - key: RAZORPAY_KEY_ID
+        sync: false
+      - key: RAZORPAY_KEY_SECRET
+        sync: false
       - key: JWT_SECRET_KEY
         generateValue: true
+      - key: ALLOW_SQLITE_FALLBACK
+        value: "false" # fail fast in production; never run on a container-local file
+      - key: CORS_ORIGINS
+        sync: false # e.g. https://gramcare-portal.onrender.com,https://gramcare-pharmacy.onrender.com
       - key: NODE_SIGNALING_URL
         value: "https://gramcare-signaling.onrender.com"
 
@@ -30,3 +41,40 @@ services:
     envVars:
       - key: FASTAPI_URL
         value: "https://gramcare-fastapi.onrender.com"
+      - key: JWT_SECRET_KEY
+        sync: false # MUST equal gramcare-fastapi's JWT_SECRET_KEY
+      - key: ALLOWED_ORIGINS
+        sync: false # comma-separated production frontend origins
+      - key: TURN_URL
+        sync: false # e.g. turn:turn.example.com:3478 (coturn / Twilio NTS)
+      - key: TURN_USERNAME
+        sync: false
+      - key: TURN_CREDENTIAL
+        sync: false
+
+  # 3. Patient/Doctor Web Portal (Next.js)
+  - type: web
+    name: gramcare-portal
+    env: node
+    plan: free
+    rootDir: apps/web_portal
+    buildCommand: npm ci && npm run build
+    startCommand: node .next/standalone/server.js
+    envVars:
+      - key: NEXT_PUBLIC_API_URL
+        value: "https://gramcare-fastapi.onrender.com/api/v1"
+      - key: NEXT_PUBLIC_WS_URL
+        value: "https://gramcare-signaling.onrender.com"
+      - key: NEXT_PUBLIC_RAZORPAY_KEY_ID
+        sync: false
+
+  # 4. Pharmacy Dashboard (Vite static build)
+  - type: web
+    name: gramcare-pharmacy
+    env: static
+    rootDir: apps/react_dashboard
+    buildCommand: npm ci && npm run build
+    staticPublishPath: dist
+    envVars:
+      - key: VITE_API_URL
+        value: "https://gramcare-fastapi.onrender.com/api/v1"

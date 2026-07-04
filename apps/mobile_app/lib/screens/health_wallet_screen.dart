@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_tts/flutter_tts.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:provider/provider.dart';
 
 import '../models/health_record.dart';
 import '../services/api_service.dart';
+import '../services/app_strings.dart';
 import '../services/profile_service.dart';
 import '../services/sync_service.dart';
 
@@ -30,6 +32,23 @@ const Map<String, (Color, IconData, String)> kRecordTypeStyle = {
 
 class _HealthWalletScreenState extends State<HealthWalletScreen> {
   bool _syncing = false;
+  final FlutterTts _tts = FlutterTts();
+
+  @override
+  void dispose() {
+    _tts.stop();
+    super.dispose();
+  }
+
+  /// "Tap to hear it read aloud" — the planning doc's accessibility feature
+  /// for users who cannot read ("ஒவ்வொரு ரெக்கார்டையும் வாய்ஸ் கிளிக் பண்ணி
+  /// கேட்டுக்கலாம்").
+  Future<void> _speakRecord(HealthRecord record) async {
+    final s = context.read<LocaleService>();
+    await _tts.setLanguage(s.isTamil ? 'ta-IN' : 'en-IN');
+    await _tts.setSpeechRate(0.45);
+    await _tts.speak('${record.title ?? record.recordType}. ${record.content}');
+  }
 
   Future<void> _refresh() async {
     setState(() => _syncing = true);
@@ -146,6 +165,12 @@ class _HealthWalletScreenState extends State<HealthWalletScreen> {
                             ),
                           ),
                           const Spacer(),
+                          // Voice playback for low-literacy users
+                          GestureDetector(
+                            onTap: () => _speakRecord(record),
+                            child: Icon(Icons.volume_up, size: 22, color: color),
+                          ),
+                          const SizedBox(width: 10),
                           Icon(
                             record.synced ? Icons.cloud_done : Icons.cloud_upload,
                             size: 18,

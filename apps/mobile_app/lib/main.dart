@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import 'models/health_record.dart';
 import 'router.dart';
+import 'services/app_strings.dart';
 import 'services/profile_service.dart';
 import 'services/secure_store.dart';
 
@@ -24,10 +25,15 @@ void main() async {
     encryptionCipher: HiveAesCipher(hiveKey),
   );
 
+  // Tamil-first localization (planning doc) — persisted user choice.
+  final locale = LocaleService();
+  await locale.load();
+
   runApp(
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => ProfileService()),
+        ChangeNotifierProvider.value(value: locale),
       ],
       child: const GramCareApp(),
     ),

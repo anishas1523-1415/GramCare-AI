@@ -16,7 +16,12 @@
 | P4 Doctors + payments | ✅ **DONE** | Doctor directory/profiles/slots; Payment state machine (CREATED→PAID→CONSUMED→REFUNDED); server-enforced pay-before-book; auto-refund + slot release on cancel; web booking rewritten (no more DOCTOR_ID=2) |
 | P5 Pharmacy intelligence | ✅ **DONE** | Pharmacy entity + geo registration; nearby search w/ green-red + per-shop generic substitutes; set/decrement/delta stock modes; fulfill decrements stock; expiry alerts; invoice-OCR entry; patient search UI (web + mobile) |
 | Verification | ✅ 27/27 backend tests pass (auth, family, doctors, sync idempotency, triage persistence, payment/booking invariants, pharmacy lifecycle, migration-from-scratch); react_dashboard `tsc` clean; Node `--check` clean; seed idempotent | |
-| P6–P10 | ⏳ Not started (out of this session's scope) | |
+| P6 Emergency SOS | ✅ **DONE** | EmergencyContact model+API, migration `9b2d5f7c1a44`; GPS capture + hold-3s guard + SMS fallback (mobile); voice note on SOS; nearest-hospital assignment + escalation watchdog; responder-room-scoped broadcasts; HOSPITAL desk role can respond |
+| P7 Tamil + voice | ✅ **DONE** | Tamil-first LocaleService (en/ta, persisted, toggle); mic-first voice symptom input (ta-IN/en-IN); TTS playback on wallet records + triage results; per-module color themes |
+| P8 AI depth | ✅ **DONE** | Triage enriched with causes/first-aid/side-effects/treatments/untreated-outcome/specialist/language; auto-SOS prompt on CRITICAL (mobile) + emergency banner (web); AI Doctor Assistant pre-consult summary (rules + optional Gemini); Community Health Intelligence clusters + overview + web page |
+| P9 Hardening | ✅ **DONE** | Non-root backend image + HEALTHCHECK; runtime/dev dependency split; .dockerignore everywhere; Postgres port unexposed; TURN config via env; new P6/P8 test suite added |
+| P10 Deployment | ✅ Config complete | render.yaml covers all 4 services with production env vars; deployment checklist + owner-required items in final report |
+| ⚠ Outstanding | See "Remaining issues" in the final report: P6/P8 tests written but not yet executed (sandbox VM failed mid-session — run `pytest` once locally), JWT-in-localStorage (web), no refresh tokens, web portal untranslated | |
 
 ---
 

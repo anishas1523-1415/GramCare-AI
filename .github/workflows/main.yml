@@ -38,14 +38,15 @@ jobs:
       working-directory: ./apps/backend_service
       run: |
         python -m pip install --upgrade pip
-        pip install -r requirements.txt
-        pip install pytest pytest-asyncio httpx
+        pip install -r requirements-dev.txt
         
     - name: Run Backend Tests
       working-directory: ./apps/backend_service
       env:
         DATABASE_URL: postgresql://gramcare_user:securepassword123@localhost:5432/gramcare_db
-        SECRET_KEY: test-secret-key
+        # The app reads JWT_SECRET_KEY (not SECRET_KEY); the old name was a
+        # no-op that silently left CI running on the hardcoded default.
+        JWT_SECRET_KEY: test-secret-key-ci-only
         GEMINI_API_KEY: mock-api-key
       run: |
         pytest tests/

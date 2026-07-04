@@ -1,0 +1,5 @@
+# Test/dev-only tooling — NOT installed into the production image.
+-r requirements.txt
+pytest==8.4.1
+pytest-asyncio
+httpx==0.28.1

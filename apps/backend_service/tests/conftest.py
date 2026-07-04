@@ -23,6 +23,7 @@ os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-not-for-production")
 os.environ["GEMINI_API_KEY"] = ""
 os.environ["RAZORPAY_KEY_ID"] = ""
 os.environ["RAZORPAY_KEY_SECRET"] = ""
+os.environ["TESTING"] = "1"  # disables the SOS escalation background loop
 
 from fastapi.testclient import TestClient  # noqa: E402
 

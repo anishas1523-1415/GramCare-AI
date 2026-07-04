@@ -49,6 +49,14 @@ dependencies:
   image_picker: ^1.1.2
   # Client-generated record UUIDs powering idempotent offline sync
   uuid: ^4.4.0
+  # Real GPS coordinates for Emergency SOS (planning doc requirement)
+  geolocator: ^13.0.1
+  # Offline SMS fallback for SOS + phone dialing for pharmacies
+  url_launcher: ^6.3.0
+  # Voice-first symptom input for low-literacy rural users (planning doc)
+  speech_to_text: ^7.0.0
+  # "Tap to hear" playback of wallet records and AI results (planning doc)
+  flutter_tts: ^4.1.0
 
 dev_dependencies:
   flutter_test:

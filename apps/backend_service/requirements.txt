@@ -1,5 +1,6 @@
 # ============================================================
-# GramCare AI — Backend Service Dependencies
+# GramCare AI — Backend Service RUNTIME Dependencies
+# (test tooling lives in requirements-dev.txt)
 # ============================================================
 
 # Core Framework
@@ -33,10 +34,6 @@ Pillow
 
 # Environment
 python-dotenv==1.1.1
-
-# Testing
-pytest==8.4.1
-httpx==0.28.1
 
 # Utilities
 aiofiles==24.1.0

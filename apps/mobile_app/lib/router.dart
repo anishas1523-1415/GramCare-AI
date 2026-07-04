@@ -1,6 +1,7 @@
 import 'package:go_router/go_router.dart';
 
 import 'screens/dashboard_screen.dart';
+import 'screens/emergency_contacts_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/profile_selection_screen.dart';
 import 'screens/pharmacy_search_screen.dart';
@@ -57,6 +58,10 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: '/pharmacy',
       builder: (context, state) => const PharmacySearchScreen(),
+    ),
+    GoRoute(
+      path: '/emergency-contacts',
+      builder: (context, state) => const EmergencyContactsScreen(),
     ),
     GoRoute(
       path: '/vitals',

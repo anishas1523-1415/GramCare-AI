@@ -268,6 +268,7 @@ class EmergencySOSCreate(BaseModel):
     location_lat: Optional[float] = None
     location_lng: Optional[float] = None
     location_text: Optional[str] = None
+    voice_note: Optional[str] = Field(None, max_length=2000)
     severity: str = "CRITICAL"
     family_profile_id: Optional[int] = None
 
@@ -279,8 +280,21 @@ class EmergencySOSResponse(EmergencySOSCreate):
     patient_id: int
     status: str
     responded_by: Optional[int]
+    escalation_level: Optional[int] = 0
+    assigned_hospital_id: Optional[int] = None
     created_at: datetime
     resolved_at: Optional[datetime]
+
+    model_config = {"from_attributes": True}
+
+class EmergencyContactCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)
+    phone: str = Field(..., min_length=5, max_length=20)
+    relation: Optional[str] = None
+
+class EmergencyContactResponse(EmergencyContactCreate):
+    id: int
+    user_id: int
 
     model_config = {"from_attributes": True}
 

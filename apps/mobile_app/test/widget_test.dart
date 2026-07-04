@@ -12,6 +12,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:mobile_app/main.dart';
+import 'package:mobile_app/services/app_strings.dart';
 import 'package:mobile_app/services/profile_service.dart';
 
 void main() {
@@ -25,6 +26,7 @@ void main() {
       MultiProvider(
         providers: [
           ChangeNotifierProvider(create: (_) => ProfileService()),
+          ChangeNotifierProvider(create: (_) => LocaleService()),
         ],
         child: const GramCareApp(),
       ),

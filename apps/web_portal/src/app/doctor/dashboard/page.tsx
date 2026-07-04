@@ -2,12 +2,88 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { Users, Calendar, ShieldAlert, Video, FileText, CheckCircle, Clock, Plus, Trash2 } from 'lucide-react';
+import { Users, Calendar, ShieldAlert, Video, FileText, CheckCircle, Clock, Plus, Trash2, Brain, BarChart3 } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import api from '../../../lib/api';
 import { io } from 'socket.io-client';
 import type { Slot } from '../../../types';
+
+interface AssistSummary {
+  patient_name: string;
+  risk_flag: 'LOW' | 'MODERATE' | 'HIGH';
+  summary_text: string;
+  active_medicines: { name: string; dosage: string; days_remaining: number }[];
+  recent_conditions: string[];
+  latest_vitals?: { heart_rate: number; spo2: number; temperature: number } | null;
+  generated_by: string;
+}
+
+/** AI Doctor Assistant panel — the planning doc's pre-consultation summary
+ * ("டாக்டர்ஸ் பேஷன்ட்ட பாக்குறதுக்கு முன்னாடியே... சம்மரி ரிப்போர்ட்"). */
+function AssistPanel({ patientId, familyProfileId }: { patientId: number; familyProfileId?: number | null }) {
+  const [summary, setSummary] = useState<AssistSummary | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [open, setOpen] = useState(false);
+
+  const load = async () => {
+    if (open) { setOpen(false); return; }
+    setOpen(true);
+    if (summary) return;
+    setLoading(true);
+    try {
+      const res = await api.get<AssistSummary>(`/assist/patient-summary/${patientId}`, {
+        params: familyProfileId ? { family_profile_id: familyProfileId } : {},
+      });
+      setSummary(res.data);
+    } catch {
+      setSummary(null);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="w-full">
+      <button
+        onClick={load}
+        className="mt-2 flex items-center gap-2 text-sm font-semibold text-purple-600 hover:text-purple-800"
+      >
+        <Brain size={16} /> {open ? 'Hide AI summary' : 'AI pre-consult summary'}
+      </button>
+      {open && (
+        <div className="mt-2 p-3 rounded-xl bg-purple-500/10 border border-purple-500/20 text-sm">
+          {loading ? (
+            <span className="text-gray-500">Preparing summary…</span>
+          ) : summary ? (
+            <>
+              <div className="flex items-center gap-2 mb-1">
+                <span className={`px-2 py-0.5 rounded text-xs font-bold ${summary.risk_flag === 'HIGH' ? 'bg-red-500 text-white' : summary.risk_flag === 'MODERATE' ? 'bg-yellow-500 text-black' : 'bg-green-500 text-white'}`}>
+                  {summary.risk_flag} RISK
+                </span>
+                <span className="text-xs text-gray-500">({summary.generated_by})</span>
+              </div>
+              <p className="mb-2">{summary.summary_text}</p>
+              {summary.active_medicines.length > 0 && (
+                <p className="text-xs text-gray-600">
+                  <strong>Active medicines:</strong>{' '}
+                  {summary.active_medicines.map((m) => `${m.name} (${m.days_remaining}d left)`).join(', ')}
+                </p>
+              )}
+              {summary.latest_vitals && (
+                <p className="text-xs text-gray-600">
+                  <strong>Latest vitals:</strong> HR {summary.latest_vitals.heart_rate}, SpO2 {summary.latest_vitals.spo2}%, {summary.latest_vitals.temperature}°C
+                </p>
+              )}
+            </>
+          ) : (
+            <span className="text-gray-500">No summary available for this patient.</span>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 /** Doctor availability editor — publishes the slots patients book against
  * (planning doc: bookings only happen inside the doctor's published
@@ -173,6 +249,9 @@ export default function DoctorDashboard() {
     socket.on("connect", () => {
       setSocketConnected(true);
       socket.emit("join_department", "General Medicine");
+      // Scoped SOS delivery: responders join this room instead of relying
+      // on a global broadcast to every connected socket.
+      socket.emit("join_department", "emergency_responders");
     });
 
     socket.on("disconnect", () => setSocketConnected(false));
@@ -225,8 +304,11 @@ export default function DoctorDashboard() {
           </p>
         </div>
         <div className="flex gap-4">
-          <button className="neu-button px-6 py-2 bg-indigo-500 text-white font-bold rounded-xl flex items-center gap-2">
-            <Video size={20} /> Tele-ICU
+          <button
+            onClick={() => router.push('/doctor/analytics')}
+            className="neu-button px-6 py-2 bg-purple-500 text-white font-bold rounded-xl flex items-center gap-2"
+          >
+            <BarChart3 size={20} /> Health Intelligence
           </button>
         </div>
       </header>
@@ -244,7 +326,17 @@ export default function DoctorDashboard() {
                   <span className="bg-red-500 text-white text-xs font-bold px-3 py-1 rounded-full animate-pulse">CRITICAL</span>
                 </div>
                 <h3 className="text-xl font-bold mb-2">SOS from Patient #{sos.patient_id}</h3>
-                <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">Location: {sos.location_text || `${sos.location_lat}, ${sos.location_lng}`}</p>
+                <p className="text-sm text-gray-600 dark:text-gray-300 mb-1">
+                  Location: {sos.location_lat != null
+                    ? <a className="underline" target="_blank" rel="noreferrer" href={`https://maps.google.com/?q=${sos.location_lat},${sos.location_lng}`}>{sos.location_lat}, {sos.location_lng}</a>
+                    : (sos.location_text || 'Unknown')}
+                </p>
+                {sos.voice_note && (
+                  <p className="text-sm italic text-gray-700 dark:text-gray-200 mb-1">&ldquo;{sos.voice_note}&rdquo;</p>
+                )}
+                {sos.escalation_level > 0 && (
+                  <p className="text-xs font-bold text-orange-600 mb-1">Escalated ×{sos.escalation_level} (unanswered)</p>
+                )}
                 <p className="text-xs text-gray-500 mb-6">Triggered at: {new Date(sos.created_at).toLocaleTimeString()}</p>
                 <button 
                   onClick={() => respondToSOS(sos.id)}
@@ -279,6 +371,7 @@ export default function DoctorDashboard() {
                       </div>
                       <p className="text-sm text-gray-500">Scheduled: {new Date(appt.scheduled_at).toLocaleString()}</p>
                       {appt.triage_summary && <p className="text-sm mt-2 text-gray-600 dark:text-gray-300"><strong>Triage:</strong> {appt.triage_summary}</p>}
+                      <AssistPanel patientId={appt.patient_id} familyProfileId={appt.family_profile_id} />
                     </div>
                     
                     <div className="flex gap-2 w-full md:w-auto">

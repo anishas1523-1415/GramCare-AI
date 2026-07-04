@@ -25,10 +25,26 @@ try {
 // minted by the FastAPI service validate here too. (Previously this file read a
 // different env var, SECRET_KEY, with a different default, which meant tokens
 // silently failed to validate across the two services.)
+const DEV_DEFAULT_SECRET = "gramcare_jwt_secret_change_this_in_production_2026";
+const IS_PRODUCTION =
+  (process.env.NODE_ENV || "").toLowerCase() === "production" ||
+  (process.env.ENVIRONMENT || "").toLowerCase() === "production";
 const JWT_SECRET =
-  process.env.JWT_SECRET_KEY ||
-  process.env.SECRET_KEY ||
-  "gramcare_jwt_secret_change_this_in_production_2026";
+  process.env.JWT_SECRET_KEY || process.env.SECRET_KEY || DEV_DEFAULT_SECRET;
+
+// Security: refuse to run on the publicly-known default secret in production.
+// The signaling service validates tokens minted by FastAPI; if it fell back to
+// the committed default while FastAPI used a real secret, either cross-service
+// auth breaks OR (worse) both run on a guessable secret and tokens are
+// forgeable. Fail fast so misconfiguration is caught at boot, not in prod.
+if (IS_PRODUCTION && JWT_SECRET === DEV_DEFAULT_SECRET) {
+  console.error(
+    "FATAL: JWT_SECRET_KEY is unset or equals the public development default " +
+      "while NODE_ENV/ENVIRONMENT=production. Set a strong secret shared with " +
+      "the FastAPI backend."
+  );
+  process.exit(1);
+}
 
 // Allowed origins for both REST (Express) and Socket.io. Defaults cover local
 // dev for web_portal (3000), react_dashboard (80 in Docker / 5173 in dev).
@@ -132,7 +148,9 @@ io.on("connection", (socket) => {
     }
 
     if (alertData.severity === "CRITICAL") {
-      io.emit("emergency_alert", alertData);
+      // Scoped to on-duty responders (doctors/hospital desks join the
+      // "emergency_responders" room on connect) instead of every socket.
+      io.to("emergency_responders").emit("emergency_alert", alertData);
     }
   });
 
@@ -266,13 +284,10 @@ app.post("/api/sos/trigger", requireJwtAuth, async (req, res) => {
       isEmergency: true
     };
 
-    // 1. Broadcast via WebSocket to active doctors
-    // NOTE: this still broadcasts globally to every connected socket rather
-    // than a scoped "on-duty responders" room, matching current client
-    // behavior (no client currently joins a responder-specific room). Scoping
-    // this down is tracked as a follow-up once the doctor dashboard joins a
-    // dedicated "emergency_responders" room.
-    io.emit("emergency_alert", payload);
+    // 1. Broadcast via WebSocket to on-duty responders. The doctor dashboard
+    // joins the "emergency_responders" room on connect (authenticated), so
+    // alerts no longer flood every visitor's socket.
+    io.to("emergency_responders").emit("emergency_alert", payload);
 
     // 2. Fire Push Notification via Firebase Cloud Messaging (FCM)
     if (firebaseInitialized && payload.severity === "CRITICAL") {
@@ -303,16 +318,23 @@ app.post("/api/sos/trigger", requireJwtAuth, async (req, res) => {
   }
 });
 
-// TURN Server configuration for WebRTC in strict networks (NAT/Firewalls)
+// ICE server configuration for WebRTC. STUN alone fails behind symmetric
+// NAT — common on rural mobile networks, this platform's exact audience —
+// so a TURN relay is configurable via env (coturn, Twilio NTS, or any
+// provider). Without TURN_URL set, clients still get STUN (dev fallback).
 app.get("/api/webrtc/turn-credentials", (req, res) => {
-  // In production, integrate with Twilio Network Traversal or equivalent
-  res.json({
-    iceServers: [
-      { urls: "stun:stun.l.google.com:19302" },
-      { urls: "stun:stun1.l.google.com:19302" },
-      // { urls: "turn:your-turn-server.com", username: "guest", credential: "password" }
-    ]
-  });
+  const iceServers = [
+    { urls: "stun:stun.l.google.com:19302" },
+    { urls: "stun:stun1.l.google.com:19302" }
+  ];
+  if (process.env.TURN_URL && process.env.TURN_USERNAME && process.env.TURN_CREDENTIAL) {
+    iceServers.push({
+      urls: process.env.TURN_URL,
+      username: process.env.TURN_USERNAME,
+      credential: process.env.TURN_CREDENTIAL
+    });
+  }
+  res.json({ iceServers });
 });
 
 // Express-level error handler: catches CORS rejections (thrown by the

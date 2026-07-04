@@ -185,11 +185,32 @@ class EmergencySOS(Base):
     location_lat = Column(Float, nullable=True)
     location_lng = Column(Float, nullable=True)
     location_text = Column(String, nullable=True)
+    # Transcribed voice description of the emergency (planning doc: the user
+    # can SAY what happened; the text rides along with the alert).
+    voice_note = Column(Text, nullable=True)
     severity = Column(String, default="CRITICAL")
     status = Column(String, default="ACTIVE")  # ACTIVE/RESPONDED/RESOLVED
     responded_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    # Escalation chain (planning doc: if the first hospital doesn't respond,
+    # the alert moves to the next-nearest one).
+    escalation_level = Column(Integer, default=0)
+    assigned_hospital_id = Column(Integer, ForeignKey("hospitals.id"), nullable=True)
     created_at = Column(DateTime, default=_utcnow)
     resolved_at = Column(DateTime, nullable=True)
+
+
+class EmergencyContact(Base):
+    """Family/neighbour contacts alerted on SOS (planning doc: "எமர்ஜென்சி
+    காண்டாக்ட்ஸ்க்கு, அதாவது குடும்பத்தினருக்கு, ஒரு தானியங்கி SMS போகும்").
+    The mobile client uses these for the offline SMS fallback."""
+    __tablename__ = "emergency_contacts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), index=True)
+    name = Column(String)
+    phone = Column(String)
+    relation = Column(String, nullable=True)
+    created_at = Column(DateTime, default=_utcnow)
 
 
 class TriageLog(Base):

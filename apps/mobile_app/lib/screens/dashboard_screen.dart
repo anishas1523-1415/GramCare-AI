@@ -1,11 +1,15 @@
-import 'package:flutter/material.dart';
+import 'dart:async';
 import 'dart:ui';
+
+import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../services/api_service.dart';
+import '../services/app_strings.dart';
 import '../services/profile_service.dart';
 import '../services/secure_store.dart';
+import '../services/sos_service.dart';
 import '../services/sync_service.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -17,6 +21,10 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   bool _sosInFlight = false;
+  double _holdProgress = 0;
+  Timer? _holdTimer;
+
+  static const _holdDuration = Duration(seconds: 3);
 
   @override
   void initState() {
@@ -25,6 +33,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
       // Load profiles (offline-cached) and run a background wallet sync.
       final profiles = context.read<ProfileService>();
       await profiles.load();
+      // Warm the emergency-contact cache so the offline SMS fallback works
+      // even if the SOS moment itself has no connectivity.
+      SosService().cachedContactNumbers();
       try {
         final me = await ApiService().client.get('/auth/me');
         final myId = me.data['id'] as int?;
@@ -32,10 +43,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
           await SyncService().fullSync(myId);
         }
       } catch (_) {
-        // Offline — queued records will sync next time we're online.
         await SyncService().pushUnsynced();
       }
     });
+  }
+
+  @override
+  void dispose() {
+    _holdTimer?.cancel();
+    super.dispose();
   }
 
   void _logout() async {
@@ -46,62 +62,62 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (mounted) context.go('/login');
   }
 
-  /// Emergency SOS. Fixed vs. the previous implementation, which sent a
-  /// payload the backend schema silently dropped (`location` instead of
-  /// `location_text`), hardcoded patient_id '1', and never awaited or
-  /// surfaced errors — unacceptable for a life-safety feature.
-  /// GPS capture and hold-to-activate arrive with roadmap Phase 6.
-  Future<void> _triggerSos() async {
+  // --- Hold-to-activate SOS (planning doc: "Hold for 3 seconds" guard
+  // against accidental / child presses) --------------------------------
+  void _startHold() {
     if (_sosInFlight) return;
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Send Emergency SOS?'),
-        content: const Text(
-            'This will alert doctors and emergency responders immediately.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Colors.red),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('SEND SOS'),
-          ),
-        ],
-      ),
+    final s = context.read<LocaleService>();
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    const tick = Duration(milliseconds: 100);
+    int elapsed = 0;
+    _holdTimer?.cancel();
+    _holdTimer = Timer.periodic(tick, (timer) {
+      elapsed += tick.inMilliseconds;
+      setState(() => _holdProgress = elapsed / _holdDuration.inMilliseconds);
+      if (elapsed >= _holdDuration.inMilliseconds) {
+        timer.cancel();
+        setState(() => _holdProgress = 0);
+        _fireSos();
+      }
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(s.t('hold_to_sos')), duration: _holdDuration),
     );
-    if (confirmed != true || !mounted) return;
+  }
 
+  void _cancelHold() {
+    _holdTimer?.cancel();
+    if (_holdProgress > 0) setState(() => _holdProgress = 0);
+  }
+
+  Future<void> _fireSos() async {
+    if (_sosInFlight) return;
     setState(() => _sosInFlight = true);
+    final s = context.read<LocaleService>();
     final activeProfile = context.read<ProfileService>().active;
-    try {
-      await ApiService().client.post('/sos/trigger', data: {
-        'location_text': 'Location unavailable (GPS pending Phase 6)',
-        'severity': 'CRITICAL',
-        'family_profile_id': activeProfile?.id,
-      });
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('EMERGENCY SOS SENT — help has been alerted'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text(
-                'SOS FAILED TO SEND. Please call emergency services directly (108).'),
-            backgroundColor: Colors.red.shade900,
-            duration: const Duration(seconds: 8),
-          ),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _sosInFlight = false);
+
+    final result = await SosService().trigger(familyProfileId: activeProfile?.id);
+
+    if (!mounted) return;
+    if (result.sent) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(s.t('sos_sent')),
+        backgroundColor: Colors.red,
+      ));
+    } else if (result.smsFallbackUsed) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(s.t('sos_sms_fallback')),
+        backgroundColor: Colors.orange.shade800,
+        duration: const Duration(seconds: 6),
+      ));
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(s.t('sos_failed')),
+        backgroundColor: Colors.red.shade900,
+        duration: const Duration(seconds: 8),
+      ));
     }
+    setState(() => _sosInFlight = false);
   }
 
   Color _profileColor(ProfileService profiles) {
@@ -115,12 +131,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   Widget build(BuildContext context) {
     final profiles = context.watch<ProfileService>();
+    final s = context.watch<LocaleService>();
 
     return Scaffold(
       body: SafeArea(
         child: Stack(
           children: [
-            // Background blobs for subtle glassmorphism effect
             Positioned(
               top: -100,
               left: -100,
@@ -146,25 +162,36 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text(
-                        'GramCare AI',
-                        style: TextStyle(
-                          fontSize: 32,
+                      Text(
+                        s.t('app_title'),
+                        style: const TextStyle(
+                          fontSize: 28,
                           fontWeight: FontWeight.w900,
                           color: Color(0xFF2D3748),
                           letterSpacing: -1,
                         ),
                       ),
-                      IconButton(
-                        icon: const Icon(Icons.logout, color: Colors.redAccent),
-                        onPressed: _logout,
-                      )
+                      Row(children: [
+                        // Language toggle (Tamil-first per planning doc)
+                        TextButton(
+                          onPressed: () => s.setCode(s.isTamil ? 'en' : 'ta'),
+                          child: Text(s.isTamil ? 'EN' : 'தமிழ்',
+                              style: const TextStyle(fontWeight: FontWeight.bold)),
+                        ),
+                        IconButton(
+                          tooltip: s.t('emergency_contacts'),
+                          icon: const Icon(Icons.contact_phone, color: Color(0xFFEF4444)),
+                          onPressed: () => context.push('/emergency-contacts'),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.logout, color: Colors.redAccent),
+                          onPressed: _logout,
+                        ),
+                      ]),
                     ],
                   ),
                   const SizedBox(height: 8),
 
-                  // Active family member chip — tap to switch (planning doc:
-                  // every feature acts for the selected member).
                   GestureDetector(
                     onTap: () => context.push('/profiles'),
                     child: Container(
@@ -192,8 +219,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           const SizedBox(width: 8),
                           Text(
                             profiles.active == null
-                                ? 'Acting for: Myself'
-                                : 'Acting for: ${profiles.active!.fullName}',
+                                ? s.t('acting_for_self')
+                                : '${s.t('acting_for')}: ${profiles.active!.fullName}',
                             style: const TextStyle(
                                 fontWeight: FontWeight.bold, color: Color(0xFF2D3748)),
                           ),
@@ -205,7 +232,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                   const SizedBox(height: 32),
 
-                  // Neumorphic Feature Grid
                   Expanded(
                     child: GridView.count(
                       crossAxisCount: 2,
@@ -214,50 +240,50 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       children: [
                         GestureDetector(
                           onTap: () => context.push('/wallet'),
-                          child: const NeumorphicCard(
+                          child: NeumorphicCard(
                             icon: Icons.favorite,
-                            title: 'Health Wallet',
-                            iconColor: Color(0xFF4F46E5),
+                            title: s.t('health_wallet'),
+                            iconColor: const Color(0xFF4F46E5),
                           ),
                         ),
                         GestureDetector(
                           onTap: () => context.push('/triage'),
-                          child: const NeumorphicCard(
+                          child: NeumorphicCard(
                             icon: Icons.psychology,
-                            title: 'Symptom Checker',
-                            iconColor: Color(0xFF2DD4BF),
+                            title: s.t('symptom_checker'),
+                            iconColor: const Color(0xFF2DD4BF),
                           ),
                         ),
                         GestureDetector(
                           onTap: () => context.push('/scan'),
-                          child: const NeumorphicCard(
+                          child: NeumorphicCard(
                             icon: Icons.document_scanner,
-                            title: 'Scan Prescription',
-                            iconColor: Color(0xFF8B5CF6),
+                            title: s.t('scan_prescription'),
+                            iconColor: const Color(0xFF8B5CF6),
                           ),
                         ),
                         GestureDetector(
                           onTap: () => context.push('/pharmacy'),
-                          child: const NeumorphicCard(
+                          child: NeumorphicCard(
                             icon: Icons.local_pharmacy,
-                            title: 'Find Medicine',
-                            iconColor: Color(0xFF10B981),
+                            title: s.t('find_medicine'),
+                            iconColor: const Color(0xFF10B981),
                           ),
                         ),
                         GestureDetector(
                           onTap: () => context.push('/vitals'),
-                          child: const NeumorphicCard(
+                          child: NeumorphicCard(
                             icon: Icons.monitor_heart,
-                            title: 'IoT Vitals',
-                            iconColor: Color(0xFF3B82F6),
+                            title: s.t('iot_vitals'),
+                            iconColor: const Color(0xFF3B82F6),
                           ),
                         ),
                         GestureDetector(
                           onTap: () => context.push('/reminders'),
-                          child: const GlassmorphicCard(
+                          child: GlassmorphicCard(
                             icon: Icons.notifications_active,
-                            title: 'Medicine Reminders',
-                            iconColor: Color(0xFFEF4444),
+                            title: s.t('medicine_reminders'),
+                            iconColor: const Color(0xFFEF4444),
                           ),
                         ),
                       ],
@@ -269,16 +295,48 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _sosInFlight ? null : _triggerSos,
-        backgroundColor: Colors.red,
-        icon: _sosInFlight
-            ? const SizedBox(
-                width: 20, height: 20,
-                child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-            : const Icon(Icons.warning, color: Colors.white),
-        label: const Text('EMERGENCY SOS',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+      // Hold-to-activate SOS: long-press 3 seconds (accidental-press guard),
+      // progress ring shows the hold state.
+      floatingActionButton: GestureDetector(
+        onLongPressStart: (_) => _startHold(),
+        onLongPressEnd: (_) => _cancelHold(),
+        onLongPressCancel: _cancelHold,
+        onTap: () {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(s.t('hold_to_sos'))),
+          );
+        },
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+          decoration: BoxDecoration(
+            color: Colors.red,
+            borderRadius: BorderRadius.circular(30),
+            boxShadow: const [
+              BoxShadow(color: Color(0xFFA3B1C6), offset: Offset(4, 4), blurRadius: 8),
+            ],
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (_sosInFlight)
+                const SizedBox(
+                    width: 20, height: 20,
+                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+              else if (_holdProgress > 0)
+                SizedBox(
+                  width: 20, height: 20,
+                  child: CircularProgressIndicator(
+                      value: _holdProgress, color: Colors.white, strokeWidth: 3),
+                )
+              else
+                const Icon(Icons.warning, color: Colors.white),
+              const SizedBox(width: 8),
+              Text(s.t('emergency_sos'),
+                  style: const TextStyle(
+                      color: Colors.white, fontWeight: FontWeight.bold)),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -303,16 +361,8 @@ class NeumorphicCard extends StatelessWidget {
         color: const Color(0xFFE0E5EC),
         borderRadius: BorderRadius.circular(24),
         boxShadow: const [
-          BoxShadow(
-            color: Color(0xFFA3B1C6),
-            offset: Offset(8, 8),
-            blurRadius: 16,
-          ),
-          BoxShadow(
-            color: Color(0xFFFFFFFF),
-            offset: Offset(-8, -8),
-            blurRadius: 16,
-          ),
+          BoxShadow(color: Color(0xFFA3B1C6), offset: Offset(8, 8), blurRadius: 16),
+          BoxShadow(color: Color(0xFFFFFFFF), offset: Offset(-8, -8), blurRadius: 16),
         ],
       ),
       child: Column(
@@ -324,28 +374,23 @@ class NeumorphicCard extends StatelessWidget {
               color: Color(0xFFE0E5EC),
               shape: BoxShape.circle,
               boxShadow: [
-                BoxShadow(
-                  color: Color(0xFFA3B1C6),
-                  offset: Offset(4, 4),
-                  blurRadius: 8,
-                ),
-                BoxShadow(
-                  color: Color(0xFFFFFFFF),
-                  offset: Offset(-4, -4),
-                  blurRadius: 8,
-                ),
+                BoxShadow(color: Color(0xFFA3B1C6), offset: Offset(4, 4), blurRadius: 8),
+                BoxShadow(color: Color(0xFFFFFFFF), offset: Offset(-4, -4), blurRadius: 8),
               ],
             ),
             child: Icon(icon, size: 32, color: iconColor),
           ),
           const SizedBox(height: 16),
-          Text(
-            title,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: Color(0xFF2D3748),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: Text(
+              title,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF2D3748),
+              ),
             ),
           ),
         ],
@@ -376,16 +421,9 @@ class GlassmorphicCard extends StatelessWidget {
           decoration: BoxDecoration(
             color: Colors.white.withOpacity(0.2),
             borderRadius: BorderRadius.circular(24),
-            border: Border.all(
-              color: Colors.white.withOpacity(0.4),
-              width: 1.5,
-            ),
+            border: Border.all(color: Colors.white.withOpacity(0.4), width: 1.5),
             boxShadow: [
-              BoxShadow(
-                color: Colors.red.withOpacity(0.1),
-                blurRadius: 24,
-                spreadRadius: 4,
-              ),
+              BoxShadow(color: Colors.red.withOpacity(0.1), blurRadius: 24, spreadRadius: 4),
             ],
           ),
           child: Column(
@@ -400,13 +438,16 @@ class GlassmorphicCard extends StatelessWidget {
                 child: Icon(icon, size: 32, color: iconColor),
               ),
               const SizedBox(height: 16),
-              Text(
-                title,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: iconColor,
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: Text(
+                  title,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    color: iconColor,
+                  ),
                 ),
               ),
             ],

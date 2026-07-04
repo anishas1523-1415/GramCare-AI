@@ -4,8 +4,35 @@ from jose import JWTError, jwt
 import bcrypt
 import os
 
-# Secret key for JWT
-SECRET_KEY = os.getenv("JWT_SECRET_KEY", "gramcare_jwt_secret_change_this_in_production_2026")
+# Secret key for JWT.
+#
+# Security: the previous code unconditionally fell back to a hardcoded default
+# that is committed to source control. Anyone with repo access could therefore
+# forge valid tokens for ANY user against a deployment that forgot to set
+# JWT_SECRET_KEY. For a healthcare application that is a critical hole.
+#
+# We now refuse to boot on the public default when ENVIRONMENT=production, while
+# preserving the zero-config dev/test experience (the default is still used when
+# ENVIRONMENT is unset or "development"/"test"). Set ENVIRONMENT=production and a
+# strong JWT_SECRET_KEY (shared with the Node signaling service) in real
+# deployments.
+_DEV_DEFAULT_SECRET = "gramcare_jwt_secret_change_this_in_production_2026"
+_ENVIRONMENT = os.getenv("ENVIRONMENT", "development").lower()
+SECRET_KEY = os.getenv("JWT_SECRET_KEY")
+if not SECRET_KEY:
+    if _ENVIRONMENT == "production":
+        raise RuntimeError(
+            "JWT_SECRET_KEY is not set but ENVIRONMENT=production. Refusing to "
+            "start on the publicly-known default secret. Set a strong, secret "
+            "JWT_SECRET_KEY (shared with the Node signaling service)."
+        )
+    SECRET_KEY = _DEV_DEFAULT_SECRET
+elif SECRET_KEY == _DEV_DEFAULT_SECRET and _ENVIRONMENT == "production":
+    raise RuntimeError(
+        "JWT_SECRET_KEY is set to the publicly-known development default in a "
+        "production environment. Generate a unique secret (e.g. "
+        "`python -c \"import secrets; print(secrets.token_urlsafe(48))\"`)."
+    )
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", str(60 * 24 * 7)))  # 7 days default
 

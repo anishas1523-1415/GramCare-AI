@@ -116,8 +116,11 @@ services:
       # this fallback MUST be overridden for any real deployment.
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-securepassword123}
       POSTGRES_DB: gramcare_db
-    ports:
-      - "5432:5432"
+    # Postgres is intentionally NOT exposed to the host (attack-surface
+    # reduction) — services reach it over the internal network. For local
+    # debugging, uncomment:
+    # ports:
+    #   - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:

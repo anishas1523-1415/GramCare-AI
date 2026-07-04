@@ -4,6 +4,17 @@
          INTERNET permission at all — the app would ship unable to reach the
          backend. -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Emergency SOS: real GPS coordinates ride with the alert -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+    <!-- Voice-first symptom input (speech_to_text) -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+    <!-- SMS fallback intent + tel: links (url_launcher package visibility) -->
+    <queries>
+        <intent><action android:name="android.intent.action.SENDTO"/><data android:scheme="smsto"/></intent>
+        <intent><action android:name="android.intent.action.DIAL"/></intent>
+        <intent><action android:name="android.speech.RecognitionService"/></intent>
+    </queries>
     <application
         android:label="GramCare AI"
         android:name="${applicationName}"

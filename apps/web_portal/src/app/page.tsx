@@ -86,6 +86,10 @@ export default function Home() {
         department: data.predicted_condition,
         recommendation: data.doctor_recommendation,
         home_remedies: data.home_remedies,
+        first_aid: data.first_aid,
+        possible_causes: data.possible_causes,
+        specialist_type: data.specialist_type,
+        untreated_outcome: data.untreated_outcome,
         confidence: data.confidence_score,
         explanation: data.explanation,
       });
@@ -197,9 +201,33 @@ export default function Home() {
                   {triageResult.department}
                 </div>
                 <div className="mb-2">
-                  <span className="font-bold">Recommendation: </span> 
+                  <span className="font-bold">Recommendation: </span>
                   {triageResult.recommendation}
                 </div>
+                {triageResult.first_aid && (
+                  <div className="mb-2">
+                    <span className="font-bold text-orange-600">First aid: </span>
+                    {triageResult.first_aid}
+                  </div>
+                )}
+                {triageResult.home_remedies && (
+                  <div className="mb-2">
+                    <span className="font-bold">Home remedies: </span>
+                    {triageResult.home_remedies}
+                  </div>
+                )}
+                {triageResult.specialist_type && (
+                  <div className="mb-2">
+                    <span className="font-bold text-indigo-500">See a: </span>
+                    {triageResult.specialist_type}
+                  </div>
+                )}
+                {triageResult.severity === 'CRITICAL' && (
+                  <div className="mt-3 p-3 rounded-xl bg-red-500/15 border border-red-500/40 text-sm font-semibold text-red-600">
+                    ⚠ This looks like an emergency. Call 108 or use the Emergency SOS
+                    in the GramCare mobile app immediately.
+                  </div>
+                )}
               </motion.div>
             )}
           </div>
