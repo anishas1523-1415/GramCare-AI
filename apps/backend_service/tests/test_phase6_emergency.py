@@ -85,7 +85,8 @@ def test_sos_escalates_to_next_hospital(client, patient_token):
 
         # Age the alert past the escalation window, then run the watchdog
         sos = db.get(models.EmergencySOS, sos_id)
-        sos.created_at = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(minutes=30)
+        original_created_at = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(minutes=30)
+        sos.created_at = original_created_at
         db.commit()
 
         escalated = escalate_stale_sos(db)
@@ -94,6 +95,11 @@ def test_sos_escalates_to_next_hospital(client, patient_token):
         db.refresh(sos)
         assert sos.escalation_level >= 1
         assert sos.assigned_hospital_id != first_hospital
+        # Audit-trail guarantee: created_at must NOT be overwritten by
+        # escalation; the escalation clock lives on last_escalated_at.
+        assert sos.created_at == original_created_at
+        assert sos.last_escalated_at is not None
+        assert sos.last_escalated_at > original_created_at
     finally:
         db.close()
 
@@ -122,7 +128,7 @@ def test_assist_summary_requires_doctor(client, patient_token, doctor_token):
     assert res.status_code == 200, res.text
     body = res.json()
     assert body["patient_id"] == me["id"]
-    assert body["generated_by"] == "rules"  # keyless test environment
+    assert body["generated_by"] in ["rules", "gemini", "openai", "groq", "anthropic"]  # CI may have real keys
     assert "summary_text" in body
 
 
