@@ -64,7 +64,7 @@ app = FastAPI(
 )
 
 # Configure CORS
-origins = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://localhost:3000,http://localhost:3001,http://localhost:80,https://gram-care-mru8ufysx-anishas1523-1415s-projects.vercel.app").split(",")
+origins = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://localhost:3000,http://localhost:3001,http://localhost:80,https://gram-care-mru8ufysx-anishas1523-1415s-projects.vercel.app,https://gram-care-ai.vercel.app").split(",")
 
 app.add_middleware(
     CORSMiddleware,
