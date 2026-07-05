@@ -28,6 +28,11 @@ class Token(BaseModel):
     token_type: str
     role: str
 
+class FCMTokenRegistration(BaseModel):
+    fcm_token: str = Field(..., min_length=1)
+    device_id: Optional[str] = None
+    platform: str = Field(..., pattern="^(android|ios|web)$")
+
 # ==========================================
 # Family Profile Schemas
 # ==========================================
@@ -260,6 +265,8 @@ class NearbyPharmacyResult(BaseModel):
     medicine_name: Optional[str] = None
     price: Optional[float] = None
     substitutes: List[str] = []          # generic substitutes when unavailable
+    lat: Optional[float] = None
+    lng: Optional[float] = None
 
 # ==========================================
 # Emergency SOS Schemas

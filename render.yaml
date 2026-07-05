@@ -14,7 +14,7 @@ services:
       - key: PYTHON_VERSION
         value: "3.11.0"
       - key: DATABASE_URL
-        sync: false # Managed Postgres connection string — set in the Render dashboard
+        sync: false # Neon PostgreSQL connection string (incl. ?sslmode=require) — set in the Render dashboard
       - key: GEMINI_API_KEY
         sync: false # Set in the Render dashboard
       - key: RAZORPAY_KEY_ID
@@ -23,8 +23,6 @@ services:
         sync: false
       - key: JWT_SECRET_KEY
         generateValue: true
-      - key: ALLOW_SQLITE_FALLBACK
-        value: "false" # fail fast in production; never run on a container-local file
       - key: CORS_ORIGINS
         sync: false # e.g. https://gramcare-portal.onrender.com,https://gramcare-pharmacy.onrender.com
       - key: NODE_SIGNALING_URL

@@ -18,6 +18,7 @@ import os
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone, timedelta
 
@@ -26,6 +27,7 @@ import models
 import schemas
 from modules.auth.router import get_current_user
 from modules.family.router import resolve_owned_profile
+from core.maps import maps_client
 
 router = APIRouter()
 logger = logging.getLogger("gramcare.emergency")
@@ -48,26 +50,43 @@ def _nearest_hospital(
     if lat is None or lng is None:
         return hospitals[0]
 
+    # Coarse filter (math) to get top 5 before hitting the API
     def dist(h: models.Hospital) -> float:
         if h.lat is None or h.lng is None:
             return 1e9
         return math.hypot(h.lat - lat, h.lng - lng)
 
-    return min(hospitals, key=dist)
+    top_hospitals = sorted(hospitals, key=dist)[:5]
+
+    # Distance Matrix API for exact driving time
+    dest_list = [{"id": h.id, "lat": h.lat, "lng": h.lng} for h in top_hospitals if h.lat and h.lng]
+    best = maps_client.get_nearest_destination(lat, lng, dest_list)
+
+    if best:
+        # Return the actual Hospital object corresponding to best['id']
+        return next((h for h in top_hospitals if h.id == best['id']), top_hospitals[0])
+
+    # Fallback to straight line math if API fails
+    return top_hospitals[0]
 
 
 def escalate_stale_sos(db: Session) -> int:
     """Escalate every ACTIVE SOS that has waited too long without a
     response. Called by the startup background loop and directly testable.
     Returns the number of alerts escalated."""
-    cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(
-        seconds=ESCALATION_AFTER_SECONDS
-    )
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    cutoff = now - timedelta(seconds=ESCALATION_AFTER_SECONDS)
+    # The escalation clock is last_escalated_at once escalated, else created_at.
+    # created_at is never mutated, preserving the true creation time for audit.
     stale = (
         db.query(models.EmergencySOS)
         .filter(
             models.EmergencySOS.status == "ACTIVE",
-            models.EmergencySOS.created_at <= cutoff,
+            func.coalesce(
+                models.EmergencySOS.last_escalated_at,
+                models.EmergencySOS.created_at,
+            )
+            <= cutoff,
         )
         .all()
     )
@@ -78,8 +97,9 @@ def escalate_stale_sos(db: Session) -> int:
         if next_hospital and next_hospital.id != sos.assigned_hospital_id:
             sos.assigned_hospital_id = next_hospital.id
             sos.escalation_level = (sos.escalation_level or 0) + 1
-            # Reset the clock so the new hospital gets a full window.
-            sos.created_at = datetime.now(timezone.utc).replace(tzinfo=None)
+            # Reset the escalation clock only — the new hospital gets a full
+            # window — without destroying created_at.
+            sos.last_escalated_at = now
             count += 1
             logger.warning(
                 "SOS %d escalated to level %d -> hospital %s",
@@ -108,12 +128,18 @@ async def trigger_sos(
     resolve_owned_profile(sos_data.family_profile_id, current_user, db)
     hospital = _nearest_hospital(db, sos_data.location_lat, sos_data.location_lng, [])
 
+    loc_text = sos_data.location_text
+    if (not loc_text or loc_text == "GPS unavailable" or loc_text == "location unknown") and sos_data.location_lat and sos_data.location_lng:
+        geo = maps_client.reverse_geocode(sos_data.location_lat, sos_data.location_lng)
+        if geo:
+            loc_text = geo
+
     db_sos = models.EmergencySOS(
         patient_id=current_user.id,
         family_profile_id=sos_data.family_profile_id,
         location_lat=sos_data.location_lat,
         location_lng=sos_data.location_lng,
-        location_text=sos_data.location_text,
+        location_text=loc_text,
         voice_note=sos_data.voice_note,
         severity=sos_data.severity,
         status="ACTIVE",

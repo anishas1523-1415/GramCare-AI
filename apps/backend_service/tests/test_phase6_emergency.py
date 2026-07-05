@@ -84,15 +84,19 @@ def test_sos_escalates_to_next_hospital(client, patient_token):
         first_hospital = res.json()["assigned_hospital_id"]
 
         # Age the alert past the escalation window, then run the watchdog
-        sos = db.get(models.EmergencySOS, sos_id)
+        from sqlalchemy import update
         original_created_at = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(minutes=30)
-        sos.created_at = original_created_at
+        db.execute(
+            update(models.EmergencySOS)
+            .where(models.EmergencySOS.id == sos_id)
+            .values(created_at=original_created_at)
+        )
         db.commit()
 
         escalated = escalate_stale_sos(db)
         assert escalated >= 1
 
-        db.refresh(sos)
+        sos = db.get(models.EmergencySOS, sos_id)
         assert sos.escalation_level >= 1
         assert sos.assigned_hospital_id != first_hospital
         # Audit-trail guarantee: created_at must NOT be overwritten by

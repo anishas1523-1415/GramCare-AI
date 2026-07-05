@@ -8,6 +8,7 @@ import { useRouter } from 'next/navigation';
 import api from '../../../lib/api';
 import { io } from 'socket.io-client';
 import type { Slot } from '../../../types';
+import { APIProvider, Map, Marker } from '@vis.gl/react-google-maps';
 
 interface AssistSummary {
   patient_name: string;
@@ -196,7 +197,7 @@ function SlotManager({ doctorId }: { doctorId: number }) {
 export default function DoctorDashboard() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
-  
+
   const [appointments, setAppointments] = useState<any[]>([]);
   const [activeSOS, setActiveSOS] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -204,7 +205,7 @@ export default function DoctorDashboard() {
 
   useEffect(() => {
     if (authLoading) return;
-    
+
     // Redirect non-doctors
     if (!user || user.role !== "DOCTOR") {
       router.push("/");
@@ -225,7 +226,7 @@ export default function DoctorDashboard() {
           api.get(`/appointments/doctor/${doctorId}/queue`),
           api.get('/sos/active')
         ]);
-        
+
         setAppointments(queueRes.data);
         setActiveSOS(sosRes.data);
       } catch (error) {
@@ -255,7 +256,7 @@ export default function DoctorDashboard() {
     });
 
     socket.on("disconnect", () => setSocketConnected(false));
-    
+
     socket.on("emergency_alert", (data) => {
       // Refresh active SOS list
       fetchData();
@@ -319,6 +320,32 @@ export default function DoctorDashboard() {
           <h2 className="text-2xl font-bold text-red-500 mb-6 flex items-center gap-2">
             <ShieldAlert className="animate-pulse" /> Active Emergencies
           </h2>
+
+          <div className="mb-6 rounded-2xl overflow-hidden border border-red-500/30 h-[300px] w-full">
+            <APIProvider apiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || ""}>
+              <Map
+                defaultZoom={12}
+                defaultCenter={
+                  activeSOS.length > 0 && activeSOS[0].location_lat
+                  ? { lat: activeSOS[0].location_lat, lng: activeSOS[0].location_lng }
+                  : { lat: 12.9716, lng: 77.5946 }
+                }
+                mapId="sos_map"
+                gestureHandling={'greedy'}
+                disableDefaultUI={true}
+              >
+                {activeSOS.map(sos => (
+                  sos.location_lat != null && sos.location_lng != null ? (
+                    <Marker
+                      key={`marker-${sos.id}`}
+                      position={{ lat: sos.location_lat, lng: sos.location_lng }}
+                    />
+                  ) : null
+                ))}
+              </Map>
+            </APIProvider>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {activeSOS.map(sos => (
               <div key={sos.id} className="bg-red-500/10 border border-red-500/30 p-6 rounded-2xl relative overflow-hidden">
@@ -338,7 +365,7 @@ export default function DoctorDashboard() {
                   <p className="text-xs font-bold text-orange-600 mb-1">Escalated ×{sos.escalation_level} (unanswered)</p>
                 )}
                 <p className="text-xs text-gray-500 mb-6">Triggered at: {new Date(sos.created_at).toLocaleTimeString()}</p>
-                <button 
+                <button
                   onClick={() => respondToSOS(sos.id)}
                   className="w-full py-3 bg-red-500 hover:bg-red-600 text-white font-bold rounded-xl transition-colors"
                 >
@@ -352,11 +379,11 @@ export default function DoctorDashboard() {
 
       {/* Main Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        
+
         {/* Appointment Queue */}
         <div className="lg:col-span-2">
           <h2 className="text-2xl font-bold mb-6 flex items-center gap-2"><Calendar className="text-teal-500" /> Patient Queue</h2>
-          
+
           <div className="glass-panel p-6">
             {appointments.length === 0 ? (
               <div className="text-center p-10 text-gray-500">No upcoming appointments.</div>
@@ -373,9 +400,9 @@ export default function DoctorDashboard() {
                       {appt.triage_summary && <p className="text-sm mt-2 text-gray-600 dark:text-gray-300"><strong>Triage:</strong> {appt.triage_summary}</p>}
                       <AssistPanel patientId={appt.patient_id} familyProfileId={appt.family_profile_id} />
                     </div>
-                    
+
                     <div className="flex gap-2 w-full md:w-auto">
-                      <button 
+                      <button
                         onClick={() => router.push(`/consultation/${appt.id}`)}
                         className="flex-1 md:flex-none px-4 py-2 bg-indigo-500 text-white rounded-lg flex items-center justify-center gap-2 text-sm font-semibold hover:bg-indigo-600 transition-colors"
                       >
@@ -387,7 +414,7 @@ export default function DoctorDashboard() {
                       >
                         <FileText size={16} /> Write Rx
                       </button>
-                      <button 
+                      <button
                         onClick={() => completeAppointment(appt.id)}
                         className="p-2 border border-green-500 text-green-500 rounded-lg flex items-center justify-center hover:bg-green-500 hover:text-white transition-colors"
                         title="Mark Completed"

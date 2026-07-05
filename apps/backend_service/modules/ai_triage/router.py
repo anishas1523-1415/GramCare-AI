@@ -1,6 +1,3 @@
-import os
-import json
-import re
 import logging
 from typing import Optional
 
@@ -10,6 +7,7 @@ from dotenv import load_dotenv
 from sqlalchemy.orm import Session
 
 import models
+from ai import AITask, get_ai_manager
 from core.ratelimit import rate_limit
 from database import get_db
 from modules.auth.router import get_current_user_optional
@@ -20,22 +18,13 @@ logger = logging.getLogger("gramcare.ai_triage")
 
 router = APIRouter()
 
-# ============================================================
-# Initialize Google Gemini SDK (new unified google-genai package)
-# ============================================================
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-gemini_client = None
-
-if GEMINI_API_KEY:
-    try:
-        from google import genai
-        gemini_client = genai.Client(api_key=GEMINI_API_KEY)
-        logger.info("Gemini AI client initialized successfully.")
-    except Exception as e:
-        logger.warning("Failed to initialize Gemini client: %s", str(e))
-        gemini_client = None
-else:
-    logger.warning("GEMINI_API_KEY not set. AI Triage will return mock responses.")
+# All AI provider selection, health checking, retries, and fallback are
+# handled by AIManager (apps/backend_service/ai/manager.py) — this module
+# has no knowledge of which provider (Gemini, OpenAI, Groq, Anthropic, or
+# Mock) actually serves a given request, and does not import any AI SDK
+# directly. See ai/README expectations: no module outside ai/providers/*.py
+# may `import google.genai`/`openai`/`groq`/`anthropic`.
+ai_manager = get_ai_manager()
 
 
 # ============================================================
@@ -155,7 +144,10 @@ async def analyze_symptoms(
     current_user: Optional[models.User] = Depends(get_current_user_optional),
 ):
     """
-    AI Triage Engine using Google Gemini (Explainable AI approach).
+    AI Triage Engine, routed entirely through AIManager (Gemini -> OpenAI ->
+    Groq -> Anthropic -> Mock, in configured priority order — see
+    ai/config.py). This function no longer knows which provider ends up
+    serving the request.
 
     - Accepts symptoms in any language (English, Tamil, Hindi, etc.)
     - Returns severity score, predicted condition, home remedies, and doctor recommendation
@@ -163,20 +155,41 @@ async def analyze_symptoms(
     - Enforces strict medical disclaimer
     - Persists every analysis to TriageLog (attributed when authenticated)
     """
-    if not gemini_client:
-        # Fallback Mock Response if no API key
-        logger.info("Returning mock triage response (no Gemini client).")
-        mock = TriageResponse(
+    prompt = TRIAGE_PROMPT_TEMPLATE.format(
+        age=request.age,
+        symptoms=request.symptoms_text,
+    )
+
+    # AIManager guarantees a result (falling all the way back to
+    # MockProvider internally) — this call cannot raise for "AI is down".
+    outcome = await ai_manager.run(AITask.TRIAGE, prompt=prompt)
+    data = dict(outcome.data)
+
+    try:
+        data["disclaimer"] = MEDICAL_DISCLAIMER
+        data["severity_score"] = max(0, min(100, int(data.get("severity_score", 50))))
+        data["confidence_score"] = max(0.0, min(1.0, float(data.get("confidence_score", 0.5))))
+
+        result = TriageResponse(**data)
+    except Exception as e:
+        # The provider (or mock) returned a dict that doesn't validate
+        # against TriageResponse — should be rare since MockProvider always
+        # matches the schema exactly, but guard against a misbehaving real
+        # provider response slipping through provider-level normalization.
+        logger.error(
+            "request_id=%s Failed to parse AI response into TriageResponse: %s",
+            outcome.request_id, str(e),
+        )
+        result = TriageResponse(
             severity_score=50,
-            predicted_condition="Unknown (API Key Not Configured)",
+            predicted_condition="Unknown (invalid AI response)",
             home_remedies="Rest and hydration.",
             doctor_recommendation="Consult a doctor for proper evaluation.",
             recovery_time="N/A",
             status="Warning",
             confidence_score=0.0,
-            explanation="This is a mock response because the Gemini API key is not configured. "
-                        "Please set GEMINI_API_KEY in the .env file for real AI analysis.",
-            possible_causes="Not available in mock mode.",
+            explanation="The AI response could not be validated. Falling back to safe defaults.",
+            possible_causes="Not available in fallback mode.",
             first_aid="Keep the patient comfortable and hydrated.",
             side_effects="",
             treatment_options="",
@@ -185,57 +198,9 @@ async def analyze_symptoms(
             language_detected="en",
             disclaimer=MEDICAL_DISCLAIMER,
         )
-        _persist_triage_log(db, request, current_user, mock.model_dump())
-        return mock
 
-    prompt = TRIAGE_PROMPT_TEMPLATE.format(
-        age=request.age,
-        symptoms=request.symptoms_text,
-    )
-
-    try:
-        response = gemini_client.models.generate_content(
-            model="gemini-2.0-flash",
-            contents=prompt,
-        )
-        response_text = response.text
-        logger.info("Gemini response received for patient %s (%d chars).", request.patient_id, len(response_text))
-
-        # Extract JSON from potential markdown formatting
-        json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
-        if json_match:
-            data = json.loads(json_match.group(0))
-
-            # Enforce the strict medical disclaimer (never trust AI to include it correctly)
-            data["disclaimer"] = MEDICAL_DISCLAIMER
-
-            # Clamp values to valid ranges
-            data["severity_score"] = max(0, min(100, int(data.get("severity_score", 50))))
-            data["confidence_score"] = max(0.0, min(1.0, float(data.get("confidence_score", 0.5))))
-
-            _persist_triage_log(db, request, current_user, data)
-            return TriageResponse(**data)
-        else:
-            logger.error("Failed to parse JSON from Gemini response: %s", response_text[:200])
-            raise HTTPException(
-                status_code=500,
-                detail="AI Engine returned an unparseable response. Please try again.",
-            )
-
-    except HTTPException:
-        raise
-    except json.JSONDecodeError as e:
-        logger.error("JSON decode error: %s", str(e))
-        raise HTTPException(
-            status_code=500,
-            detail="AI Engine returned malformed JSON. Please try again.",
-        )
-    except Exception as e:
-        logger.error("AI Engine error: %s", str(e))
-        raise HTTPException(
-            status_code=500,
-            detail=f"AI Engine Error: {str(e)}",
-        )
+    _persist_triage_log(db, request, current_user, result.model_dump())
+    return result
 
 
 # ============================================================
@@ -274,52 +239,27 @@ Respond in JSON format only, no markdown:
 )
 async def extract_prescription_text(request: OCRRequest):
     """
-    Extracts text from a prescription image using Gemini Vision.
-    Falls back to mock data if Gemini client is unavailable.
+    Extracts text from a prescription image. Routed through AIManager,
+    which restricts OCR's candidate providers to ones that actually support
+    vision (Gemini, OpenAI, ... -> Mock) regardless of configuration —
+    see AIManager._candidates_for.
     """
-    if not gemini_client:
-        # Mock fallback for development without API key
-        logger.info("Returning mock OCR response (no Gemini client).")
-        return OCRResponse(
-            extracted_text=(
-                "Rx\nPatient: P1\nDr. Sarah Jenkins\n\n"
-                "1. Paracetamol 500mg (1-0-1)\n"
-                "2. Amoxicillin 250mg (1-1-1)\n\n"
-                "Notes: Take after food."
-            ),
-            medicines_parsed=[
-                "Paracetamol 500mg (1-0-1)",
-                "Amoxicillin 250mg (1-1-1)",
-            ],
-            confidence=0.0,
-        )
-
     try:
         import base64
-
-        # Decode the base64 image (validates the payload early)
         base64.b64decode(request.image_base64)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid Base64 Image provided to OCR.")
 
-        # Use Gemini Vision to analyze the prescription image
-        response = gemini_client.models.generate_content(
-            model="gemini-2.0-flash",
-            contents=[
-                OCR_PROMPT,
-                {"inline_data": {"mime_type": "image/jpeg", "data": request.image_base64}},
-            ],
-        )
-        response_text = response.text
+    outcome = await ai_manager.run(AITask.OCR, prompt=OCR_PROMPT, image_base64=request.image_base64)
+    data = dict(outcome.data)
 
-        json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
-        if json_match:
-            data = json.loads(json_match.group(0))
-            data["confidence"] = max(0.0, min(1.0, float(data.get("confidence", 0.8))))
-            return OCRResponse(**data)
-        else:
-            raise HTTPException(status_code=500, detail="Failed to parse OCR response.")
-
-    except HTTPException:
-        raise
+    try:
+        data["confidence"] = max(0.0, min(1.0, float(data.get("confidence", 0.8))))
+        return OCRResponse(**data)
     except Exception as e:
-        logger.error("OCR Error: %s", str(e))
-        raise HTTPException(status_code=500, detail=f"OCR Engine Error: {str(e)}")
+        logger.error("request_id=%s Failed to parse OCR response: %s", outcome.request_id, str(e))
+        return OCRResponse(
+            extracted_text="[AI response could not be validated]",
+            medicines_parsed=[],
+            confidence=0.0,
+        )

@@ -1,39 +1,113 @@
 # ============================================================
 # GramCare AI — Backend Service RUNTIME Dependencies
 # (test tooling lives in requirements-dev.txt)
+#
+# Every version below is an exact pin, verified (2026-07-04 dependency
+# audit) to resolve and install together with zero `pip check` conflicts.
+# See requirements.lock.txt for the fully-resolved transitive graph
+# (generated via `pip freeze` after a clean install of this exact file) —
+# that file is what CI/Docker should diff against to catch future drift.
+# Pins changed during the audit are called out inline below; everything
+# else is unchanged from before.
 # ============================================================
 
 # Core Framework
 fastapi==0.115.12
 uvicorn[standard]==0.34.3
-pydantic==2.11.7
+# CHANGED 2.11.7 -> 2.13.4 (dependency audit). google-genai==2.10.0 requires
+# pydantic>=2.12.5,<3.0.0, which 2.11.7 cannot satisfy. Previously this went
+# undetected because `google-genai` was floor-pinned (`>=1.65.0`) and
+# installed in a separate pip invocation from the rest of this file, so pip
+# silently upgraded pydantic past the stated 2.11.7 pin instead of failing
+# loudly. 2.13.4 is within fastapi 0.115.12's accepted range
+# (`<3.0.0`, excluding a handful of unrelated 2.0.x/2.1.0 point releases),
+# so no other code is affected.
+pydantic==2.13.4
+# NEW explicit pin (dependency audit). pydantic-core is released in
+# lockstep with pydantic and pydantic 2.13.4 requires pydantic-core==2.46.4
+# exactly — pinning it directly here (rather than leaving it to transitive
+# resolution) keeps the lock fully deterministic.
+pydantic-core==2.46.4
 python-multipart==0.0.20
 
 # Database
 sqlalchemy==2.0.41
 alembic==1.16.2
-psycopg[binary]>=3.2.1
-psycopg2-binary
+# CHANGED from floor-pin (`>=3.2.1`) to exact pin (dependency audit) —
+# pinning the version actually verified against the test suite.
+psycopg[binary]==3.3.4
+# NEW exact pin (dependency audit) — was previously unpinned.
+psycopg2-binary==2.9.12
 
 # Validation
-email-validator
+# NEW exact pin (dependency audit) — was previously unpinned.
+email-validator==2.3.0
 
 # Authentication
 passlib[bcrypt]==1.7.4
-python-jose[cryptography]==3.4.0
+# CHANGED 3.4.0 -> 3.5.0 (dependency audit). 3.4.0 requires
+# `pyasn1<0.5.0,>=0.4.1`, but google-genai's google-auth dependency pulls in
+# pyasn1-modules>=0.6.1, which itself requires `pyasn1<0.7.0,>=0.6.1` — the
+# two chains cannot both be satisfied under jose 3.4.0. Upstream jose 3.5.0
+# (released 2025-05-28) relaxed this to `pyasn1>=0.5.0` with no upper bound,
+# specifically a dependency-metadata change (see project CHANGELOG: "Upgrade
+# to pyasn1 0.5.1+") with no public API changes — this app only calls jose's
+# public `jwt.encode`/`jwt.decode`/`JWTError`, none of which changed.
+python-jose[cryptography]==3.5.0
+# NEW explicit pin (dependency audit). Previously only ever resolved
+# transitively; pinning it directly because it's the exact point of the
+# jose/google-auth conflict above. 0.6.3 satisfies both jose 3.5.0's
+# `pyasn1>=0.5.0` and google-auth's pyasn1-modules `pyasn1<0.7.0,>=0.6.1`.
+pyasn1==0.6.3
 bcrypt==4.3.0
 
-# AI & ML
-google-genai>=1.65.0
+# AI & ML — all four are optional at runtime (AIManager skips any provider
+# without a configured API key), but must be installed for AIManager to be
+# able to use them at all. See apps/backend_service/ai/ for the unified
+# provider abstraction; no module outside ai/providers/*.py may import
+# these SDKs directly.
+# CHANGED from floor-pins (`>=`) to exact pins (dependency audit). A bare
+# `>=1.65.0` is exactly what let google-genai silently jump to a version
+# with an incompatible pydantic requirement in the first place — exact
+# pins mean a future SDK release can't reintroduce that class of conflict
+# without a deliberate, reviewed version bump here.
+google-genai==2.10.0
+openai==2.44.0
+groq==1.5.0
+anthropic==0.116.0
 
 # Payments (Razorpay for Indian market)
 razorpay==1.4.2
 
 # Image Processing & OCR
-Pillow
+# NEW exact pin (dependency audit) — was previously unpinned.
+Pillow==12.3.0
 
 # Environment
 python-dotenv==1.1.1
 
 # Utilities
 aiofiles==24.1.0
+
+# Firebase — server-side FCM push (core/notifications.py). Added after the
+# 2026-07-04 dependency audit above, so it wasn't part of that pass's clean-
+# install/pip-check/test-suite verification; checked separately during the
+# Flutter Firebase integration work: google-auth<3.0.0 ranges pulled in by
+# its google-cloud-firestore/storage/api-core dependencies are all
+# compatible with this file's pinned google-auth==2.55.1 / pyasn1==0.6.3,
+# and its httpx[http2]==0.28.1 pin matches this file's httpx exactly.
+firebase-admin==6.5.0
+
+# Google Maps — core/maps.py (pharmacy/hospital distance ranking, reverse
+# geocoding) does `import googlemaps` unconditionally at module load, so
+# this is required for the app to start AT ALL, not just for maps features
+# to work — it was missing from this file entirely (found during the
+# 2026-07-05 Razorpay payment verification pass, when `pytest` failed at
+# collection with ModuleNotFoundError before a single payment test could
+# even run). MapsClient itself already degrades gracefully when
+# GOOGLE_MAPS_API_KEY is unset (falls back to straight-line Haversine
+# distance), but that fallback is unreachable if the import itself fails.
+# Verified via a clean-venv install: resolves with zero `pip check`
+# conflicts against every pin above (its own dependency is a floor-pinned
+# `requests`, already satisfied by this file's locked requests version).
+googlemaps==4.10.0

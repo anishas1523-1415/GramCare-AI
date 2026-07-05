@@ -24,6 +24,7 @@ import models
 import schemas
 from database import get_db
 from modules.auth.router import get_current_user, require_role
+from core.maps import maps_client
 
 router = APIRouter()
 
@@ -412,12 +413,31 @@ async def search_medicine(
     pharmacies = q.limit(200).all()
 
     results: List[schemas.NearbyPharmacyResult] = []
+
+    # Pre-calculate distances using Google Maps API
+    pharmacy_distances = {}
+    if lat is not None and lng is not None and pharmacies:
+        # 1. Coarse sort using haversine to get top 20
+        def coarse_dist(p):
+            if p.lat is None or p.lng is None:
+                return 1e9
+            return _haversine_km(lat, lng, p.lat, p.lng)
+
+        top_pharmacies = sorted(pharmacies, key=coarse_dist)[:20]
+
+        # 2. Get accurate driving distances using Distance Matrix
+        dest_list = [{"id": p.id, "lat": p.lat, "lng": p.lng} for p in top_pharmacies if p.lat and p.lng]
+        pharmacy_distances = maps_client.get_distance_list(lat, lng, dest_list)
+
     for pharmacy in pharmacies:
-        distance = None
-        if lat is not None and lng is not None and pharmacy.lat is not None and pharmacy.lng is not None:
+        distance = pharmacy_distances.get(pharmacy.id)
+
+        # If API failed or pharmacy was not in top 20, fallback to math (only for those within radius)
+        if distance is None and lat is not None and lng is not None and pharmacy.lat is not None and pharmacy.lng is not None:
             distance = round(_haversine_km(lat, lng, pharmacy.lat, pharmacy.lng), 1)
-            if distance > radius_km:
-                continue
+
+        if distance is not None and distance > radius_km:
+            continue
 
         item = (
             db.query(models.PharmacyItem)
@@ -462,6 +482,8 @@ async def search_medicine(
             medicine_name=item.medicine_name if item else None,
             price=item.price if (item and available) else None,
             substitutes=substitutes,
+            lat=pharmacy.lat,
+            lng=pharmacy.lng,
         ))
 
     # Available first, then nearest

@@ -125,6 +125,19 @@ export interface PaymentOrder {
   is_mock: boolean;
 }
 
+/** Mirrors schemas.PaymentResponse — one row of GET /payments/my history or
+ * GET /payments/{order_id}/status. */
+export interface PaymentRecord {
+  id: number;
+  order_id: string;
+  patient_id: number;
+  amount: number;
+  currency: string;
+  status: 'CREATED' | 'PAID' | 'CONSUMED' | 'REFUNDED' | 'FAILED';
+  gateway: 'razorpay' | 'mock';
+  created_at: string;
+}
+
 export interface NearbyPharmacyResult {
   pharmacy_id: number;
   pharmacy_name: string;
@@ -135,4 +148,6 @@ export interface NearbyPharmacyResult {
   medicine_name?: string | null;
   price?: number | null;
   substitutes: string[];
+  lat?: number | null;
+  lng?: number | null;
 }

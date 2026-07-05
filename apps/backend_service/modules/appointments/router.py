@@ -11,9 +11,9 @@ Planning doc rules implemented here:
   discussion's practical implementation).
 """
 import logging
-from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import update as sa_update
 from sqlalchemy.orm import Session
 from typing import List
 
@@ -105,9 +105,19 @@ async def book_appointment(
                 status_code=402,
                 detail=f"Consultation fee is INR {fee:.0f}. Pay first, then book with payment_order_id.",
             )
+        # with_for_update() serializes concurrent readers on databases that
+        # honor row locks (Postgres, production). It is a documented no-op
+        # on SQLite though — two concurrent requests can each read
+        # status="PAID" here before either writes — so the actual
+        # correctness guarantee against double-consuming one payment is the
+        # atomic `UPDATE ... WHERE status='PAID'` + rowcount check further
+        # below, which is safe on both backends regardless of isolation
+        # level. This read is kept for the early validation (ownership,
+        # amount) and for the Postgres fast-path where it avoids wasted work.
         payment = (
             db.query(models.Payment)
             .filter(models.Payment.order_id == appointment.payment_order_id)
+            .with_for_update()
             .first()
         )
         if not payment or payment.patient_id != current_user.id:
@@ -134,11 +144,35 @@ async def book_appointment(
     db.add(db_appointment)
     db.flush()  # obtain id before linking slot/payment
 
+    # Atomic claim of the payment: the UPDATE only matches (and only then
+    # does rowcount become 1) if status is STILL "PAID" at the moment this
+    # statement executes, which SQLite and Postgres both guarantee is
+    # serialized against any other concurrent UPDATE on the same row —
+    # unlike the plain read-then-write above, this is immune to the
+    # check-then-act race regardless of whether the DB honors row locks.
+    # If we lose the race, roll back everything (including the
+    # already-flushed Appointment insert) so no orphaned row is left behind.
     if payment:
-        payment.status = "CONSUMED"
+        result = db.execute(
+            sa_update(models.Payment)
+            .where(models.Payment.id == payment.id, models.Payment.status == "PAID")
+            .values(status="CONSUMED")
+        )
+        if result.rowcount != 1:
+            db.rollback()
+            raise HTTPException(status_code=409, detail="This payment was already used for a booking.")
+
+    # Same atomic-claim pattern for the slot — two concurrent bookings
+    # against the same slot_id must not both succeed.
     if slot:
-        slot.is_booked = True
-        slot.appointment_id = db_appointment.id
+        slot_result = db.execute(
+            sa_update(models.AvailabilitySlot)
+            .where(models.AvailabilitySlot.id == slot.id, models.AvailabilitySlot.is_booked == False)  # noqa: E712
+            .values(is_booked=True, appointment_id=db_appointment.id)
+        )
+        if slot_result.rowcount != 1:
+            db.rollback()
+            raise HTTPException(status_code=409, detail="This slot has just been booked. Please pick another.")
 
     db.commit()
     db.refresh(db_appointment)
@@ -227,6 +261,7 @@ async def update_appointment(
                 payment = (
                     db.query(models.Payment)
                     .filter(models.Payment.id == appointment.payment_id)
+                    .with_for_update()
                     .first()
                 )
                 if payment and payment.status in ("PAID", "CONSUMED"):

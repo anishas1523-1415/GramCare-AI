@@ -30,6 +30,29 @@ class User(Base):
     pharmacy = relationship("Pharmacy", back_populates="owner", uselist=False)
     appointments_as_patient = relationship("Appointment", foreign_keys="[Appointment.patient_id]", back_populates="patient")
     appointments_as_doctor = relationship("Appointment", foreign_keys="[Appointment.doctor_id]", back_populates="doctor")
+    push_tokens = relationship("UserPushToken", back_populates="user")
+
+
+class UserPushToken(Base):
+    __tablename__ = "user_push_tokens"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), index=True)
+    device_id = Column(String, nullable=True)
+    platform = Column(String)  # 'android', 'ios', 'web'
+    # Uniqueness is enforced at the DB level only among ACTIVE rows via a
+    # partial unique index (see alembic/versions/8757c24a7b38_add_user_push_tokens.py) —
+    # a plain column-level unique=True would reject legitimate cross-account
+    # reuse of the same physical device token, since the fcm-token
+    # registration endpoint deactivates rather than deletes the previous
+    # owner's row.
+    fcm_token = Column(String, index=True)
+    is_active = Column(Boolean, default=True)
+    last_seen_at = Column(DateTime, default=_utcnow)
+    created_at = Column(DateTime, default=_utcnow)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
+
+    user = relationship("User", back_populates="push_tokens")
 
 
 class FamilyProfile(Base):
@@ -153,6 +176,13 @@ class Payment(Base):
     status = Column(String, default="CREATED", index=True)
     gateway = Column(String, default="mock")  # 'razorpay' | 'mock'
     gateway_payment_id = Column(String, nullable=True)
+    # Client-supplied dedup key (e.g. a UUID generated once per "Pay" button
+    # press and reused across retries) so a network retry of create-order
+    # returns the SAME order instead of minting a second one. Unique only
+    # among rows where it's actually set (partial index — see the migration)
+    # so NULL (the common case for older/other clients that don't send one)
+    # never collides.
+    idempotency_key = Column(String, nullable=True, index=True)
     created_at = Column(DateTime, default=_utcnow)
     updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
 
@@ -196,6 +226,9 @@ class EmergencySOS(Base):
     escalation_level = Column(Integer, default=0)
     assigned_hospital_id = Column(Integer, ForeignKey("hospitals.id"), nullable=True)
     created_at = Column(DateTime, default=_utcnow)
+    # Escalation clock, kept separate so the true creation time is never
+    # overwritten (preserves the medical-audit trail).
+    last_escalated_at = Column(DateTime, nullable=True)
     resolved_at = Column(DateTime, nullable=True)
 
 

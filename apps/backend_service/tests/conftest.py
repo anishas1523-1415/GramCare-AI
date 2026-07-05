@@ -23,6 +23,12 @@ os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-not-for-production")
 os.environ["GEMINI_API_KEY"] = ""
 os.environ["RAZORPAY_KEY_ID"] = ""
 os.environ["RAZORPAY_KEY_SECRET"] = ""
+# Fixed test secret so tests/test_payments.py can compute valid webhook
+# signatures with plain hmac — gateway keys stay empty above (mock-mode
+# payments), but the webhook secret is a genuinely separate credential in
+# real Razorpay (see modules/payments/router.py), so it's exercised here
+# independently of mock vs. real gateway mode.
+os.environ.setdefault("RAZORPAY_WEBHOOK_SECRET", "test_webhook_secret_not_for_production")
 os.environ["TESTING"] = "1"  # disables the SOS escalation background loop
 
 from fastapi.testclient import TestClient  # noqa: E402
@@ -46,6 +52,24 @@ def _reset_rate_limits():
 @pytest.fixture(scope="session")
 def client():
     return TestClient(app)
+
+
+@pytest.fixture()
+def db():
+    """A direct SQLAlchemy session against the same test database `client`
+    talks to through the app — for tests that need to assert on rows the API
+    doesn't expose directly (e.g. tests/test_notifications.py checking
+    UserPushToken.is_active). Function-scoped and always closed, mirroring
+    database.get_db()'s per-request lifecycle rather than leaking a
+    session across the whole test session.
+    """
+    from database import SessionLocal
+
+    session = SessionLocal()
+    try:
+        yield session
+    finally:
+        session.close()
 
 
 def _register_and_login(client, username, role, email=None):

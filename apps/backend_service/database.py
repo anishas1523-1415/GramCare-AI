@@ -9,91 +9,74 @@ load_dotenv()
 
 logger = logging.getLogger("gramcare.database")
 
-# Resolve database URL from environment
-SQLALCHEMY_DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "sqlite:///./gramcare_local.db"
-)
+# Production runs on PostgreSQL (Neon). SQLite is supported ONLY for the test
+# suite, which points DATABASE_URL at a throwaway file (see tests/conftest.py).
+# There is deliberately NO silent SQLite fallback: a missing or unreachable
+# database fails loudly at startup instead of quietly running on a local file
+# that has no durability and is lost on the next restart.
+SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL")
+if not SQLALCHEMY_DATABASE_URL:
+    raise RuntimeError(
+        "DATABASE_URL is not set. Point it at your Neon PostgreSQL connection "
+        "string, e.g. "
+        "postgresql://<user>:<password>@<host>.neon.tech/<db>?sslmode=require . "
+        "The test suite sets DATABASE_URL to a temporary SQLite database "
+        "automatically; no other environment may run on SQLite."
+    )
 
-# Previously, ANY failure to connect to a configured PostgreSQL URL silently
-# fell back to a local SQLite file with only a log-level WARNING — meaning a
-# misconfigured DATABASE_URL (e.g. the literal "[YOUR-PASSWORD]" placeholder
-# that ships in apps/backend_service/.env) would make the whole application
-# run on a throwaway local database with no durability guarantees, with
-# nothing in the logs loud enough to notice before real data went missing.
-#
-# ALLOW_SQLITE_FALLBACK controls this:
-#   - unset / "true"  -> fallback still allowed (keeps local/dev workflows
-#                        working without a running Postgres instance), but
-#                        now logged at CRITICAL with a large, hard-to-miss
-#                        banner instead of a routine warning.
-#   - "false"         -> fail fast: raise instead of silently degrading.
-#     docker-compose.yml now sets this explicitly for the containerized
-#     (production-like) deployment, since a silent SQLite fallback inside a
-#     container is even more dangerous — the file lives inside an ephemeral
-#     container filesystem and is lost on the next `docker compose up --build`.
-ALLOW_SQLITE_FALLBACK = os.getenv("ALLOW_SQLITE_FALLBACK", "true").lower() == "true"
+# Managed Postgres providers (Neon, Heroku, Railway, …) sometimes emit URLs
+# with the legacy `postgres://` scheme that SQLAlchemy 2.x no longer accepts.
+# Normalise to the canonical `postgresql://`.
+if SQLALCHEMY_DATABASE_URL.startswith("postgres://"):
+    SQLALCHEMY_DATABASE_URL = "postgresql://" + SQLALCHEMY_DATABASE_URL[len("postgres://"):]
 
 
 def _create_engine(url: str):
-    """Create the appropriate SQLAlchemy engine based on URL scheme."""
+    """Create the SQLAlchemy engine for the configured database.
+
+    SQLite path: tests only (`sqlite:///…`). PostgreSQL path: every non-test
+    deployment (Neon in production). On PostgreSQL the connection is verified
+    once at startup and raises on failure — no fallback.
+    """
     if url.startswith("sqlite"):
-        logger.info("Using SQLite database: %s", url.replace("sqlite:///", ""))
+        logger.info("Using SQLite database (tests only): %s", url.replace("sqlite:///", ""))
         eng = create_engine(
             url,
             connect_args={"check_same_thread": False},
             echo=False,
         )
-        # Enable WAL mode for better concurrent read performance
+
+        # WAL + FK enforcement for the test database's concurrency/behaviour
+        # parity with Postgres.
         @event.listens_for(eng, "connect")
         def _set_sqlite_pragma(dbapi_connection, connection_record):
             cursor = dbapi_connection.cursor()
             cursor.execute("PRAGMA journal_mode=WAL")
             cursor.execute("PRAGMA foreign_keys=ON")
             cursor.close()
-        return eng
-    else:
-        logger.info("Connecting to PostgreSQL: %s", url.split("@")[-1] if "@" in url else url)
-        try:
-            eng = create_engine(
-                url,
-                poolclass=QueuePool,
-                pool_size=10,
-                max_overflow=20,
-                pool_pre_ping=True,  # Verifies connection is alive before checkout
-                echo=False,
-            )
-            # Test the connection
-            with eng.connect() as conn:
-                conn.execute(text("SELECT 1"))
-            logger.info("PostgreSQL connection verified successfully.")
-            return eng
-        except Exception as e:
-            if not ALLOW_SQLITE_FALLBACK:
-                logger.critical(
-                    "Failed to connect to PostgreSQL (%s) and ALLOW_SQLITE_FALLBACK=false. "
-                    "Refusing to silently start on SQLite. Fix DATABASE_URL and retry.",
-                    str(e)[:200],
-                )
-                raise RuntimeError(
-                    f"Could not connect to PostgreSQL and SQLite fallback is disabled "
-                    f"(ALLOW_SQLITE_FALLBACK=false). Original error: {e}"
-                ) from e
 
-            fallback_url = "sqlite:///./gramcare_local.db"
-            logger.critical(
-                "=" * 70 + "\n"
-                "DATABASE FALLBACK IN EFFECT: could not connect to PostgreSQL (%s).\n"
-                "Running on local SQLite file (%s) instead — data written this\n"
-                "session will NOT be in the real database. Check DATABASE_URL in .env.\n"
-                + "=" * 70,
-                str(e)[:200], fallback_url,
-            )
-            return create_engine(
-                fallback_url,
-                connect_args={"check_same_thread": False},
-                echo=False,
-            )
+        return eng
+
+    logger.info("Connecting to PostgreSQL: %s", url.split("@")[-1])
+    eng = create_engine(
+        url,
+        poolclass=QueuePool,
+        pool_size=10,
+        max_overflow=20,
+        pool_pre_ping=True,   # verify a pooled connection is alive on checkout
+        pool_recycle=300,     # Neon drops idle connections; recycle proactively
+        echo=False,
+    )
+    try:
+        with eng.connect() as conn:
+            conn.execute(text("SELECT 1"))
+    except Exception as e:
+        raise RuntimeError(
+            "Could not connect to PostgreSQL at startup. Check DATABASE_URL "
+            f"(Neon connection string incl. ?sslmode=require). Original error: {e}"
+        ) from e
+    logger.info("PostgreSQL connection verified successfully.")
+    return eng
 
 
 engine = _create_engine(SQLALCHEMY_DATABASE_URL)

@@ -9,7 +9,7 @@ All data is aggregated and anonymized: no patient identifiers leave this
 endpoint ("இந்த டேட்டா எல்லாமே அனனிமைஸ் செய்யப்பட்டு").
 """
 from datetime import datetime, timedelta, timezone
-from typing import List, Optional
+from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel

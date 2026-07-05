@@ -82,14 +82,18 @@ services:
     env_file:
       - ./apps/backend_service/.env
     environment:
+      # Local dev uses the bundled postgres_db service. In production set this
+      # to your Neon connection string instead (see render.yaml / .env.example).
+      # An unreachable DB fails startup loudly — there is no fallback.
       - DATABASE_URL=postgresql://gramcare_user:${POSTGRES_PASSWORD:-securepassword123}@postgres_db:5432/gramcare_db
-      # In the containerized deployment, silently falling back to SQLite is
-      # strictly worse than failing to start: the fallback file lives inside
-      # the container's ephemeral filesystem and is lost on every rebuild.
-      # Fail fast instead so a misconfigured DB is caught immediately.
-      - ALLOW_SQLITE_FALLBACK=false
+      # Single source of truth for the shared JWT secret. This `environment`
+      # entry OVERRIDES any JWT_SECRET_KEY in the env_file above, so FastAPI and
+      # node_signaling both resolve the SAME compose-interpolated value (root
+      # .env or shell). This closes the cross-service secret-divergence gap:
+      # set JWT_SECRET_KEY once (root .env) and both services stay in lockstep.
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-gramcare_jwt_secret_change_this_in_production_2026}
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/')"]
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health').status==200 else 1)"]
       interval: 15s
       timeout: 5s
       retries: 3

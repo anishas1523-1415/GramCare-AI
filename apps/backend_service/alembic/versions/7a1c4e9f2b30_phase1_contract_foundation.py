@@ -217,6 +217,11 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     # Reverse of the recreations restores the legacy string-keyed shapes.
+    # Each legacy table is recreated WITH the exact indexes the earlier
+    # migrations (34cdce76363d, 0d9255b12a10) created, so their own
+    # downgrade() steps can drop those indexes without erroring on Postgres
+    # (DROP INDEX of a nonexistent object raises there; SQLite tolerated the
+    # omission only because full downgrade-to-base was never exercised).
     op.drop_table("pharmacy_inventory")
     op.create_table(
         "pharmacy_inventory",
@@ -229,6 +234,9 @@ def downgrade() -> None:
         sa.Column("last_updated", sa.DateTime(), nullable=True),
         sa.PrimaryKeyConstraint("id"),
     )
+    op.create_index(op.f("ix_pharmacy_inventory_id"), "pharmacy_inventory", ["id"])
+    op.create_index(op.f("ix_pharmacy_inventory_medicine_name"), "pharmacy_inventory", ["medicine_name"])
+    op.create_index(op.f("ix_pharmacy_inventory_pharmacy_id"), "pharmacy_inventory", ["pharmacy_id"])
 
     op.drop_table("ehr_records")
     op.create_table(
@@ -241,6 +249,8 @@ def downgrade() -> None:
         sa.Column("created_at", sa.DateTime(), nullable=True),
         sa.PrimaryKeyConstraint("id"),
     )
+    op.create_index(op.f("ix_ehr_records_id"), "ehr_records", ["id"])
+    op.create_index(op.f("ix_ehr_records_patient_id"), "ehr_records", ["patient_id"])
 
     op.drop_table("iot_vitals")
     op.create_table(
@@ -254,6 +264,8 @@ def downgrade() -> None:
         sa.Column("timestamp", sa.DateTime(), nullable=True),
         sa.PrimaryKeyConstraint("id"),
     )
+    op.create_index(op.f("ix_iot_vitals_id"), "iot_vitals", ["id"])
+    op.create_index(op.f("ix_iot_vitals_patient_id"), "iot_vitals", ["patient_id"])
 
     with op.batch_alter_table("family_profiles") as batch:
         batch.drop_column("photo_url")

@@ -15,7 +15,7 @@ import time
 import threading
 from collections import defaultdict, deque
 
-from fastapi import Depends, HTTPException, Request
+from fastapi import HTTPException, Request
 
 _lock = threading.Lock()
 _hits: dict[str, deque] = defaultdict(deque)

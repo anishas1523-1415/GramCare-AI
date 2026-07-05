@@ -108,3 +108,43 @@ def read_users_me(current_user: models.User = Depends(get_current_user)):
         "full_name": current_user.full_name,
         "role": current_user.role
     }
+
+@router.post("/fcm-token", dependencies=[Depends(rate_limit("fcm_token", 10, 60))])
+def register_fcm_token(
+    payload: schemas.FCMTokenRegistration,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc)
+
+    # 1. Deactivate any token matching this fcm_token globally (prevents token stealing/duplicates)
+    db.query(models.UserPushToken).filter(
+        models.UserPushToken.fcm_token == payload.fcm_token,
+        models.UserPushToken.user_id != current_user.id
+    ).update({"is_active": False})
+
+    # 2. Check if this device for this user already exists
+    existing = db.query(models.UserPushToken).filter(
+        models.UserPushToken.user_id == current_user.id,
+        models.UserPushToken.device_id == payload.device_id,
+        models.UserPushToken.platform == payload.platform
+    ).first()
+
+    if existing:
+        existing.fcm_token = payload.fcm_token
+        existing.is_active = True
+        existing.last_seen_at = now
+    else:
+        new_token = models.UserPushToken(
+            user_id=current_user.id,
+            device_id=payload.device_id,
+            platform=payload.platform,
+            fcm_token=payload.fcm_token,
+            is_active=True,
+            last_seen_at=now
+        )
+        db.add(new_token)
+
+    db.commit()
+    return {"message": "FCM token registered successfully"}

@@ -23,9 +23,16 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 import models
+from ai import AITask, get_ai_manager
 from database import get_db
 from modules.auth.router import require_role
-from modules.ai_triage.router import gemini_client  # shared client (None when keyless)
+
+# Previously imported `gemini_client` directly from modules.ai_triage.router
+# — a second, informal AI entry point that bypassed any central provider
+# selection, health checking, or fallback policy, and required this module
+# to know Gemini's SDK response shape (`res.text`) itself. Now goes through
+# AIManager like every other AI-backed feature.
+ai_manager = get_ai_manager()
 
 router = APIRouter()
 logger = logging.getLogger("gramcare.ai_assist")
@@ -162,22 +169,25 @@ async def patient_summary(
     summary_text = " | ".join(parts)
     generated_by = "rules"
 
-    # --- Optional Gemini narrative upgrade ---------------------------------
-    if gemini_client:
-        try:
-            prompt = (
-                "You are assisting a rural telemedicine doctor. Summarize this "
-                "patient context in 3 concise clinical sentences (no advice, "
-                "no diagnosis, English):\n" + summary_text
-            )
-            res = gemini_client.models.generate_content(
-                model="gemini-2.0-flash", contents=prompt
-            )
-            if res.text:
-                summary_text = res.text.strip()
-                generated_by = "gemini"
-        except Exception as e:  # graceful degradation
-            logger.warning("Gemini summary failed, using rules summary: %s", e)
+    # --- Optional AI narrative upgrade --------------------------------------
+    # Deterministic `summary_text` above is always returned even if every AI
+    # provider (including Mock) somehow fails validation — this upgrade is
+    # best-effort and never blocks the response, matching the module's
+    # documented "always works offline/keyless" guarantee.
+    try:
+        prompt = (
+            "You are assisting a rural telemedicine doctor. Summarize this "
+            "patient context in 3 concise clinical sentences (no advice, "
+            "no diagnosis, English). Respond in JSON as "
+            '{"summary_text": "..."}: \n' + summary_text
+        )
+        outcome = await ai_manager.run(AITask.DOCTOR_SUMMARY, prompt=prompt)
+        upgraded = (outcome.data or {}).get("summary_text")
+        if upgraded and not outcome.used_mock:
+            summary_text = str(upgraded).strip()
+            generated_by = outcome.provider_used
+    except Exception as e:  # graceful degradation
+        logger.warning("AI summary upgrade failed, using rules summary: %s", e)
 
     return PatientSummary(
         patient_id=patient_id,
