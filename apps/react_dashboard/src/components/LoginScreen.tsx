@@ -5,7 +5,7 @@ interface LoginScreenProps {
   onLoginSuccess: () => void;
 }
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://gramcare-fastapi.onrender.com/api/v1';
 
 /**
  * Pharmacist login gate. Previously apps/react_dashboard had NO login screen

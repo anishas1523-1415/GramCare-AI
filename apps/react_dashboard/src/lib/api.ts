@@ -1,7 +1,9 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1',
+  // Production-safe default: missing VITE_API_URL at build time still yields
+  // a bundle pointing at the live backend. Local dev overrides via .env.local.
+  baseURL: import.meta.env.VITE_API_URL || 'https://gramcare-fastapi.onrender.com/api/v1',
   headers: {
     'Content-Type': 'application/json',
   },

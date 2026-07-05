@@ -30,7 +30,7 @@ export default function ConsultationRoom({ params }: { params: Promise<{ id: str
     // Connect to Signaling Server. join_room/offer/answer/ice_candidate now
     // require an authenticated socket on the server side, so pass the same
     // access token used for REST calls.
-    const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "http://localhost:4000";
+    const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "https://gramcare-signaling.onrender.com";
     socketRef.current = io(WS_URL, {
       auth: { token: localStorage.getItem('access_token') },
     });

@@ -1,7 +1,10 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1',
+  // Production-safe default: if NEXT_PUBLIC_API_URL is not baked in at build
+  // time (e.g. Vercel env var missing), the bundle still points at the live
+  // backend instead of localhost. Local dev overrides via .env.local.
+  baseURL: process.env.NEXT_PUBLIC_API_URL || 'https://gramcare-fastapi.onrender.com/api/v1',
   headers: {
     'Content-Type': 'application/json',
   },

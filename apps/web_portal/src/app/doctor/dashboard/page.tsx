@@ -242,7 +242,7 @@ export default function DoctorDashboard() {
     // The Node signaling server now requires a valid JWT to join a
     // department room (join_department) — pass the same access token used
     // for REST calls so this doctor's socket is recognized as authenticated.
-    const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "http://localhost:4000";
+    const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "https://gramcare-signaling.onrender.com";
     const socket = io(WS_URL, {
       auth: { token: localStorage.getItem('access_token') },
     });

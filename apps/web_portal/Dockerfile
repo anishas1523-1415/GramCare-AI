@@ -10,12 +10,17 @@ COPY . .
 
 # Next.js telemetry is annoying in docker
 ENV NEXT_TELEMETRY_DISABLED 1
+# Enables `output: standalone` in next.config.ts — Docker-only (Vercel must
+# build WITHOUT standalone or the deployment serves 404s).
+ENV DOCKER_BUILD 1
 
 # NEXT_PUBLIC_* variables are BUILD-time (inlined into client bundles).
 # Passing them as runtime `environment:` in docker-compose has no effect —
 # they must arrive here as build args.
-ARG NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
-ARG NEXT_PUBLIC_WS_URL=http://localhost:4000
+# Defaults point at PRODUCTION so a bare `docker build` yields a working
+# image; docker-compose overrides these for the local stack.
+ARG NEXT_PUBLIC_API_URL=https://gramcare-fastapi.onrender.com/api/v1
+ARG NEXT_PUBLIC_WS_URL=https://gramcare-signaling.onrender.com
 ARG NEXT_PUBLIC_RAZORPAY_KEY_ID=
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_WS_URL=$NEXT_PUBLIC_WS_URL

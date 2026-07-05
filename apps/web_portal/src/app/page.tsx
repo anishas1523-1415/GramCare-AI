@@ -18,7 +18,7 @@ export default function Home() {
   const [alerts, setAlerts] = useState<any[]>([]);
   const [socketConnected, setSocketConnected] = useState(false);
 
-  const WS_URL_EFFECT = process.env.NEXT_PUBLIC_WS_URL || "http://localhost:4000";
+  const WS_URL_EFFECT = process.env.NEXT_PUBLIC_WS_URL || "https://gramcare-signaling.onrender.com";
 
   useEffect(() => {
     // Connect to Node.js Realtime Server
@@ -53,8 +53,8 @@ export default function Home() {
     };
   }, []);
 
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-  const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "http://localhost:4000";
+  // (unused API_URL constant removed — all REST calls go through lib/api)
+  const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "https://gramcare-signaling.onrender.com";
 
   const analyzeSymptoms = async () => {
     if (!symptoms.trim()) return;

@@ -32,6 +32,9 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# opted in: contains ONLY public NEXT_PUBLIC_* values, required so Vercel
+# builds get production URLs without dashboard env configuration
+!.env.production
 
 # vercel
 .vercel

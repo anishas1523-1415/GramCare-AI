@@ -4,6 +4,10 @@ __pycache__/
 .env
 .env.*
 !.env.example
+# .env.production files contain ONLY public client-bundle values
+# (NEXT_PUBLIC_*/VITE_*) and must ship with the repo so Vercel/CI builds
+# get production URLs without dashboard configuration.
+!.env.production
 .venv
 venv/
 dist/
