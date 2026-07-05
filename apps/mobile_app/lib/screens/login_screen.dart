@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
 import 'package:go_router/go_router.dart';
 import '../services/api_service.dart';
+import '../services/firebase_notification_service.dart';
 import '../services/secure_store.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -52,6 +55,12 @@ class _LoginScreenState extends State<LoginScreen> {
       // Token goes into the platform keystore, not shared_preferences
       // (clinical-app compliance fix).
       await SecureStore().setToken(token as String);
+
+      // Fire-and-forget: request notification permission, obtain the FCM
+      // token, and POST it to /auth/fcm-token now that we have a JWT. Never
+      // blocks login — a notification-registration failure must not lock a
+      // patient out of the app.
+      unawaited(FirebaseNotificationService().syncTokenWithBackend());
 
       if (mounted) context.go('/');
     } catch (e) {

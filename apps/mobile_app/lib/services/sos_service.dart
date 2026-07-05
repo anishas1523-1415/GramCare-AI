@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:geocoding/geocoding.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'api_service.dart';
@@ -14,7 +15,8 @@ class SosResult {
   final bool sent;            // true = server accepted the alert
   final bool smsFallbackUsed; // true = offline path opened the SMS composer
   final String? error;
-  const SosResult({required this.sent, this.smsFallbackUsed = false, this.error});
+  final Position? position;
+  const SosResult({required this.sent, this.smsFallbackUsed = false, this.error, this.position});
 }
 
 class SosService {
@@ -55,17 +57,32 @@ class SosService {
     String? voiceNote,
   }) async {
     final position = await _bestEffortPosition();
+    String? locText;
+    
+    if (position != null) {
+      try {
+        List<Placemark> placemarks = await placemarkFromCoordinates(position.latitude, position.longitude);
+        if (placemarks.isNotEmpty) {
+          final p = placemarks.first;
+          locText = [p.street, p.subLocality, p.locality, p.postalCode].where((e) => e != null && e.isNotEmpty).join(', ');
+        }
+      } catch (e) {
+        locText = 'GPS available, address lookup failed';
+      }
+    } else {
+      locText = 'GPS unavailable';
+    }
 
     try {
       await ApiService().client.post('/sos/trigger', data: {
         'location_lat': position?.latitude,
         'location_lng': position?.longitude,
-        'location_text': position == null ? 'GPS unavailable' : null,
+        'location_text': locText,
         'voice_note': voiceNote,
         'severity': 'CRITICAL',
         'family_profile_id': familyProfileId,
       });
-      return const SosResult(sent: true);
+      return SosResult(sent: true, position: position);
     } on DioException catch (e) {
       final offline = e.type == DioExceptionType.connectionError ||
           e.type == DioExceptionType.connectionTimeout ||
@@ -73,11 +90,11 @@ class SosService {
       if (offline) {
         final smsOpened = await _smsFallback(position);
         return SosResult(sent: false, smsFallbackUsed: smsOpened,
-            error: smsOpened ? null : 'Offline and SMS unavailable');
+            error: smsOpened ? null : 'Offline and SMS unavailable', position: position);
       }
-      return SosResult(sent: false, error: e.response?.data?.toString() ?? e.message);
+      return SosResult(sent: false, error: e.response?.data?.toString() ?? e.message, position: position);
     } catch (e) {
-      return SosResult(sent: false, error: e.toString());
+      return SosResult(sent: false, error: e.toString(), position: position);
     }
   }
 

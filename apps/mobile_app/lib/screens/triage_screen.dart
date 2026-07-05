@@ -70,8 +70,10 @@ class _TriageScreenState extends State<TriageScreen> {
     }
     setState(() => _listening = true);
     await _speech.listen(
-      localeId: s.isTamil ? 'ta-IN' : 'en-IN',
-      listenOptions: stt.SpeechListenOptions(partialResults: true),
+      listenOptions: stt.SpeechListenOptions(
+        partialResults: true,
+        localeId: s.isTamil ? 'ta-IN' : 'en-IN',
+      ),
       onResult: (result) {
         setState(() => _symptomsController.text = result.recognizedWords);
       },
@@ -129,6 +131,7 @@ class _TriageScreenState extends State<TriageScreen> {
   Future<void> _analyze() async {
     if (_symptomsController.text.isEmpty) return;
     await _speech.stop();
+    if (!mounted) return;
 
     setState(() {
       _isLoading = true;
@@ -230,7 +233,7 @@ class _TriageScreenState extends State<TriageScreen> {
                       color: _listening ? Colors.red : _theme,
                       boxShadow: [
                         BoxShadow(
-                          color: (_listening ? Colors.red : _theme).withOpacity(0.4),
+                          color: (_listening ? Colors.red : _theme).withValues(alpha: 0.4),
                           blurRadius: _listening ? 30 : 12,
                           spreadRadius: _listening ? 6 : 2,
                         ),

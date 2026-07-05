@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:provider/provider.dart';
@@ -5,39 +8,63 @@ import 'package:provider/provider.dart';
 import 'models/health_record.dart';
 import 'router.dart';
 import 'services/app_strings.dart';
+import 'services/firebase_notification_service.dart';
 import 'services/profile_service.dart';
 import 'services/secure_store.dart';
 
 void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+  // runZonedGuarded, not a plain try/catch around main()'s body: this also
+  // catches errors thrown by code scheduled asynchronously outside the
+  // current call stack (timers, unawaited Futures) that would otherwise
+  // crash silently without Crashlytics ever seeing them.
+  runZonedGuarded(() async {
+    WidgetsFlutterBinding.ensureInitialized();
 
-  // Lift any legacy plain-text token into the platform keystore first.
-  await SecureStore().migrateLegacyToken();
+    // Lift any legacy plain-text token into the platform keystore first.
+    await SecureStore().migrateLegacyToken();
 
-  // Initialize Hive Offline-First Database — the health wallet box is now
-  // AES-encrypted with a key held in the platform keystore (clinical data
-  // was previously stored in plaintext on disk).
-  await Hive.initFlutter();
-  Hive.registerAdapter(HealthRecordAdapter());
-  final hiveKey = await SecureStore().getOrCreateHiveKey();
-  await Hive.openBox<HealthRecord>(
-    'health_wallet',
-    encryptionCipher: HiveAesCipher(hiveKey),
-  );
+    // Initialize Hive Offline-First Database — the health wallet box is now
+    // AES-encrypted with a key held in the platform keystore (clinical data
+    // was previously stored in plaintext on disk).
+    await Hive.initFlutter();
+    Hive.registerAdapter(HealthRecordAdapter());
+    final hiveKey = await SecureStore().getOrCreateHiveKey();
+    await Hive.openBox<HealthRecord>(
+      'health_wallet',
+      encryptionCipher: HiveAesCipher(hiveKey),
+    );
 
-  // Tamil-first localization (planning doc) — persisted user choice.
-  final locale = LocaleService();
-  await locale.load();
+    // Tamil-first localization (planning doc) — persisted user choice.
+    final locale = LocaleService();
+    await locale.load();
 
-  runApp(
-    MultiProvider(
-      providers: [
-        ChangeNotifierProvider(create: (_) => ProfileService()),
-        ChangeNotifierProvider.value(value: locale),
-      ],
-      child: const GramCareApp(),
-    ),
-  );
+    // Firebase Core + Messaging + Crashlytics + Analytics + local
+    // notifications. This also wires FlutterError.onError and
+    // PlatformDispatcher.instance.onError for Crashlytics — must happen
+    // before runApp so no early widget-build error is missed. FCM token
+    // registration with the backend happens later, from the login screen
+    // and the dashboard (needs an authenticated JWT this call doesn't have).
+    await FirebaseNotificationService().initialize();
+
+    runApp(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider(create: (_) => ProfileService()),
+          ChangeNotifierProvider.value(value: locale),
+        ],
+        child: const GramCareApp(),
+      ),
+    );
+  }, (error, stack) {
+    // Guarded: an error thrown before FirebaseNotificationService().initialize()
+    // finishes (e.g. during Hive setup) would mean Crashlytics itself isn't
+    // ready yet — must not let recordError() throw a second, masking error.
+    try {
+      FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+    } catch (_) {
+      debugPrint('Uncaught zone error (Crashlytics unavailable): $error');
+    }
+  });
 }
 
 class GramCareApp extends StatelessWidget {

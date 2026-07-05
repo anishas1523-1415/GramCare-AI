@@ -31,12 +31,8 @@ dependencies:
   flutter:
     sdk: flutter
 
-  # The following adds the Cupertino Icons font to your application.
-  # Use with the CupertinoIcons class for iOS style icons.
-  cupertino_icons: ^1.0.8
   hive: ^2.2.3
   hive_flutter: ^1.1.0
-  path_provider: ^2.1.6
   dio: ^5.10.0
   shared_preferences: ^2.5.5
   go_router: ^17.3.0
@@ -51,12 +47,33 @@ dependencies:
   uuid: ^4.4.0
   # Real GPS coordinates for Emergency SOS (planning doc requirement)
   geolocator: ^13.0.1
+  google_maps_flutter: ^2.10.0
+  geocoding: ^3.0.0
   # Offline SMS fallback for SOS + phone dialing for pharmacies
   url_launcher: ^6.3.0
   # Voice-first symptom input for low-literacy rural users (planning doc)
   speech_to_text: ^7.0.0
   # "Tap to hear" playback of wallet records and AI results (planning doc)
   flutter_tts: ^4.1.0
+
+  # --- Firebase Cloud Messaging integration -----------------------------
+  # Core Firebase bootstrap; every other firebase_* plugin needs this.
+  firebase_core: ^3.8.0
+  # Push notifications: token issuance/refresh, foreground/background/
+  # terminated message delivery. android/app/google-services.json already
+  # exists — see android/app/build.gradle.kts and settings.gradle.kts for
+  # the Gradle-side wiring this requires.
+  firebase_messaging: ^15.1.3
+  # Crash + non-fatal error reporting (wired via FlutterError.onError and
+  # PlatformDispatcher.instance.onError in main.dart).
+  firebase_crashlytics: ^4.1.3
+  # Notification lifecycle + navigation funnel analytics (permission
+  # granted/denied, token registered, notification received/tapped by type).
+  firebase_analytics: ^11.3.3
+  # Foreground notifications are NOT shown automatically by FCM on Android —
+  # this renders them into the system tray while the app is open, using the
+  # same notification channel background/terminated messages use.
+  flutter_local_notifications: ^18.0.1
 
 dev_dependencies:
   flutter_test:

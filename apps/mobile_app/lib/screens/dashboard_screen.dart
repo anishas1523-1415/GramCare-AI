@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 
 import '../services/api_service.dart';
 import '../services/app_strings.dart';
+import '../services/firebase_notification_service.dart';
 import '../services/profile_service.dart';
 import '../services/secure_store.dart';
 import '../services/sos_service.dart';
@@ -36,6 +37,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
       // Warm the emergency-contact cache so the offline SMS fallback works
       // even if the SOS moment itself has no connectivity.
       SosService().cachedContactNumbers();
+      // Covers the "already logged in, app relaunched" path — login_screen
+      // only fires this right after a fresh login, so a returning session
+      // (app reopened, token still valid) needs its own registration point.
+      // syncTokenWithBackend() is a no-op network-wise if the token hasn't
+      // changed since the last successful registration.
+      unawaited(FirebaseNotificationService().syncTokenWithBackend());
       try {
         final me = await ApiService().client.get('/auth/me');
         final myId = me.data['id'] as int?;
@@ -100,10 +107,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     if (!mounted) return;
     if (result.sent) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(s.t('sos_sent')),
-        backgroundColor: Colors.red,
-      ));
+      context.push('/sos-active?lat=${result.position?.latitude ?? 0}&lng=${result.position?.longitude ?? 0}');
     } else if (result.smsFallbackUsed) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(s.t('sos_sms_fallback')),
@@ -144,7 +148,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 width: 300,
                 height: 300,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF4F46E5).withOpacity(0.3),
+                  color: const Color(0xFF4F46E5).withValues(alpha: 0.3),
                   shape: BoxShape.circle,
                 ),
                 child: BackdropFilter(
@@ -419,11 +423,11 @@ class GlassmorphicCard extends StatelessWidget {
         filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
         child: Container(
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.2),
+            color: Colors.white.withValues(alpha: 0.2),
             borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: Colors.white.withOpacity(0.4), width: 1.5),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.4), width: 1.5),
             boxShadow: [
-              BoxShadow(color: Colors.red.withOpacity(0.1), blurRadius: 24, spreadRadius: 4),
+              BoxShadow(color: Colors.red.withValues(alpha: 0.1), blurRadius: 24, spreadRadius: 4),
             ],
           ),
           child: Column(
@@ -432,7 +436,7 @@ class GlassmorphicCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: Colors.red.withOpacity(0.1),
+                  color: Colors.red.withValues(alpha: 0.1),
                   shape: BoxShape.circle,
                 ),
                 child: Icon(icon, size: 32, color: iconColor),

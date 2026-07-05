@@ -10,6 +10,7 @@ import 'screens/triage_screen.dart';
 import 'screens/health_wallet_screen.dart';
 import 'screens/vitals_screen.dart';
 import 'screens/reminders_screen.dart';
+import 'screens/sos_active_screen.dart';
 import 'services/secure_store.dart';
 
 final GoRouter appRouter = GoRouter(
@@ -70,6 +71,14 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: '/reminders',
       builder: (context, state) => const RemindersScreen(),
+    ),
+    GoRoute(
+      path: '/sos-active',
+      builder: (context, state) {
+        final lat = double.tryParse(state.uri.queryParameters['lat'] ?? '0') ?? 0;
+        final lng = double.tryParse(state.uri.queryParameters['lng'] ?? '0') ?? 0;
+        return SosActiveScreen(patientLat: lat, patientLng: lng);
+      },
     ),
   ],
 );

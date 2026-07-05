@@ -248,7 +248,7 @@ class _ScanPrescriptionScreenState extends State<ScanPrescriptionScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 18),
         decoration: BoxDecoration(
-          color: onTap == null ? color.withOpacity(0.4) : color,
+          color: onTap == null ? color.withValues(alpha: 0.4) : color,
           borderRadius: BorderRadius.circular(16),
           boxShadow: const [
             BoxShadow(color: Color(0xFFA3B1C6), offset: Offset(4, 4), blurRadius: 8),

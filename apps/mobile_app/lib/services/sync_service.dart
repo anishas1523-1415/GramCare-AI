@@ -102,7 +102,7 @@ class SyncService {
 
   /// Pull the caller's server-side records into the local wallet cache so
   /// the wallet is complete offline. Server-origin records are stored with
-  /// clientUuid 'srv-<id>' — the same idempotency trick, locally.
+  /// clientUuid `srv-<id>` — the same idempotency trick, locally.
   Future<void> pullRemote(int myUserId, {String patientName = 'Me'}) async {
     try {
       final res = await ApiService().client.get('/ehr/patient/$myUserId');

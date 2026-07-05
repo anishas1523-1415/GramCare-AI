@@ -107,7 +107,7 @@ class _RemindersScreenState extends State<RemindersScreen> {
                         ],
                       ),
                     ),
-                    Icon(Icons.notifications_active, color: isTaken ? Colors.grey.withOpacity(0.5) : const Color(0xFF3B82F6)),
+                    Icon(Icons.notifications_active, color: isTaken ? Colors.grey.withValues(alpha: 0.5) : const Color(0xFF3B82F6)),
                   ],
                 ),
               ),
