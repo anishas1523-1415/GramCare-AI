@@ -74,6 +74,9 @@ dependencies:
   # this renders them into the system tray while the app is open, using the
   # same notification channel background/terminated messages use.
   flutter_local_notifications: ^18.0.1
+  # tz database for daily medicine-reminder scheduling (zonedSchedule);
+  # same minor the notifications plugin depends on transitively.
+  timezone: ^0.10.0
 
 dev_dependencies:
   flutter_test:

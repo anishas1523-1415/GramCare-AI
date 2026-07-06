@@ -52,6 +52,7 @@ export default function LoginPage() {
     });
 
     login(data.access_token, meRes.data);
+    return meRes.data.role as string;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -70,12 +71,17 @@ export default function LoginPage() {
         });
         // Register endpoint doesn't return a token — log in immediately
         // with the credentials just created for a seamless flow.
-        await doLogin(username, password);
-      } else {
-        await doLogin(username, password);
       }
+      const loggedInRole = await doLogin(username, password);
 
-      router.push('/');
+      // Land each role on its own home (hospital desks go straight to the
+      // Emergency Desk — seconds matter there).
+      router.push(
+        loggedInRole === 'HOSPITAL' ? '/hospital'
+        : loggedInRole === 'DOCTOR' ? '/doctor/dashboard'
+        : loggedInRole === 'ADMIN' ? '/authority'
+        : '/'
+      );
     } catch (err) {
       const message = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
       setError(

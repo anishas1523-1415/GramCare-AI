@@ -1,6 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
 
+import '../services/app_strings.dart';
+import '../services/profile_service.dart';
+import '../services/reminder_service.dart';
+
+/// Medicine Reminders — real implementation (previously a hardcoded static
+/// list with no persistence and no notifications). Reminders are scoped to
+/// the active family member, persist offline in Hive, fire daily local
+/// notifications, and can be auto-imported from wallet prescriptions
+/// ("பிரஸ்கிரிப்ஷன் அப்லோட் செஞ்சா, ஆப் ஆட்டோமேட்டிக்கா எல்லா
+/// டீடைல்ஸையும் ஃபில் பண்ணிடும்" — planning doc).
 class RemindersScreen extends StatefulWidget {
   const RemindersScreen({super.key});
 
@@ -9,35 +20,115 @@ class RemindersScreen extends StatefulWidget {
 }
 
 class _RemindersScreenState extends State<RemindersScreen> {
-  final List<Map<String, dynamic>> _reminders = [
-    {
-      'medicine': 'Paracetamol 500mg',
-      'time': '08:00 AM',
-      'taken': false,
-      'instructions': 'Take after food'
-    },
-    {
-      'medicine': 'Amoxicillin 250mg',
-      'time': '02:00 PM',
-      'taken': true,
-      'instructions': 'Take with water'
-    },
-    {
-      'medicine': 'Paracetamol 500mg',
-      'time': '08:00 PM',
-      'taken': false,
-      'instructions': 'Take after food'
-    }
-  ];
+  // Module theme: reminder red/amber (planning doc per-module identity)
+  static const _theme = Color(0xFFEF4444);
 
-  void _toggleReminder(int index) {
-    setState(() {
-      _reminders[index]['taken'] = !_reminders[index]['taken'];
-    });
+  List<Map<String, dynamic>> _items = [];
+  bool _loading = true;
+  bool _importing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final active = context.read<ProfileService>().active;
+    final items = await ReminderService().reminders(familyProfileId: active?.id);
+    if (mounted) {
+      setState(() {
+        _items = items;
+        _loading = false;
+      });
+    }
+  }
+
+  Future<void> _importFromPrescriptions() async {
+    setState(() => _importing = true);
+    final active = context.read<ProfileService>().active;
+    final added =
+        await ReminderService().importFromPrescriptions(familyProfileId: active?.id);
+    await _load();
+    if (mounted) {
+      setState(() => _importing = false);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(added > 0
+            ? '$added reminder(s) created from prescriptions'
+            : 'No new medicines found in prescriptions'),
+        backgroundColor: added > 0 ? const Color(0xFF10B981) : Colors.grey,
+      ));
+    }
+  }
+
+  Future<void> _addManual() async {
+    final s = context.read<LocaleService>();
+    final medCtl = TextEditingController();
+    final notesCtl = TextEditingController();
+    TimeOfDay time = const TimeOfDay(hour: 8, minute: 0);
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx2, setSt) => AlertDialog(
+          title: Text(s.t('medicine_reminders')),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                  controller: medCtl,
+                  decoration: const InputDecoration(labelText: 'Medicine')),
+              TextField(
+                  controller: notesCtl,
+                  decoration: const InputDecoration(labelText: 'Instructions (optional)')),
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                icon: const Icon(Icons.access_time),
+                label: Text(time.format(ctx2)),
+                onPressed: () async {
+                  final picked =
+                      await showTimePicker(context: ctx2, initialTime: time);
+                  if (picked != null) setSt(() => time = picked);
+                },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: Text(s.t('cancel'))),
+            FilledButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: Text(s.t('save'))),
+          ],
+        ),
+      ),
+    );
+
+    if (saved == true && medCtl.text.trim().isNotEmpty && mounted) {
+      final active = context.read<ProfileService>().active;
+      await ReminderService().addReminder(
+        medicine: medCtl.text.trim(),
+        hour: time.hour,
+        minute: time.minute,
+        instructions: notesCtl.text.trim(),
+        familyProfileId: active?.id,
+      );
+      await _load();
+    }
+  }
+
+  String _fmt(int h, int m) {
+    final period = h >= 12 ? 'PM' : 'AM';
+    final hh = h % 12 == 0 ? 12 : h % 12;
+    return '${hh.toString()}:${m.toString().padLeft(2, '0')} $period';
   }
 
   @override
   Widget build(BuildContext context) {
+    final s = context.watch<LocaleService>();
+    final active = context.watch<ProfileService>().active;
+
     return Scaffold(
       backgroundColor: const Color(0xFFE0E5EC),
       appBar: AppBar(
@@ -47,73 +138,138 @@ class _RemindersScreenState extends State<RemindersScreen> {
           icon: const Icon(Icons.arrow_back, color: Color(0xFF2D3748)),
           onPressed: () => context.pop(),
         ),
-        title: const Text(
-          'Medicine Reminders',
-          style: TextStyle(color: Color(0xFF2D3748), fontWeight: FontWeight.bold),
+        title: Text(
+          active == null
+              ? s.t('medicine_reminders')
+              : '${active.fullName} • ${s.t('medicine_reminders')}',
+          style: const TextStyle(
+              color: Color(0xFF2D3748), fontWeight: FontWeight.bold, fontSize: 17),
         ),
+        actions: [
+          IconButton(
+            tooltip: 'Import from prescriptions',
+            onPressed: _importing ? null : _importFromPrescriptions,
+            icon: _importing
+                ? const SizedBox(
+                    width: 18, height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2))
+                : const Icon(Icons.auto_awesome, color: _theme),
+          ),
+        ],
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _addManual,
+        backgroundColor: _theme,
+        child: const Icon(Icons.add_alarm, color: Colors.white),
       ),
       body: SafeArea(
-        child: ListView.builder(
-          padding: const EdgeInsets.all(24),
-          itemCount: _reminders.length,
-          itemBuilder: (context, index) {
-            final reminder = _reminders[index];
-            final isTaken = reminder['taken'];
-            
-            return GestureDetector(
-              onTap: () => _toggleReminder(index),
-              child: Container(
-                margin: const EdgeInsets.only(bottom: 16),
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFE0E5EC),
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: isTaken ? const [] : const [
-                    BoxShadow(color: Color(0xFFA3B1C6), offset: Offset(4, 4), blurRadius: 8),
-                    BoxShadow(color: Color(0xFFFFFFFF), offset: Offset(-4, -4), blurRadius: 8),
-                  ],
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 32,
-                      height: 32,
-                      decoration: BoxDecoration(
-                        color: isTaken ? Colors.green : Colors.transparent,
-                        shape: BoxShape.circle,
-                        border: Border.all(color: isTaken ? Colors.green : Colors.grey, width: 2),
-                      ),
-                      child: isTaken ? const Icon(Icons.check, color: Colors.white, size: 20) : null,
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
+        child: _loading
+            ? const Center(child: CircularProgressIndicator())
+            : _items.isEmpty
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(32),
                       child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: const [
+                          Icon(Icons.notifications_none,
+                              size: 56, color: Color(0xFF718096)),
+                          SizedBox(height: 12),
                           Text(
-                            reminder['medicine'],
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold, 
-                              fontSize: 18,
-                              color: isTaken ? Colors.grey : const Color(0xFF2D3748),
-                              decoration: isTaken ? TextDecoration.lineThrough : null,
-                            ),
+                            'No reminders yet.\nTap ✨ to create them from your prescriptions,\nor + to add one manually.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(color: Color(0xFF718096), fontSize: 15),
                           ),
-                          const SizedBox(height: 4),
-                          Text(
-                            '${reminder['time']} — ${reminder['instructions']}',
-                            style: TextStyle(color: isTaken ? Colors.grey : const Color(0xFF718096)),
-                          )
                         ],
                       ),
                     ),
-                    Icon(Icons.notifications_active, color: isTaken ? Colors.grey.withValues(alpha: 0.5) : const Color(0xFF3B82F6)),
-                  ],
-                ),
-              ),
-            );
-          },
-        ),
+                  )
+                : ListView.builder(
+                    padding: const EdgeInsets.all(24),
+                    itemCount: _items.length,
+                    itemBuilder: (context, i) {
+                      final r = _items[i];
+                      final taken = ReminderService().takenToday(r);
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 14),
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFE0E5EC),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border(
+                            left: BorderSide(
+                                color: taken ? const Color(0xFF10B981) : _theme,
+                                width: 6),
+                          ),
+                          boxShadow: const [
+                            BoxShadow(
+                                color: Color(0xFFA3B1C6),
+                                offset: Offset(4, 4),
+                                blurRadius: 8),
+                            BoxShadow(
+                                color: Color(0xFFFFFFFF),
+                                offset: Offset(-4, -4),
+                                blurRadius: 8),
+                          ],
+                        ),
+                        child: Row(
+                          children: [
+                            // Tap-to-mark-taken (big touch target)
+                            GestureDetector(
+                              onTap: () async {
+                                await ReminderService()
+                                    .markTaken(r['id'] as int, taken: !taken);
+                                await _load();
+                              },
+                              child: Icon(
+                                taken
+                                    ? Icons.check_circle
+                                    : Icons.radio_button_unchecked,
+                                size: 34,
+                                color: taken
+                                    ? const Color(0xFF10B981)
+                                    : const Color(0xFF718096),
+                              ),
+                            ),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    r['medicine'] as String,
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16,
+                                      decoration: taken
+                                          ? TextDecoration.lineThrough
+                                          : null,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    '${_fmt(r['hour'] as int, r['minute'] as int)}'
+                                    '${(r['instructions'] as String? ?? '').isNotEmpty ? ' • ${r['instructions']}' : ''}',
+                                    style: const TextStyle(
+                                        fontSize: 13, color: Color(0xFF718096)),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.delete_outline,
+                                  color: Colors.redAccent, size: 22),
+                              onPressed: () async {
+                                await ReminderService()
+                                    .removeReminder(r['id'] as int);
+                                await _load();
+                              },
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
       ),
     );
   }

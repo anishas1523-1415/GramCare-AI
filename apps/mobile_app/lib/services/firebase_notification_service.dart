@@ -118,6 +118,10 @@ class FirebaseNotificationService {
   final FlutterLocalNotificationsPlugin _localNotifications =
       FlutterLocalNotificationsPlugin();
 
+  /// Shared plugin instance so other schedulers (medicine reminders) reuse
+  /// the same initialization/channels instead of creating a second plugin.
+  FlutterLocalNotificationsPlugin get localNotifications => _localNotifications;
+
   bool _initialized = false;
 
   /// Call once, before runApp(). Sets up everything that doesn't depend on

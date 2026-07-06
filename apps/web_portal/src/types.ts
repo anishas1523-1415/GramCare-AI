@@ -111,9 +111,14 @@ export interface EmergencySOS {
   location_lat?: number | null;
   location_lng?: number | null;
   location_text?: string | null;
+  /** Transcribed voice description riding with the alert (Phase 6). */
+  voice_note?: string | null;
   severity: string;
   status: 'ACTIVE' | 'RESPONDED' | 'RESOLVED';
   responded_by?: number | null;
+  /** Times the alert was reassigned after going unanswered (Phase 6). */
+  escalation_level?: number;
+  assigned_hospital_id?: number | null;
   created_at: string;
   resolved_at?: string | null;
 }

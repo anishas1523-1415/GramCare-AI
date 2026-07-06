@@ -57,7 +57,16 @@ export default function Header() {
               </>
             )}
             {user.role === 'DOCTOR' && (
-              <Link href="/doctor/dashboard" className="hover:text-teal-500 transition-colors">Doctor Dashboard</Link>
+              <>
+                <Link href="/doctor/dashboard" className="hover:text-teal-500 transition-colors">Doctor Dashboard</Link>
+                <Link href="/hospital" className="hover:text-red-500 transition-colors">Emergency Desk</Link>
+              </>
+            )}
+            {(user.role === 'HOSPITAL' || user.role === 'ADMIN') && (
+              <>
+                <Link href="/hospital" className="hover:text-red-500 transition-colors font-bold">Emergency Desk</Link>
+                <Link href="/authority" className="hover:text-purple-500 transition-colors">Health Intelligence</Link>
+              </>
             )}
             <span className="text-gray-500">
               {user.full_name || user.username} ({user.role})
