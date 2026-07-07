@@ -37,6 +37,7 @@ import models
 import schemas
 from database import get_db
 from modules.auth.router import get_current_user
+from core.ratelimit import rate_limit
 
 router = APIRouter()
 logger = logging.getLogger("gramcare.payments")
@@ -104,7 +105,11 @@ class VerifyPaymentResponse(BaseModel):
 # ============================================================
 # Endpoints
 # ============================================================
-@router.post("/create-order", response_model=OrderResponse)
+@router.post(
+    "/create-order",
+    response_model=OrderResponse,
+    dependencies=[Depends(rate_limit("payment_order", 20, 300))],
+)
 async def create_order(
     request: OrderCreateRequest,
     db: Session = Depends(get_db),

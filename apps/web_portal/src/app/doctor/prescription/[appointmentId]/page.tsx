@@ -2,9 +2,16 @@
 
 import React, { use, useState } from 'react';
 import { motion } from 'framer-motion';
-import { FileText, Plus, Trash2, Printer } from 'lucide-react';
+import { FileText, Plus, Trash2, Printer, CheckCircle2, TriangleAlert } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import api from '../../../../lib/api';
+
+interface InteractionWarning {
+  drug_a: string;
+  drug_b: string;
+  severity: string;
+  description: string;
+}
 
 // Next.js 15+ (this project is on Next 16.2.9) passes `params` as a Promise
 // on page components, not a plain object. The previous synchronous
@@ -44,6 +51,8 @@ export default function PrescriptionWriter({ params }: { params: Promise<{ appoi
   };
 
   const [submitError, setSubmitError] = useState('');
+  const [issued, setIssued] = useState(false);
+  const [interactionWarnings, setInteractionWarnings] = useState<InteractionWarning[]>([]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -59,7 +68,7 @@ export default function PrescriptionWriter({ params }: { params: Promise<{ appoi
     setLoading(true);
 
     try {
-      await api.post('/ehr/issue_prescription', {
+      const res = await api.post('/ehr/issue_prescription', {
         appointment_id: parseInt(appointmentId, 10),
         patient_id: patientId,
         medicines: medicines,
@@ -67,14 +76,54 @@ export default function PrescriptionWriter({ params }: { params: Promise<{ appoi
         notes,
         dosage_instructions: "Follow strictly after meals unless specified."
       });
-      alert("Prescription saved and sent to pharmacy!");
-      router.push('/doctor/dashboard');
+      // Medicine Interaction Alerts (planning doc): checked server-side
+      // against the patient's other currently-active medicines.
+      setInteractionWarnings(res.data?.interaction_warnings || []);
+      setIssued(true);
     } catch (error: any) {
       setSubmitError(error?.response?.data?.detail || "Failed to issue prescription.");
     } finally {
       setLoading(false);
     }
   };
+
+  if (issued) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-8">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="glass-panel max-w-lg w-full p-8 text-center"
+        >
+          <CheckCircle2 size={56} className="text-emerald-500 mx-auto mb-4" />
+          <h2 className="text-2xl font-bold mb-2">Prescription Issued</h2>
+          <p className="text-gray-500 mb-6">
+            Saved and synced to the patient&apos;s Health Wallet and the pharmacy queue.
+          </p>
+
+          {interactionWarnings.length > 0 && (
+            <div className="text-left mb-6 p-4 rounded-xl bg-red-500/10 border border-red-500/40">
+              <p className="font-bold text-red-600 flex items-center gap-2 mb-2">
+                <TriangleAlert size={18} /> Medicine Interaction Warning
+              </p>
+              {interactionWarnings.map((w, i) => (
+                <p key={i} className="text-sm text-red-700 dark:text-red-300 mb-1">
+                  <strong>{w.drug_a} + {w.drug_b}</strong> ({w.severity}): {w.description}
+                </p>
+              ))}
+            </div>
+          )}
+
+          <button
+            onClick={() => router.push('/doctor/dashboard')}
+            className="neu-button w-full py-3 bg-teal-500 text-white font-bold rounded-xl"
+          >
+            Back to Dashboard
+          </button>
+        </motion.div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen p-8 lg:p-24 relative overflow-hidden bg-[var(--background)]">

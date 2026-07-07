@@ -172,3 +172,21 @@ def test_vitals_requires_auth_and_bounds(client, patient_token):
         "device_id": "d1", "heart_rate": 80, "spo2": 98, "temperature": 36.6,
     })
     assert ok.status_code == 200
+
+
+def test_vitals_steps_sleep_and_history(client, patient_token):
+    """Health Vitals Tracker: Steps + Sleep Analysis alongside HR/SpO2, and a
+    history endpoint for the dashboard's trend graphs."""
+    posted = client.post("/api/v1/ehr/vitals", headers=auth(patient_token), json={
+        "device_id": "d1", "heart_rate": 72, "spo2": 97, "temperature": 36.7,
+        "steps": 5400, "sleep_deep_hours": 2.5, "sleep_light_hours": 4.0,
+    })
+    assert posted.status_code == 200, posted.text
+    body = posted.json()
+    assert body["steps"] == 5400
+    assert body["sleep_deep_hours"] == 2.5
+
+    history = client.get("/api/v1/ehr/vitals/history", headers=auth(patient_token))
+    assert history.status_code == 200, history.text
+    entries = history.json()
+    assert any(e["steps"] == 5400 for e in entries)

@@ -7,9 +7,105 @@
 
 import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { BarChart3, AlertTriangle, Activity, Building2, Pill } from 'lucide-react';
+import { BarChart3, AlertTriangle, Activity, Building2, Pill, Siren, CheckCircle2 } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
+import ThemedLoader from '../../../components/ThemedLoader';
 import api from '../../../lib/api';
+
+interface IssuedRecall {
+  id: number;
+  medicine_name: string;
+  batch_number: string;
+  reason: string;
+  created_at: string;
+}
+
+/** Batch Recall Alerts — health-authority-only (planning doc: "கவர்மெண்ட்
+ * ஒரு மருந்து பேட்சை ரீகால் பண்ணா, பார்மசிஸ்ட்களும் யூசர்களும் உடனே அலர்ட்
+ * ஆகணும்"). Pharmacists already receive matched recalls via
+ * GET /pharmacy/recalls/mine — this is the missing other half: where an
+ * authority actually issues one. */
+function BatchRecallIssuer() {
+  const [medicineName, setMedicineName] = useState('');
+  const [batchNumber, setBatchNumber] = useState('');
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [issued, setIssued] = useState<IssuedRecall[]>([]);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setError('');
+    try {
+      const res = await api.post<IssuedRecall>('/pharmacy/recalls', {
+        medicine_name: medicineName,
+        batch_number: batchNumber,
+        reason,
+      });
+      setIssued((prev) => [res.data, ...prev]);
+      setMedicineName('');
+      setBatchNumber('');
+      setReason('');
+    } catch {
+      setError('Could not issue the recall. Please check the details and try again.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="glass-panel p-6 mb-10">
+      <h2 className="text-xl font-bold flex items-center gap-2 mb-1 text-red-500">
+        <Siren size={22} /> Issue a Batch Recall
+      </h2>
+      <p className="text-sm text-gray-500 mb-4">
+        Pharmacists holding this batch are alerted immediately in their portal.
+      </p>
+      <form onSubmit={submit} className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
+        <input
+          required
+          placeholder="Medicine name"
+          value={medicineName}
+          onChange={(e) => setMedicineName(e.target.value)}
+          className="p-3 rounded-xl bg-white/50 dark:bg-black/20 border border-white/20 focus:ring-2 focus:ring-red-400 focus:outline-none"
+        />
+        <input
+          required
+          placeholder="Batch number"
+          value={batchNumber}
+          onChange={(e) => setBatchNumber(e.target.value)}
+          className="p-3 rounded-xl bg-white/50 dark:bg-black/20 border border-white/20 focus:ring-2 focus:ring-red-400 focus:outline-none"
+        />
+        <input
+          required
+          placeholder="Reason (e.g. contamination found)"
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          className="p-3 rounded-xl bg-white/50 dark:bg-black/20 border border-white/20 focus:ring-2 focus:ring-red-400 focus:outline-none"
+        />
+        <button
+          type="submit"
+          disabled={busy}
+          className="md:col-span-3 neu-button py-3 bg-red-500 text-white font-bold rounded-xl disabled:opacity-50"
+        >
+          {busy ? 'Issuing…' : 'Issue Recall Alert'}
+        </button>
+      </form>
+      {error && <p role="alert" className="text-red-500 text-sm font-semibold">{error}</p>}
+      {issued.length > 0 && (
+        <div className="mt-4 space-y-2">
+          {issued.map((r) => (
+            <div key={r.id} className="flex items-center gap-2 text-sm bg-red-500/10 border border-red-500/30 rounded-lg p-2">
+              <CheckCircle2 size={16} className="text-red-500 shrink-0" />
+              <span><strong>{r.medicine_name}</strong> (batch {r.batch_number}) — recall issued.</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 interface Cluster {
   condition: string;
@@ -83,8 +179,13 @@ export default function HealthIntelligence() {
 
       {error && <p role="alert" className="text-red-500 font-semibold mb-6">{error}</p>}
 
+      {/* Recall issuance is a health-authority action, not a clinician one —
+          this same component is shared with the Doctor analytics route, so
+          it's gated to ADMIN accounts only. */}
+      {user?.role === 'ADMIN' && <BatchRecallIssuer />}
+
       {loading ? (
-        <div className="flex justify-center p-10"><div className="animate-spin w-10 h-10 border-4 border-purple-500 border-t-transparent rounded-full" /></div>
+        <ThemedLoader variant="analytics" />
       ) : (
         <>
           {overview && (

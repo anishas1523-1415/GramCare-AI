@@ -7,11 +7,12 @@
 
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Pill, Search, MapPin, Phone, CheckCircle2, XCircle } from 'lucide-react';
+import { Pill, Search, MapPin, Phone, CheckCircle2, XCircle, Landmark, PackagePlus } from 'lucide-react';
 import api from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
 import type { NearbyPharmacyResult } from '../../types';
 import { APIProvider, Map, Marker } from '@vis.gl/react-google-maps';
+import { SkeletonList } from '../../components/Skeleton';
 
 export default function PharmacySearch() {
   const { user } = useAuth();
@@ -20,6 +21,20 @@ export default function PharmacySearch() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [usedLocation, setUsedLocation] = useState(false);
+  const [preorderedIds, setPreorderedIds] = useState<Set<number>>(new Set());
+
+  const preorder = async (pharmacyId: number, medicineName: string) => {
+    try {
+      await api.post('/pharmacy/preorders', {
+        pharmacy_id: pharmacyId,
+        medicine_name: medicineName,
+        quantity: 1,
+      });
+      setPreorderedIds((prev) => new Set(prev).add(pharmacyId));
+    } catch {
+      setError('Could not place the pre-order. Please try again.');
+    }
+  };
 
   const search = async () => {
     if (medicine.trim().length < 2) return;
@@ -98,7 +113,9 @@ export default function PharmacySearch() {
 
         {error && <p role="alert" className="text-red-500 font-semibold mb-6">{error}</p>}
 
-        {results !== null && (
+        {loading && <SkeletonList count={3} />}
+
+        {!loading && results !== null && (
           <>
             <p className="text-sm text-gray-500 mb-4">
               {usedLocation ? 'Sorted by distance from your location.' : 'Location off — showing all registered pharmacies.'}
@@ -146,7 +163,14 @@ export default function PharmacySearch() {
                   >
                     <div className="flex justify-between items-start">
                       <div>
-                        <h3 className="font-bold text-lg">{r.pharmacy_name}</h3>
+                        <h3 className="font-bold text-lg flex items-center gap-2">
+                          {r.pharmacy_name}
+                          {r.is_jan_aushadhi && (
+                            <span className="flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-full bg-blue-500/15 text-blue-600">
+                              <Landmark size={12} /> Jan Aushadhi
+                            </span>
+                          )}
+                        </h3>
                         <p className="text-sm text-gray-500 flex items-center gap-1">
                           <MapPin size={14} /> {r.address || 'Address not listed'}
                           {r.distance_km != null && <span className="font-semibold"> · {r.distance_km} km</span>}
@@ -178,6 +202,17 @@ export default function PharmacySearch() {
                         <span className="font-bold text-emerald-700">Same-effect alternatives here: </span>
                         {r.substitutes.join(', ')}
                       </div>
+                    )}
+
+                    {!r.available && (
+                      <button
+                        onClick={() => preorder(r.pharmacy_id, medicine.trim())}
+                        disabled={preorderedIds.has(r.pharmacy_id)}
+                        className="mt-3 w-full py-2 rounded-xl border border-indigo-400 text-indigo-500 font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:border-gray-300 disabled:text-gray-400 hover:bg-indigo-500/10 transition-colors"
+                      >
+                        <PackagePlus size={16} />
+                        {preorderedIds.has(r.pharmacy_id) ? 'Pre-ordered — we\'ll notify you' : 'Pre-order for when restocked'}
+                      </button>
                     )}
                   </motion.div>
                 ))}

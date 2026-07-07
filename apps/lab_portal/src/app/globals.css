@@ -1,0 +1,106 @@
+@import "tailwindcss";
+
+:root {
+  /* Neumorphism Base Colors (Light Mode) — shared tokens from apps/web_portal
+     so this standalone portal still belongs to the same design family. */
+  --background: #e0e5ec;
+  --foreground: #2d3748;
+
+  /* Laboratory module accent: violet/diagnostics, distinct from
+     red=emergency, blue=doctor consultation, green=pharmacy, teal=patient. */
+  --primary: #7c3aed;
+  --primary-foreground: #ffffff;
+
+  /* Glassmorphism Variables */
+  --glass-bg: rgba(255, 255, 255, 0.25);
+  --glass-border: rgba(255, 255, 255, 0.4);
+  --glass-shadow: 0 8px 32px 0 rgba(76, 29, 149, 0.12);
+
+  /* Neumorphism Shadow Colors */
+  --neu-light: #ffffff;
+  --neu-dark: #a3b1c6;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+
+  --color-glass: var(--glass-bg);
+
+  --shadow-neu-flat: 8px 8px 16px var(--neu-dark), -8px -8px 16px var(--neu-light);
+  --shadow-neu-pressed: inset 8px 8px 16px var(--neu-dark), inset -8px -8px 16px var(--neu-light);
+  --shadow-glass: var(--glass-shadow);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #1e1b24;
+    --foreground: #e2e8f0;
+
+    --glass-bg: rgba(24, 18, 33, 0.4);
+    --glass-border: rgba(255, 255, 255, 0.1);
+    --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+
+    --neu-light: #2c2733;
+    --neu-dark: #100d15;
+  }
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+}
+
+.glass-panel {
+  background: var(--glass-bg);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+  border-radius: 1.5rem;
+}
+
+.neu-panel {
+  background: var(--background);
+  box-shadow: var(--shadow-neu-flat);
+  border-radius: 1.5rem;
+}
+
+.neu-button {
+  background: var(--background);
+  box-shadow: var(--shadow-neu-flat);
+  border-radius: 0.75rem;
+  transition: all 0.2s ease-in-out;
+  cursor: pointer;
+}
+
+.neu-button:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.03);
+}
+
+.neu-button:active {
+  box-shadow: var(--shadow-neu-pressed);
+  transform: translateY(0) scale(0.98);
+}
+
+:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

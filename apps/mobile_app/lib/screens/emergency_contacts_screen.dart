@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../services/app_strings.dart';
 import '../services/sos_service.dart';
+import '../theme/neumorphic_colors.dart';
 
 /// Emergency contacts management — the numbers alerted by SMS when an SOS
 /// cannot reach the server (planning doc requirement).
@@ -71,17 +72,18 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
   @override
   Widget build(BuildContext context) {
     final s = context.watch<LocaleService>();
+    final neu = Theme.of(context).extension<NeumorphicColors>()!;
     return Scaffold(
-      backgroundColor: const Color(0xFFE0E5EC),
+      backgroundColor: neu.background,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Color(0xFF2D3748)),
+          icon: Icon(Icons.arrow_back, color: neu.foreground),
           onPressed: () => context.pop(),
         ),
         title: Text(s.t('emergency_contacts'),
-            style: const TextStyle(color: Color(0xFF2D3748), fontWeight: FontWeight.bold)),
+            style: TextStyle(color: neu.foreground, fontWeight: FontWeight.bold)),
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: _addDialog,
@@ -96,7 +98,7 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
                     padding: const EdgeInsets.all(32),
                     child: Text(s.t('no_contacts'),
                         textAlign: TextAlign.center,
-                        style: const TextStyle(color: Color(0xFF718096), fontSize: 16)),
+                        style: TextStyle(color: neu.foregroundMuted, fontSize: 16)),
                   ),
                 )
               : ListView.builder(
@@ -107,11 +109,11 @@ class _EmergencyContactsScreenState extends State<EmergencyContactsScreen> {
                     return Container(
                       margin: const EdgeInsets.only(bottom: 12),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFE0E5EC),
+                        color: neu.background,
                         borderRadius: BorderRadius.circular(16),
-                        boxShadow: const [
-                          BoxShadow(color: Color(0xFFA3B1C6), offset: Offset(4, 4), blurRadius: 8),
-                          BoxShadow(color: Color(0xFFFFFFFF), offset: Offset(-4, -4), blurRadius: 8),
+                        boxShadow: [
+                          BoxShadow(color: neu.shadowDark, offset: const Offset(4, 4), blurRadius: 8),
+                          BoxShadow(color: neu.shadowLight, offset: const Offset(-4, -4), blurRadius: 8),
                         ],
                       ),
                       child: ListTile(

@@ -53,6 +53,7 @@ export interface Appointment {
   scheduled_at: string;
   status: 'PENDING' | 'CONFIRMED' | 'COMPLETED' | 'CANCELLED';
   triage_summary?: string | null;
+  triage_severity_score?: number | null;
   consultation_notes?: string | null;
   payment_id?: number | null;
   created_at: string;
@@ -155,4 +156,5 @@ export interface NearbyPharmacyResult {
   substitutes: string[];
   lat?: number | null;
   lng?: number | null;
+  is_jan_aushadhi: boolean;
 }

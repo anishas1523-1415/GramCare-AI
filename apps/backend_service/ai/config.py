@@ -31,12 +31,14 @@ _DEFAULT_PRIORITY_BY_TASK = {
     AITask.TRIAGE: "gemini,openai,groq,anthropic,mock",
     AITask.OCR: "gemini,openai,mock",
     AITask.DOCTOR_SUMMARY: "gemini,openai,groq,anthropic,mock",
+    AITask.MEDICINE_INFO: "gemini,openai,groq,anthropic,mock",
 }
 
 #: Env var name -> AITask, for the per-task override variables.
 _ENV_VAR_BY_TASK = {
     AITask.TRIAGE: "AI_PROVIDER_PRIORITY_TRIAGE",
     AITask.OCR: "AI_PROVIDER_PRIORITY_OCR",
+    AITask.MEDICINE_INFO: "AI_PROVIDER_PRIORITY_MEDICINE_INFO",
     AITask.DOCTOR_SUMMARY: "AI_PROVIDER_PRIORITY_DOCTOR_SUMMARY",
 }
 

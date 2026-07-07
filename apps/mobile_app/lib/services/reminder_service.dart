@@ -203,6 +203,8 @@ class ReminderService extends ChangeNotifier {
         ),
         androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
         matchDateTimeComponents: DateTimeComponents.time, // repeat daily
+        uiLocalNotificationDateInterpretation:
+            UILocalNotificationDateInterpretation.absoluteTime,
         payload: '{"type":"appointment_reminder"}',
       );
     } catch (e) {

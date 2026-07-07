@@ -121,6 +121,29 @@ class TestProviderIndependence:
         assert "gemini" in names
         assert "mock" in names  # always eligible, MockProvider.supports_vision()=True
 
+    def test_triage_without_image_includes_non_vision_providers(self):
+        """Plain text/voice symptom checking must stay routable to every
+        configured provider, including non-vision ones like Groq."""
+        vision_provider = FakeProvider("gemini", vision=True)
+        no_vision_provider = FakeProvider("groq", vision=False)
+        manager = _manager(vision_provider, no_vision_provider)
+        candidates = manager._candidates_for(AITask.TRIAGE, requires_vision=False)
+        names = [c.name for c in candidates]
+        assert "groq" in names
+        assert "gemini" in names
+
+    def test_triage_with_image_excludes_non_vision_providers(self):
+        """Planning doc: the symptom checker accepts an OPTIONAL photo —
+        when one is actually attached, only vision-capable providers may
+        serve the request, same rule as OCR."""
+        vision_provider = FakeProvider("gemini", vision=True)
+        no_vision_provider = FakeProvider("groq", vision=False)
+        manager = _manager(vision_provider, no_vision_provider)
+        candidates = manager._candidates_for(AITask.TRIAGE, requires_vision=True)
+        names = [c.name for c in candidates]
+        assert "groq" not in names
+        assert "gemini" in names
+
 
 # ---------------------------------------------------------------------------
 # 2-5. Simulated failure modes

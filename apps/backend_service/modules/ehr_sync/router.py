@@ -15,11 +15,15 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from datetime import datetime, timedelta
+
 import models
 import schemas
 from database import get_db
 from modules.auth.router import get_current_user, require_role
 from modules.family.router import resolve_owned_profile
+from core.drug_interactions import check_interactions
+from modules.ai_assist.router import _parse_duration_days
 
 router = APIRouter()
 
@@ -77,6 +81,32 @@ async def issue_prescription(
     db.add(ehr_record)
     db.commit()
     db.refresh(db_prescription)
+
+    # Medicine Interaction Alerts: check the newly-prescribed medicines
+    # against whatever else this patient is currently, actively taking
+    # (same start-date + duration logic as the AI Doctor Assistant's
+    # patient-summary "active medicines" detection).
+    now = datetime.utcnow()
+    other_rx = (
+        db.query(models.Prescription)
+        .filter(
+            models.Prescription.patient_id == prescription.patient_id,
+            models.Prescription.id != db_prescription.id,
+        )
+        .order_by(models.Prescription.created_at.desc())
+        .limit(20)
+        .all()
+    )
+    currently_active_names: List[str] = []
+    for rx in other_rx:
+        for med in (rx.medicines or []):
+            days = _parse_duration_days(med.get("duration", ""))
+            if (rx.created_at + timedelta(days=days)) >= now:
+                currently_active_names.append(med.get("name", ""))
+
+    new_names = [m.name for m in prescription.medicines]
+    db_prescription.interaction_warnings = check_interactions(new_names + currently_active_names)
+
     return db_prescription
 
 
@@ -244,9 +274,30 @@ class VitalsPayload(BaseModel):
     heart_rate: int = Field(..., gt=0, lt=300)
     spo2: int = Field(..., ge=0, le=100)
     temperature: float = Field(..., gt=25.0, lt=45.0)
+    # Health Vitals Tracker (planning doc): Steps Tracker + Sleep Analysis
+    # (deep/light breakdown) alongside HR/SpO2 — all optional since manual
+    # entry (no wearable yet) may only fill some fields at a time.
+    steps: Optional[int] = Field(None, ge=0, le=200000)
+    sleep_deep_hours: Optional[float] = Field(None, ge=0, le=24)
+    sleep_light_hours: Optional[float] = Field(None, ge=0, le=24)
 
 
-@router.post("/vitals")
+class VitalsResponse(BaseModel):
+    id: int
+    family_profile_id: Optional[int] = None
+    device_id: str
+    heart_rate: int
+    spo2: int
+    temperature: float
+    steps: Optional[int] = None
+    sleep_deep_hours: Optional[float] = None
+    sleep_light_hours: Optional[float] = None
+    timestamp: datetime
+
+    model_config = {"from_attributes": True}
+
+
+@router.post("/vitals", response_model=VitalsResponse)
 async def store_vitals(
     payload: VitalsPayload,
     db: Session = Depends(get_db),
@@ -263,7 +314,31 @@ async def store_vitals(
         heart_rate=payload.heart_rate,
         spo2=payload.spo2,
         temperature=payload.temperature,
+        steps=payload.steps,
+        sleep_deep_hours=payload.sleep_deep_hours,
+        sleep_light_hours=payload.sleep_light_hours,
     )
     db.add(db_vital)
     db.commit()
-    return {"status": "success"}
+    db.refresh(db_vital)
+    return db_vital
+
+
+@router.get("/vitals/history", response_model=List[VitalsResponse])
+async def vitals_history(
+    family_profile_id: Optional[int] = Query(None),
+    days: int = Query(30, ge=1, le=365),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Recent vitals for the Health Vitals Tracker dashboard (graphs/trends),
+    scoped to the caller and optionally to one family member."""
+    resolve_owned_profile(family_profile_id, current_user, db)
+    cutoff = datetime.utcnow() - timedelta(days=days)
+    q = db.query(models.IoTVitals).filter(
+        models.IoTVitals.patient_id == current_user.id,
+        models.IoTVitals.timestamp >= cutoff,
+    )
+    if family_profile_id is not None:
+        q = q.filter(models.IoTVitals.family_profile_id == family_profile_id)
+    return q.order_by(models.IoTVitals.timestamp.desc()).limit(200).all()

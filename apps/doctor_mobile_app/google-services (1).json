@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "584026943637",
+    "project_id": "gramcare-ai",
+    "storage_bucket": "gramcare-ai.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:584026943637:android:8527f7c3d7e02d4c06eb9c",
+        "android_client_info": {
+          "package_name": "com.gramcare.doctor_mobile_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCKAQDcSqbTatP9fOWTinG97kWGL7CqyUE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:584026943637:android:86b0626064e9641506eb9c",
+        "android_client_info": {
+          "package_name": "com.gramcare.mobile_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCKAQDcSqbTatP9fOWTinG97kWGL7CqyUE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

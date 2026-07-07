@@ -40,4 +40,45 @@ void main() {
     // than the dashboard.
     expect(find.byType(TextField), findsNWidgets(2));
   });
+
+  testWidgets(
+      'Shows an error and re-enables the button when login fails',
+      (WidgetTester tester) async {
+    // No backend is reachable in the test environment, so submitting the
+    // login form exercises the real failure path (connection error ->
+    // catch block -> error message + spinner reset) without needing to
+    // mock Dio.
+    FlutterSecureStorage.setMockInitialValues({});
+    SharedPreferences.setMockInitialValues({});
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider(create: (_) => ProfileService()),
+          ChangeNotifierProvider(create: (_) => LocaleService()),
+        ],
+        child: const GramCareApp(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextField).first, 'testuser');
+    await tester.enterText(find.byType(TextField).last, 'testpass');
+    await tester.tap(find.text('Login'));
+
+    // The button swaps to a spinner immediately (isLoading = true).
+    await tester.pump();
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+
+    // Let the failed network call resolve — bounded pumps rather than
+    // pumpAndSettle, since Dio's own connection-timeout backoff can keep
+    // scheduling frames past pumpAndSettle's patience in a sandboxed
+    // network-less test runner.
+    for (var i = 0; i < 30 && find.text('Login').evaluate().isEmpty; i++) {
+      await tester.pump(const Duration(milliseconds: 200));
+    }
+
+    expect(find.text('Invalid credentials. Please try again.'), findsOneWidget);
+    expect(find.text('Login'), findsOneWidget);
+  }, timeout: const Timeout(Duration(seconds: 20)));
 }

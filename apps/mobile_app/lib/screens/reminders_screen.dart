@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../services/app_strings.dart';
 import '../services/profile_service.dart';
 import '../services/reminder_service.dart';
+import '../theme/neumorphic_colors.dart';
 
 /// Medicine Reminders — real implementation (previously a hardcoded static
 /// list with no persistence and no notifications). Reminders are scoped to
@@ -128,22 +129,24 @@ class _RemindersScreenState extends State<RemindersScreen> {
   Widget build(BuildContext context) {
     final s = context.watch<LocaleService>();
     final active = context.watch<ProfileService>().active;
+    final neu = Theme.of(context).extension<NeumorphicColors>()!;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFE0E5EC),
+      backgroundColor: neu.background,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Color(0xFF2D3748)),
+          icon: Icon(Icons.arrow_back, color: neu.foreground),
+          tooltip: s.t('back'),
           onPressed: () => context.pop(),
         ),
         title: Text(
           active == null
               ? s.t('medicine_reminders')
               : '${active.fullName} • ${s.t('medicine_reminders')}',
-          style: const TextStyle(
-              color: Color(0xFF2D3748), fontWeight: FontWeight.bold, fontSize: 17),
+          style: TextStyle(
+              color: neu.foreground, fontWeight: FontWeight.bold, fontSize: 17),
         ),
         actions: [
           IconButton(
@@ -171,14 +174,14 @@ class _RemindersScreenState extends State<RemindersScreen> {
                       padding: const EdgeInsets.all(32),
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
-                        children: const [
+                        children: [
                           Icon(Icons.notifications_none,
-                              size: 56, color: Color(0xFF718096)),
-                          SizedBox(height: 12),
+                              size: 56, color: neu.foregroundMuted),
+                          const SizedBox(height: 12),
                           Text(
                             'No reminders yet.\nTap ✨ to create them from your prescriptions,\nor + to add one manually.',
                             textAlign: TextAlign.center,
-                            style: TextStyle(color: Color(0xFF718096), fontSize: 15),
+                            style: TextStyle(color: neu.foregroundMuted, fontSize: 15),
                           ),
                         ],
                       ),
@@ -194,21 +197,21 @@ class _RemindersScreenState extends State<RemindersScreen> {
                         margin: const EdgeInsets.only(bottom: 14),
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFE0E5EC),
+                          color: neu.background,
                           borderRadius: BorderRadius.circular(16),
                           border: Border(
                             left: BorderSide(
                                 color: taken ? const Color(0xFF10B981) : _theme,
                                 width: 6),
                           ),
-                          boxShadow: const [
+                          boxShadow: [
                             BoxShadow(
-                                color: Color(0xFFA3B1C6),
-                                offset: Offset(4, 4),
+                                color: neu.shadowDark,
+                                offset: const Offset(4, 4),
                                 blurRadius: 8),
                             BoxShadow(
-                                color: Color(0xFFFFFFFF),
-                                offset: Offset(-4, -4),
+                                color: neu.shadowLight,
+                                offset: const Offset(-4, -4),
                                 blurRadius: 8),
                           ],
                         ),
@@ -228,7 +231,7 @@ class _RemindersScreenState extends State<RemindersScreen> {
                                 size: 34,
                                 color: taken
                                     ? const Color(0xFF10B981)
-                                    : const Color(0xFF718096),
+                                    : neu.foregroundMuted,
                               ),
                             ),
                             const SizedBox(width: 14),
@@ -250,8 +253,8 @@ class _RemindersScreenState extends State<RemindersScreen> {
                                   Text(
                                     '${_fmt(r['hour'] as int, r['minute'] as int)}'
                                     '${(r['instructions'] as String? ?? '').isNotEmpty ? ' • ${r['instructions']}' : ''}',
-                                    style: const TextStyle(
-                                        fontSize: 13, color: Color(0xFF718096)),
+                                    style: TextStyle(
+                                        fontSize: 13, color: neu.foregroundMuted),
                                   ),
                                 ],
                               ),
@@ -259,6 +262,7 @@ class _RemindersScreenState extends State<RemindersScreen> {
                             IconButton(
                               icon: const Icon(Icons.delete_outline,
                                   color: Colors.redAccent, size: 22),
+                              tooltip: s.t('delete'),
                               onPressed: () async {
                                 await ReminderService()
                                     .removeReminder(r['id'] as int);

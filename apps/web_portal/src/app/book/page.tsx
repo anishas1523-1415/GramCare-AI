@@ -6,27 +6,49 @@
 // verified payment order. The old page hardcoded DOCTOR_ID = 2 and booked
 // any free-typed datetime with no payment check.
 
-import React, { useEffect, useState } from 'react';
+import React, { Suspense, useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Stethoscope, CalendarDays, CheckCircle, ArrowLeft } from 'lucide-react';
+import { Stethoscope, CalendarDays, CheckCircle, ArrowLeft, Sparkles } from 'lucide-react';
+import { useSearchParams } from 'next/navigation';
 import { useAuth } from '../../contexts/AuthContext';
 import { useProfile } from '../../contexts/ProfileContext';
 import RazorpayCheckout from '../../components/RazorpayCheckout';
+import ThemedLoader from '../../components/ThemedLoader';
 import api from '../../lib/api';
 import type { DoctorPublic, Slot } from '../../types';
 
 type Step = 'doctor' | 'slot' | 'pay' | 'done';
 
 export default function AppointmentBooking() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center text-gray-500">Loading…</div>}>
+      <BookingFlow />
+    </Suspense>
+  );
+}
+
+function BookingFlow() {
   const { user } = useAuth();
   const { activeProfile } = useProfile();
+  const searchParams = useSearchParams();
+
+  // Carried over from the AI Symptom Checker (planning doc: specialist
+  // recommendations feed directly into doctor selection here) — read once,
+  // query params don't change while this page is open.
+  const [severityScore] = useState<number | null>(() => {
+    const raw = searchParams.get('severity');
+    const n = raw ? parseInt(raw, 10) : NaN;
+    return Number.isNaN(n) ? null : n;
+  });
+  const recommendedSpecialist = searchParams.get('specialist') || '';
 
   const [step, setStep] = useState<Step>('doctor');
   const [doctors, setDoctors] = useState<DoctorPublic[]>([]);
+  const [showAllSpecialties, setShowAllSpecialties] = useState(!recommendedSpecialist);
   const [slots, setSlots] = useState<Slot[]>([]);
   const [doctor, setDoctor] = useState<DoctorPublic | null>(null);
   const [slot, setSlot] = useState<Slot | null>(null);
-  const [symptoms, setSymptoms] = useState('');
+  const [symptoms, setSymptoms] = useState(searchParams.get('symptoms') || '');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -44,6 +66,14 @@ export default function AppointmentBooking() {
       }
     })();
   }, [user]);
+
+  const visibleDoctors = useMemo(() => {
+    if (showAllSpecialties || !recommendedSpecialist) return doctors;
+    const matches = doctors.filter((d) =>
+      d.specialty.toLowerCase().includes(recommendedSpecialist.toLowerCase())
+    );
+    return matches.length > 0 ? matches : doctors;
+  }, [doctors, showAllSpecialties, recommendedSpecialist]);
 
   const chooseDoctor = async (d: DoctorPublic) => {
     setDoctor(d);
@@ -67,6 +97,7 @@ export default function AppointmentBooking() {
         doctor_id: doctor.id,
         slot_id: slot.id,
         triage_summary: symptoms || null,
+        triage_severity_score: severityScore,
         family_profile_id: activeProfile?.id ?? null,
         payment_order_id: orderId,
       });
@@ -108,12 +139,22 @@ export default function AppointmentBooking() {
           {/* STEP 1 — choose doctor */}
           {step === 'doctor' && (
             loading ? (
-              <div className="flex justify-center p-10"><div className="animate-spin w-10 h-10 border-4 border-teal-500 border-t-transparent rounded-full" /></div>
+              <ThemedLoader variant="doctor" label="Finding available doctors…" />
             ) : doctors.length === 0 ? (
               <p className="text-gray-500 p-6 text-center">No doctors are currently available.</p>
             ) : (
               <div className="space-y-4">
-                {doctors.map((d) => (
+                {recommendedSpecialist && !showAllSpecialties && (
+                  <div className="flex items-center justify-between p-3 rounded-xl bg-indigo-500/10 border border-indigo-500/30 text-sm">
+                    <span className="flex items-center gap-2 font-semibold text-indigo-600">
+                      <Sparkles size={16} /> Showing {recommendedSpecialist} specialists, based on your AI Symptom Checker result
+                    </span>
+                    <button onClick={() => setShowAllSpecialties(true)} className="underline text-indigo-500 font-semibold shrink-0 ml-3">
+                      Show all doctors
+                    </button>
+                  </div>
+                )}
+                {visibleDoctors.map((d) => (
                   <button
                     key={d.id}
                     onClick={() => chooseDoctor(d)}

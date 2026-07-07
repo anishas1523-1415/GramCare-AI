@@ -16,6 +16,7 @@ import { useRouter } from 'next/navigation';
 import api from '../../lib/api';
 import { io } from 'socket.io-client';
 import type { EmergencySOS } from '../../types';
+import ThemedLoader from '../../components/ThemedLoader';
 
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "https://gramcare-signaling.onrender.com";
 
@@ -96,7 +97,11 @@ export default function HospitalEmergencyDesk() {
     Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
 
   if (authLoading || loading) {
-    return <div className="min-h-screen flex items-center justify-center">Loading Emergency Desk…</div>;
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <ThemedLoader variant="emergency" label="Connecting to Emergency Desk…" />
+      </div>
+    );
   }
 
   return (
@@ -125,6 +130,23 @@ export default function HospitalEmergencyDesk() {
           <RefreshCw size={16} /> Refresh
         </button>
       </header>
+
+      {/* Persistent ECG heartbeat strip — the Emergency Desk's ambient
+          "live feed" identity, not just a one-off loading animation. */}
+      {live && (
+        <div className="w-full h-10 overflow-hidden mb-8 opacity-60" aria-hidden="true">
+          <motion.svg
+            width="1200" height="40" viewBox="0 0 1200 40"
+            animate={{ x: [0, -600] }}
+            transition={{ duration: 4, repeat: Infinity, ease: 'linear' }}
+          >
+            <path
+              d="M0 20 H120 L134 6 L150 34 L164 20 H320 L334 6 L350 34 L364 20 H520 L534 6 L550 34 L564 20 H720 L734 6 L750 34 L764 20 H920 L934 6 L950 34 L964 20 H1120 L1134 6 L1150 34 L1164 20 H1200"
+              stroke="#EF4444" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"
+            />
+          </motion.svg>
+        </div>
+      )}
 
       {error && <p role="alert" className="text-red-500 font-semibold mb-6">{error}</p>}
 

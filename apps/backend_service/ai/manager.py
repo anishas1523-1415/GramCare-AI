@@ -95,9 +95,14 @@ class AIManager:
     def all_providers(self) -> dict[str, BaseAIProvider]:
         return dict(self._providers)
 
-    def _candidates_for(self, task: AITask) -> list[BaseAIProvider]:
+    def _candidates_for(self, task: AITask, requires_vision: bool = False) -> list[BaseAIProvider]:
         order = get_priority(task)
         candidates = []
+        # OCR always carries an image, so it's always vision-gated regardless
+        # of the caller; other tasks (e.g. TRIAGE with an optional symptom
+        # photo — planning doc: "இமேஜும் ஆட் பண்ணலாம்") are only vision-gated
+        # when this specific call actually attaches an image.
+        needs_vision = requires_vision or task == AITask.OCR
         for name in order:
             p = self._providers.get(name)
             if p is None:
@@ -105,7 +110,7 @@ class AIManager:
                 continue
             if task not in p.supported_tasks():
                 continue
-            if task == AITask.OCR and not p.supports_vision():
+            if needs_vision and not p.supports_vision():
                 # Requirement #4, made explicit rather than relying solely
                 # on supported_tasks(): never route an image-bearing request
                 # to a provider without vision support, regardless of what
@@ -123,7 +128,7 @@ class AIManager:
         timeout_seconds: Optional[float] = None,
     ) -> AIOutcome:
         request_id = uuid.uuid4().hex[:12]
-        candidates = self._candidates_for(task)
+        candidates = self._candidates_for(task, requires_vision=image_base64 is not None)
         attempted: list[str] = []
         total_retries = 0
         overall_start = time.monotonic()

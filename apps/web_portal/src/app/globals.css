@@ -83,6 +83,33 @@ body {
   cursor: pointer;
 }
 
+.neu-button:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.03);
+}
+
 .neu-button:active {
   box-shadow: var(--shadow-neu-pressed);
+  transform: translateY(0) scale(0.98);
+}
+
+/* Accessibility: a visible, on-brand focus ring for keyboard navigation.
+   The default browser outline is inconsistent against glass/neu surfaces
+   and easy to lose track of — this makes it deliberate everywhere. */
+:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Respect the OS-level "reduce motion" accessibility setting (planning doc
+   UI/UX requirement) — every animation in this design system collapses to
+   a near-instant transition instead of being disabled ad hoc per component. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

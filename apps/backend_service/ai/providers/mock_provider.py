@@ -33,7 +33,7 @@ class MockProvider(BaseAIProvider):
         return True
 
     def supported_tasks(self) -> set[AITask]:
-        return {AITask.TRIAGE, AITask.OCR, AITask.DOCTOR_SUMMARY}
+        return {AITask.TRIAGE, AITask.OCR, AITask.DOCTOR_SUMMARY, AITask.MEDICINE_INFO}
 
     def supports_vision(self) -> bool:
         return True  # accepts (and ignores) image input rather than erroring
@@ -73,5 +73,13 @@ class MockProvider(BaseAIProvider):
 
         if request.task == AITask.DOCTOR_SUMMARY:
             return {"summary_text": MOCK_DISCLAIMER_NOTE}
+
+        if request.task == AITask.MEDICINE_INFO:
+            return {
+                "purpose": MOCK_DISCLAIMER_NOTE,
+                "dosage_guidance": "Follow the dosage printed on your prescription or medicine strip.",
+                "side_effects": "Not available in fallback mode — ask your pharmacist.",
+                "precautions": "",
+            }
 
         return {"note": MOCK_DISCLAIMER_NOTE}

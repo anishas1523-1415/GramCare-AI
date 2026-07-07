@@ -39,7 +39,7 @@ class OpenAIProvider(BaseAIProvider):
                 self._client = None
 
     def supported_tasks(self) -> set[AITask]:
-        return {AITask.TRIAGE, AITask.OCR, AITask.DOCTOR_SUMMARY}
+        return {AITask.TRIAGE, AITask.OCR, AITask.DOCTOR_SUMMARY, AITask.MEDICINE_INFO}
 
     def supports_vision(self) -> bool:
         # gpt-4o-mini (and gpt-4o) accept image_url content parts.

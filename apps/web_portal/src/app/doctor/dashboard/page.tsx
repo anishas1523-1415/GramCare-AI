@@ -2,13 +2,14 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { Users, Calendar, ShieldAlert, Video, FileText, CheckCircle, Clock, Plus, Trash2, Brain, BarChart3 } from 'lucide-react';
+import { Users, Calendar, ShieldAlert, Video, FileText, CheckCircle, Clock, Plus, Trash2, Brain, BarChart3, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import api from '../../../lib/api';
 import { io } from 'socket.io-client';
 import type { Slot } from '../../../types';
 import { APIProvider, Map, Marker } from '@vis.gl/react-google-maps';
+import { SkeletonList } from '../../../components/Skeleton';
 
 interface AssistSummary {
   patient_name: string;
@@ -286,8 +287,25 @@ export default function DoctorDashboard() {
     }
   };
 
-  if (authLoading || loading) {
+  if (authLoading) {
     return <div className="min-h-screen flex items-center justify-center">Loading Doctor Portal...</div>;
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen p-8 lg:p-24">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <div className="lg:col-span-2">
+            <div className="glass-panel p-6">
+              <SkeletonList count={4} />
+            </div>
+          </div>
+          <div className="glass-panel p-6">
+            <SkeletonList count={2} />
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -395,6 +413,18 @@ export default function DoctorDashboard() {
                       <div className="flex items-center gap-3 mb-1">
                         <h3 className="font-bold text-lg">Patient #{appt.patient_id}</h3>
                         <span className="text-xs font-bold bg-teal-500/20 text-teal-500 px-2 py-1 rounded">{appt.status}</span>
+                        {/* Predictive Risk Stratification (planning doc): the
+                            queue itself is already severity-sorted server-side —
+                            this badge makes that ordering visible/explainable. */}
+                        {appt.triage_severity_score != null && appt.triage_severity_score >= 50 && (
+                          <span className={`text-xs font-bold px-2 py-1 rounded flex items-center gap-1 ${
+                            appt.triage_severity_score >= 75
+                              ? 'bg-red-500 text-white animate-pulse'
+                              : 'bg-orange-500 text-white'
+                          }`}>
+                            <AlertTriangle size={12} /> Risk {appt.triage_severity_score}/100
+                          </span>
+                        )}
                       </div>
                       <p className="text-sm text-gray-500">Scheduled: {new Date(appt.scheduled_at).toLocaleString()}</p>
                       {appt.triage_summary && <p className="text-sm mt-2 text-gray-600 dark:text-gray-300"><strong>Triage:</strong> {appt.triage_summary}</p>}

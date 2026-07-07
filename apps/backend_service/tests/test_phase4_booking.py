@@ -143,3 +143,33 @@ def test_cancellation_refunds_and_frees_slot(client):
         "payment_order_id": order2,
     })
     assert rebook.status_code == 200, rebook.text
+
+
+def test_queue_sorts_by_severity_not_slot_time(client):
+    """Predictive Risk Stratification: a later-scheduled but higher-severity
+    booking must surface before an earlier, low-severity one."""
+    doctor_token, doctor_id, slot_ids = _setup_doctor_with_slot(client)
+    early_slot, late_slot = slot_ids[0], slot_ids[1]
+
+    low_risk_patient = _register_and_login(client, "p4_low_risk", "PATIENT")
+    order1 = _pay(client, low_risk_patient)
+    low = client.post("/api/v1/appointments/book", headers=auth(low_risk_patient), json={
+        "doctor_id": doctor_id, "slot_id": early_slot,
+        "payment_order_id": order1, "triage_severity_score": 20,
+    })
+    assert low.status_code == 200, low.text
+
+    high_risk_patient = _register_and_login(client, "p4_high_risk", "PATIENT")
+    order2 = _pay(client, high_risk_patient)
+    high = client.post("/api/v1/appointments/book", headers=auth(high_risk_patient), json={
+        "doctor_id": doctor_id, "slot_id": late_slot,
+        "payment_order_id": order2, "triage_severity_score": 90,
+    })
+    assert high.status_code == 200, high.text
+
+    queue = client.get(f"/api/v1/appointments/doctor/{doctor_id}/queue",
+                       headers=auth(doctor_token)).json()
+    ids_in_order = [a["id"] for a in queue]
+    # The high-severity (later-scheduled) booking ranks ahead of the
+    # low-severity (earlier-scheduled) one, despite its later slot time.
+    assert ids_in_order.index(high.json()["id"]) < ids_in_order.index(low.json()["id"])

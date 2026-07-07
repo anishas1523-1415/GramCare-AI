@@ -44,7 +44,7 @@ class AnthropicProvider(BaseAIProvider):
         # even though Claude 3+ does support vision — kept out by
         # configuration (ai/config.py), not by supports_vision() below,
         # since it IS technically capable.
-        return {AITask.TRIAGE, AITask.DOCTOR_SUMMARY, AITask.OCR}
+        return {AITask.TRIAGE, AITask.DOCTOR_SUMMARY, AITask.OCR, AITask.MEDICINE_INFO}
 
     def supports_vision(self) -> bool:
         return True

@@ -10,6 +10,7 @@ import { motion } from 'framer-motion';
 import { Users, Plus, Edit2, Trash2 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useProfile } from '../../contexts/ProfileContext';
+import ThemedLoader from '../../components/ThemedLoader';
 import api from '../../lib/api';
 import type { FamilyProfile } from '../../types';
 
@@ -176,7 +177,7 @@ export default function FamilyProfiles() {
         )}
 
         {loading ? (
-          <div className="flex justify-center p-10"><div className="animate-spin w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full"></div></div>
+          <ThemedLoader variant="wallet" label="Loading family profiles…" />
         ) : profiles.length === 0 ? (
           <div className="glass-panel p-10 text-center text-gray-500">
             No family profiles added yet. Add your family members to keep their health records in one place.

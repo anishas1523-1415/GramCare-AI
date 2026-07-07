@@ -40,7 +40,7 @@ class GroqProvider(BaseAIProvider):
                 self._client = None
 
     def supported_tasks(self) -> set[AITask]:
-        return {AITask.TRIAGE, AITask.DOCTOR_SUMMARY}  # deliberately no OCR — see supports_vision()
+        return {AITask.TRIAGE, AITask.DOCTOR_SUMMARY, AITask.MEDICINE_INFO}  # deliberately no OCR — see supports_vision()
 
     def supports_vision(self) -> bool:
         # Most Groq-hosted models (Llama text models) do not accept image

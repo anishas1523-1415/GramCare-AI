@@ -20,7 +20,7 @@ class User(Base):
     email = Column(String, unique=True, index=True)
     hashed_password = Column(String)
     full_name = Column(String)
-    role = Column(String)  # 'PATIENT', 'DOCTOR', 'PHARMACIST', 'HOSPITAL', 'ADMIN'
+    role = Column(String)  # 'PATIENT', 'DOCTOR', 'PHARMACIST', 'HOSPITAL', 'ADMIN', 'LAB'
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=_utcnow)
 
@@ -28,6 +28,7 @@ class User(Base):
     family_profiles = relationship("FamilyProfile", back_populates="user")
     doctor_profile = relationship("DoctorProfile", back_populates="user", uselist=False)
     pharmacy = relationship("Pharmacy", back_populates="owner", uselist=False)
+    lab_center = relationship("LabCenter", back_populates="owner", uselist=False)
     appointments_as_patient = relationship("Appointment", foreign_keys="[Appointment.patient_id]", back_populates="patient")
     appointments_as_doctor = relationship("Appointment", foreign_keys="[Appointment.doctor_id]", back_populates="doctor")
     push_tokens = relationship("UserPushToken", back_populates="user")
@@ -141,6 +142,11 @@ class Appointment(Base):
     scheduled_at = Column(DateTime)
     status = Column(String, default="PENDING")  # PENDING/CONFIRMED/COMPLETED/CANCELLED
     triage_summary = Column(Text, nullable=True)
+    # AI Symptom Checker severity (0-100), carried over at booking time so
+    # the doctor's queue can be risk-sorted without an AI call per
+    # appointment (planning doc: "Predictive Risk Stratification" —
+    # high-risk patients surfaced to doctor attention first).
+    triage_severity_score = Column(Integer, nullable=True)
     consultation_notes = Column(Text, nullable=True)
     # Server-side link to the verified payment that authorized this booking
     # (planning doc: fee must be paid BEFORE the call; refund if unattended).
@@ -313,6 +319,10 @@ class Pharmacy(Base):
     lng = Column(Float, nullable=True, index=True)
     phone = Column(String, nullable=True)
     is_active = Column(Boolean, default=True)
+    # Jan Aushadhi Kendra flag (planning doc: "ஜன் ஆஷாதி கேந்திராஸ் அப்படின்னு
+    # எல்லாருமே இந்த நெட்வொர்க்ல இணையலாம்") — surfaced in search results so
+    # patients can prefer low-cost, quality-assured government pharmacies.
+    is_jan_aushadhi = Column(Boolean, default=False)
     created_at = Column(DateTime, default=_utcnow)
 
     owner = relationship("User", back_populates="pharmacy")
@@ -338,6 +348,41 @@ class PharmacyItem(Base):
     pharmacy = relationship("Pharmacy", back_populates="items")
 
 
+class BatchRecall(Base):
+    """Batch Recall Alerts (planning doc): "இந்த ப்ரிஸ்கிரிப்ஷன்ல ... அப்புறம்
+    வந்து Batch Recall Alerts — கவர்மெண்ட் ஒரு மருந்து பேட்சை ரீகால் பண்ணா,
+    பார்மசிஸ்ட்களும் யூசர்களும் உடனே அலர்ட் ஆகணும்." Raised by an ADMIN
+    account (regulator/health-authority role) against a medicine name +
+    batch number; pharmacists are matched against their own inventory.
+    """
+    __tablename__ = "batch_recalls"
+
+    id = Column(Integer, primary_key=True, index=True)
+    medicine_name = Column(String, index=True)
+    batch_number = Column(String, index=True)
+    reason = Column(String)
+    issued_by_user_id = Column(Integer, ForeignKey("users.id"))
+    created_at = Column(DateTime, default=_utcnow)
+
+
+class MedicinePreorder(Base):
+    """Medicine Pre-order (planning doc): "மருந்து இல்லாட்டி பேஷன்ட்ஸ்
+    ப்ரீ-ஆர்டர் பண்ணி, ரீஸ்டாக் ஆனதும் வாங்கலாம்." A patient reserves an
+    out-of-stock medicine at a specific pharmacy; the pharmacist fulfills it
+    once restocked.
+    """
+    __tablename__ = "medicine_preorders"
+
+    id = Column(Integer, primary_key=True, index=True)
+    patient_id = Column(Integer, ForeignKey("users.id"), index=True)
+    pharmacy_id = Column(Integer, ForeignKey("pharmacies.id"), index=True)
+    medicine_name = Column(String)
+    quantity = Column(Integer, default=1)
+    status = Column(String, default="PENDING")  # PENDING / READY / FULFILLED / CANCELLED
+    created_at = Column(DateTime, default=_utcnow)
+    fulfilled_at = Column(DateTime, nullable=True)
+
+
 class Hospital(Base):
     """A hospital with an emergency desk, for SOS routing/escalation.
 
@@ -357,6 +402,59 @@ class Hospital(Base):
     created_at = Column(DateTime, default=_utcnow)
 
 
+class LabCenter(Base):
+    """A diagnostic laboratory (planning doc: "Laboratory ended up being
+    split into its own separate standalone web app" — LAB is a role like
+    PHARMACIST/HOSPITAL, one center per account, geo-indexed for nearby
+    search + home-collection routing).
+    """
+    __tablename__ = "lab_centers"
+
+    id = Column(Integer, primary_key=True, index=True)
+    owner_user_id = Column(Integer, ForeignKey("users.id"), unique=True, index=True)
+    name = Column(String)
+    address = Column(String, nullable=True)
+    lat = Column(Float, nullable=True, index=True)
+    lng = Column(Float, nullable=True, index=True)
+    phone = Column(String, nullable=True)
+    offers_home_collection = Column(Boolean, default=True)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=_utcnow)
+
+    owner = relationship("User", back_populates="lab_center")
+    bookings = relationship("LabBooking", back_populates="lab_center")
+
+
+class LabBooking(Base):
+    """Lab Test Booking and Reports (planning doc): "யூசர்ஸ் நெருங்கிய
+    லேப்களில் அல்லது ஹோம் சாம்பிள் கலெக்ஷன் மூலம் லேப் டெஸ்ட்களை
+    பதிவு செய்யலாம் ... ரிப்போர்ட் தயாராக உள்ளது என அறிவிப்பு அனுப்பப்படும்."
+
+    Status lifecycle: BOOKED -> SAMPLE_COLLECTED -> PROCESSING -> REPORT_READY
+    (report attached) -> COMPLETED (patient/doctor has viewed it), or
+    CANCELLED at any point before SAMPLE_COLLECTED.
+    """
+    __tablename__ = "lab_bookings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    patient_id = Column(Integer, ForeignKey("users.id"), index=True)
+    family_profile_id = Column(Integer, ForeignKey("family_profiles.id"), nullable=True)
+    lab_center_id = Column(Integer, ForeignKey("lab_centers.id"), index=True)
+    test_name = Column(String, index=True)
+    home_collection = Column(Boolean, default=False)
+    scheduled_at = Column(DateTime, nullable=True)
+    status = Column(String, default="BOOKED", index=True)
+    notes = Column(String, nullable=True)
+    # Structured report payload once ready: {"values": [{"parameter":..,
+    # "value":.., "unit":.., "reference_range":..}], "summary": "...",
+    # "file_url": Optional[str]}
+    report_payload = Column(JSON, nullable=True)
+    report_ready_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=_utcnow)
+
+    lab_center = relationship("LabCenter", back_populates="bookings")
+
+
 class IoTVitals(Base):
     __tablename__ = "iot_vitals"
 
@@ -367,4 +465,10 @@ class IoTVitals(Base):
     heart_rate = Column(Integer)
     spo2 = Column(Integer)
     temperature = Column(Float)
+    # Health Vitals Tracker (planning doc): "Steps Tracker, Sleep Analysis
+    # (deep sleep vs light sleep breakdown)" — logged alongside HR/SpO2 so
+    # doctors can see one combined long-term trend per patient.
+    steps = Column(Integer, nullable=True)
+    sleep_deep_hours = Column(Float, nullable=True)
+    sleep_light_hours = Column(Float, nullable=True)
     timestamp = Column(DateTime, default=_utcnow)

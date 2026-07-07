@@ -35,6 +35,10 @@ class TriageRequest(BaseModel):
     patient_id: str = Field(..., min_length=1, description="Patient identifier ('GUEST' for anonymous use)")
     age: int = Field(..., ge=0, le=150, description="Patient age")
     family_profile_id: Optional[int] = Field(None, description="Family member this analysis is for")
+    # Planning doc: text/voice input plus an OPTIONAL photo (e.g. a rash,
+    # visible wound) that the AI factors into the same severity assessment
+    # — distinct from /ocr, which reads a prescription's printed text.
+    image_base64: Optional[str] = Field(None, description="Optional base64 photo of a visible symptom")
 
 
 class TriageResponse(BaseModel):
@@ -73,6 +77,7 @@ You are an expert medical AI assistant for GramCare AI, a rural telemedicine pla
 Analyze the following symptoms for a {age}-year-old patient.
 
 Symptoms: {symptoms}
+{image_note}
 
 MULTI-LANGUAGE INSTRUCTION:
 The symptoms may be spoken or typed in a regional language (like Tamil, Hindi) or in English.
@@ -155,14 +160,32 @@ async def analyze_symptoms(
     - Enforces strict medical disclaimer
     - Persists every analysis to TriageLog (attributed when authenticated)
     """
+    image_base64 = None
+    if request.image_base64:
+        try:
+            import base64
+            image_base64 = request.image_base64
+            base64.b64decode(image_base64)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid Base64 image provided.")
+
     prompt = TRIAGE_PROMPT_TEMPLATE.format(
         age=request.age,
         symptoms=request.symptoms_text,
+        image_note=(
+            "A photo of the visible symptom (e.g. rash, wound, swelling) is "
+            "attached — factor what you see in it into severity_score, "
+            "predicted_condition, and explanation."
+            if image_base64 else ""
+        ),
     )
 
     # AIManager guarantees a result (falling all the way back to
     # MockProvider internally) — this call cannot raise for "AI is down".
-    outcome = await ai_manager.run(AITask.TRIAGE, prompt=prompt)
+    # Passing image_base64 only when actually provided keeps plain
+    # text/voice triage routable to every configured provider, including
+    # non-vision ones (Groq) — see AIManager._candidates_for.
+    outcome = await ai_manager.run(AITask.TRIAGE, prompt=prompt, image_base64=image_base64)
     data = dict(outcome.data)
 
     try:

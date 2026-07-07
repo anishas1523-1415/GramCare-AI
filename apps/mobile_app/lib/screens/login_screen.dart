@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../services/api_service.dart';
 import '../services/firebase_notification_service.dart';
 import '../services/secure_store.dart';
+import '../theme/neumorphic_colors.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -76,8 +77,9 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final neu = Theme.of(context).extension<NeumorphicColors>()!;
     return Scaffold(
-      backgroundColor: const Color(0xFFE0E5EC),
+      backgroundColor: neu.background,
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
@@ -87,20 +89,20 @@ class _LoginScreenState extends State<LoginScreen> {
               children: [
                 const Icon(Icons.health_and_safety, size: 80, color: Color(0xFF4F46E5)),
                 const SizedBox(height: 24),
-                const Text(
+                Text(
                   'GramCare AI',
-                  style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Color(0xFF2D3748)),
+                  style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: neu.foreground),
                 ),
                 const SizedBox(height: 48),
-                
+
                 // Neumorphic Input: Username
                 Container(
                   decoration: BoxDecoration(
-                    color: const Color(0xFFE0E5EC),
+                    color: neu.background,
                     borderRadius: BorderRadius.circular(16),
-                    boxShadow: const [
-                      BoxShadow(color: Color(0xFFA3B1C6), offset: Offset(4, 4), blurRadius: 8),
-                      BoxShadow(color: Color(0xFFFFFFFF), offset: Offset(-4, -4), blurRadius: 8),
+                    boxShadow: [
+                      BoxShadow(color: neu.shadowDark, offset: const Offset(4, 4), blurRadius: 8),
+                      BoxShadow(color: neu.shadowLight, offset: const Offset(-4, -4), blurRadius: 8),
                     ],
                   ),
                   child: TextField(
@@ -113,15 +115,15 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ),
                 const SizedBox(height: 24),
-                
+
                 // Neumorphic Input: Password
                 Container(
                   decoration: BoxDecoration(
-                    color: const Color(0xFFE0E5EC),
+                    color: neu.background,
                     borderRadius: BorderRadius.circular(16),
-                    boxShadow: const [
-                      BoxShadow(color: Color(0xFFA3B1C6), offset: Offset(4, 4), blurRadius: 8),
-                      BoxShadow(color: Color(0xFFFFFFFF), offset: Offset(-4, -4), blurRadius: 8),
+                    boxShadow: [
+                      BoxShadow(color: neu.shadowDark, offset: const Offset(4, 4), blurRadius: 8),
+                      BoxShadow(color: neu.shadowLight, offset: const Offset(-4, -4), blurRadius: 8),
                     ],
                   ),
                   child: TextField(
@@ -134,14 +136,14 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ),
                 ),
-                
+
                 if (_error.isNotEmpty) ...[
                   const SizedBox(height: 24),
                   Text(_error, style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
                 ],
-                
+
                 const SizedBox(height: 48),
-                
+
                 // Login Button
                 GestureDetector(
                   onTap: _isLoading ? null : _login,
@@ -151,8 +153,8 @@ class _LoginScreenState extends State<LoginScreen> {
                     decoration: BoxDecoration(
                       color: const Color(0xFF4F46E5),
                       borderRadius: BorderRadius.circular(16),
-                      boxShadow: const [
-                        BoxShadow(color: Color(0xFFA3B1C6), offset: Offset(4, 4), blurRadius: 8),
+                      boxShadow: [
+                        BoxShadow(color: neu.shadowDark, offset: const Offset(4, 4), blurRadius: 8),
                       ],
                     ),
                     child: Center(

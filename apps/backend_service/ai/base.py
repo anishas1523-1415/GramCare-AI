@@ -24,6 +24,7 @@ class AITask(str, Enum):
     TRIAGE = "triage"
     OCR = "ocr"
     DOCTOR_SUMMARY = "doctor_summary"
+    MEDICINE_INFO = "medicine_info"
 
 
 @dataclass

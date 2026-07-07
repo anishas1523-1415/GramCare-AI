@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import 'screens/dashboard_screen.dart';
@@ -12,6 +13,28 @@ import 'screens/vitals_screen.dart';
 import 'screens/reminders_screen.dart';
 import 'screens/sos_active_screen.dart';
 import 'services/secure_store.dart';
+
+/// Premium navigation (planning doc: "ஃப்ளூயிட் ட்ரான்சிஷன்ஸ்" — smooth,
+/// consistent transitions app-wide). A single shared fade+slide transition
+/// applied to every route beats one-off per-screen animation code, and
+/// keeps the feel cohesive across all modules.
+CustomTransitionPage _appPage(Widget child, GoRouterState state) {
+  return CustomTransitionPage(
+    key: state.pageKey,
+    child: child,
+    transitionDuration: const Duration(milliseconds: 320),
+    transitionsBuilder: (context, animation, secondaryAnimation, child) {
+      final curved = CurvedAnimation(parent: animation, curve: Curves.easeOutCubic);
+      return FadeTransition(
+        opacity: curved,
+        child: SlideTransition(
+          position: Tween<Offset>(begin: const Offset(0, 0.04), end: Offset.zero).animate(curved),
+          child: child,
+        ),
+      );
+    },
+  );
+}
 
 final GoRouter appRouter = GoRouter(
   initialLocation: '/',
@@ -34,50 +57,50 @@ final GoRouter appRouter = GoRouter(
   routes: [
     GoRoute(
       path: '/login',
-      builder: (context, state) => const LoginScreen(),
+      pageBuilder: (context, state) => _appPage(const LoginScreen(), state),
     ),
     GoRoute(
       path: '/',
-      builder: (context, state) => const DashboardScreen(),
+      pageBuilder: (context, state) => _appPage(const DashboardScreen(), state),
     ),
     GoRoute(
       path: '/profiles',
-      builder: (context, state) => const ProfileSelectionScreen(),
+      pageBuilder: (context, state) => _appPage(const ProfileSelectionScreen(), state),
     ),
     GoRoute(
       path: '/triage',
-      builder: (context, state) => const TriageScreen(),
+      pageBuilder: (context, state) => _appPage(const TriageScreen(), state),
     ),
     GoRoute(
       path: '/wallet',
-      builder: (context, state) => const HealthWalletScreen(),
+      pageBuilder: (context, state) => _appPage(const HealthWalletScreen(), state),
     ),
     GoRoute(
       path: '/scan',
-      builder: (context, state) => const ScanPrescriptionScreen(),
+      pageBuilder: (context, state) => _appPage(const ScanPrescriptionScreen(), state),
     ),
     GoRoute(
       path: '/pharmacy',
-      builder: (context, state) => const PharmacySearchScreen(),
+      pageBuilder: (context, state) => _appPage(const PharmacySearchScreen(), state),
     ),
     GoRoute(
       path: '/emergency-contacts',
-      builder: (context, state) => const EmergencyContactsScreen(),
+      pageBuilder: (context, state) => _appPage(const EmergencyContactsScreen(), state),
     ),
     GoRoute(
       path: '/vitals',
-      builder: (context, state) => const VitalsScreen(),
+      pageBuilder: (context, state) => _appPage(const VitalsScreen(), state),
     ),
     GoRoute(
       path: '/reminders',
-      builder: (context, state) => const RemindersScreen(),
+      pageBuilder: (context, state) => _appPage(const RemindersScreen(), state),
     ),
     GoRoute(
       path: '/sos-active',
-      builder: (context, state) {
+      pageBuilder: (context, state) {
         final lat = double.tryParse(state.uri.queryParameters['lat'] ?? '0') ?? 0;
         final lng = double.tryParse(state.uri.queryParameters['lng'] ?? '0') ?? 0;
-        return SosActiveScreen(patientLat: lat, patientLng: lng);
+        return _appPage(SosActiveScreen(patientLat: lat, patientLng: lng), state);
       },
     ),
   ],

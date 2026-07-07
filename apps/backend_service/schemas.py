@@ -10,7 +10,7 @@ class UserCreate(BaseModel):
     email: EmailStr
     password: str = Field(..., min_length=8)
     full_name: str
-    role: str = Field(..., pattern="^(PATIENT|DOCTOR|PHARMACIST|HOSPITAL|ADMIN)$")
+    role: str = Field(..., pattern="^(PATIENT|DOCTOR|PHARMACIST|HOSPITAL|ADMIN|LAB)$")
 
 class UserResponse(BaseModel):
     id: int
@@ -109,6 +109,7 @@ class AppointmentCreate(BaseModel):
     slot_id: Optional[int] = None            # book against a published slot
     scheduled_at: Optional[datetime] = None  # legacy free-time path (used when doctor has no slots)
     triage_summary: Optional[str] = None
+    triage_severity_score: Optional[int] = Field(None, ge=0, le=100)
     family_profile_id: Optional[int] = None
     # The verified payment order that authorizes this booking. Optional only
     # for free consultations (fee == 0).
@@ -126,6 +127,7 @@ class AppointmentResponse(BaseModel):
     scheduled_at: datetime
     status: str
     triage_summary: Optional[str]
+    triage_severity_score: Optional[int] = None
     consultation_notes: Optional[str]
     payment_id: Optional[int] = None
     created_at: datetime
@@ -162,6 +164,11 @@ class PrescriptionResponse(BaseModel):
     notes: Optional[str]
     is_fulfilled: bool
     created_at: datetime
+    # Populated only by POST /ehr/issue_prescription (planning doc: "Medicine
+    # Interaction Alerts" — checked against the patient's other active
+    # medicines at the moment of issuing). Not a stored column; other
+    # read paths (pharmacy queue, wallet) simply omit it.
+    interaction_warnings: Optional[List[Dict[str, Any]]] = None
 
     model_config = {"from_attributes": True}
 
@@ -231,11 +238,43 @@ class PharmacyCreate(BaseModel):
     lat: Optional[float] = Field(None, ge=-90, le=90)
     lng: Optional[float] = Field(None, ge=-180, le=180)
     phone: Optional[str] = None
+    is_jan_aushadhi: bool = False
 
 class PharmacyResponse(PharmacyCreate):
     id: int
     owner_user_id: int
     is_active: bool
+
+    model_config = {"from_attributes": True}
+
+
+class BatchRecallCreate(BaseModel):
+    medicine_name: str = Field(..., min_length=1, max_length=120)
+    batch_number: str = Field(..., min_length=1, max_length=80)
+    reason: str = Field(..., min_length=3, max_length=500)
+
+class BatchRecallResponse(BatchRecallCreate):
+    id: int
+    issued_by_user_id: int
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class MedicinePreorderCreate(BaseModel):
+    pharmacy_id: int
+    medicine_name: str = Field(..., min_length=1, max_length=120)
+    quantity: int = Field(1, ge=1, le=50)
+
+class MedicinePreorderResponse(BaseModel):
+    id: int
+    patient_id: int
+    pharmacy_id: int
+    medicine_name: str
+    quantity: int
+    status: str
+    created_at: datetime
+    fulfilled_at: Optional[datetime] = None
 
     model_config = {"from_attributes": True}
 
@@ -267,6 +306,7 @@ class NearbyPharmacyResult(BaseModel):
     substitutes: List[str] = []          # generic substitutes when unavailable
     lat: Optional[float] = None
     lng: Optional[float] = None
+    is_jan_aushadhi: bool = False        # government low-cost pharmacy badge
 
 # ==========================================
 # Emergency SOS Schemas
@@ -320,6 +360,70 @@ class TriageLogCreate(BaseModel):
 
 class TriageLogResponse(TriageLogCreate):
     id: int
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+# ==========================================
+# Laboratory Schemas
+# ==========================================
+class LabCenterCreate(BaseModel):
+    name: str = Field(..., min_length=2, max_length=120)
+    address: Optional[str] = None
+    lat: Optional[float] = Field(None, ge=-90, le=90)
+    lng: Optional[float] = Field(None, ge=-180, le=180)
+    phone: Optional[str] = None
+    offers_home_collection: bool = True
+
+class LabCenterResponse(LabCenterCreate):
+    id: int
+    owner_user_id: int
+    is_active: bool
+
+    model_config = {"from_attributes": True}
+
+class LabTestInfo(BaseModel):
+    """A catalog entry from the curated test-reference table (core/lab_tests.py)
+    — name plus patient-facing prep instructions (planning doc: "Pre-test
+    preparation instructions e.g. fasting requirements")."""
+    name: str
+    category: str
+    prep_instructions: str
+    typical_turnaround_hours: int
+    sample_type: str
+
+class LabBookingCreate(BaseModel):
+    lab_center_id: int
+    test_name: str = Field(..., min_length=2, max_length=120)
+    family_profile_id: Optional[int] = None
+    home_collection: bool = False
+    scheduled_at: Optional[datetime] = None
+    notes: Optional[str] = None
+
+class LabResultValue(BaseModel):
+    parameter: str
+    value: str
+    unit: Optional[str] = None
+    reference_range: Optional[str] = None
+    flag: Optional[str] = None  # NORMAL / LOW / HIGH — pharmacist/lab-entered
+
+class LabReportSubmit(BaseModel):
+    values: List[LabResultValue] = []
+    summary: Optional[str] = None
+    file_url: Optional[str] = None
+
+class LabBookingResponse(BaseModel):
+    id: int
+    patient_id: int
+    family_profile_id: Optional[int] = None
+    lab_center_id: int
+    test_name: str
+    home_collection: bool
+    scheduled_at: Optional[datetime] = None
+    status: str
+    notes: Optional[str] = None
+    report_payload: Optional[Dict[str, Any]] = None
+    report_ready_at: Optional[datetime] = None
     created_at: datetime
 
     model_config = {"from_attributes": True}

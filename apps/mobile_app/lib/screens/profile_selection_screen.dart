@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../models/family_profile.dart';
 import '../services/profile_service.dart';
+import '../theme/neumorphic_colors.dart';
 
 /// "Who is this for?" — big, tappable member buttons per the planning doc:
 /// one box per family member, avatar-first so low-literacy users can pick by
@@ -40,17 +41,18 @@ class _ProfileSelectionScreenState extends State<ProfileSelectionScreen> {
     required bool selected,
     required VoidCallback onTap,
   }) {
+    final neu = Theme.of(context).extension<NeumorphicColors>()!;
     return GestureDetector(
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          color: const Color(0xFFE0E5EC),
+          color: neu.background,
           borderRadius: BorderRadius.circular(20),
           border: selected ? Border.all(color: const Color(0xFF2DD4BF), width: 3) : null,
-          boxShadow: const [
-            BoxShadow(color: Color(0xFFA3B1C6), offset: Offset(4, 4), blurRadius: 8),
-            BoxShadow(color: Color(0xFFFFFFFF), offset: Offset(-4, -4), blurRadius: 8),
+          boxShadow: [
+            BoxShadow(color: neu.shadowDark, offset: const Offset(4, 4), blurRadius: 8),
+            BoxShadow(color: neu.shadowLight, offset: const Offset(-4, -4), blurRadius: 8),
           ],
         ),
         child: Column(
@@ -62,12 +64,12 @@ class _ProfileSelectionScreenState extends State<ProfileSelectionScreen> {
               label,
               textAlign: TextAlign.center,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF2D3748)),
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: neu.foreground),
             ),
             const SizedBox(height: 4),
             Text(
               sublabel,
-              style: const TextStyle(fontSize: 12, color: Color(0xFF718096)),
+              style: TextStyle(fontSize: 12, color: neu.foregroundMuted),
             ),
             if (selected) ...[
               const SizedBox(height: 8),
@@ -82,19 +84,20 @@ class _ProfileSelectionScreenState extends State<ProfileSelectionScreen> {
   @override
   Widget build(BuildContext context) {
     final service = context.watch<ProfileService>();
+    final neu = Theme.of(context).extension<NeumorphicColors>()!;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFE0E5EC),
+      backgroundColor: neu.background,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Color(0xFF2D3748)),
+          icon: Icon(Icons.arrow_back, color: neu.foreground),
           onPressed: () => context.pop(),
         ),
-        title: const Text(
+        title: Text(
           'Who is this for?',
-          style: TextStyle(color: Color(0xFF2D3748), fontWeight: FontWeight.bold),
+          style: TextStyle(color: neu.foreground, fontWeight: FontWeight.bold),
         ),
       ),
       body: SafeArea(
@@ -149,14 +152,14 @@ class _ProfileSelectionScreenState extends State<ProfileSelectionScreen> {
                     child: Container(
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: const Color(0xFFA3B1C6), width: 2),
+                        border: Border.all(color: neu.shadowDark, width: 2),
                       ),
-                      child: const Column(
+                      child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.add_circle_outline, size: 48, color: Color(0xFF718096)),
-                          SizedBox(height: 8),
-                          Text('Add member', style: TextStyle(color: Color(0xFF718096), fontWeight: FontWeight.bold)),
+                          Icon(Icons.add_circle_outline, size: 48, color: neu.foregroundMuted),
+                          const SizedBox(height: 8),
+                          Text('Add member', style: TextStyle(color: neu.foregroundMuted, fontWeight: FontWeight.bold)),
                         ],
                       ),
                     ),

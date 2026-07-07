@@ -10,6 +10,7 @@ import { FileText, CheckCircle, Clock } from 'lucide-react';
 import api from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { useProfile } from '../../contexts/ProfileContext';
+import ThemedLoader from '../../components/ThemedLoader';
 import type { Prescription } from '../../types';
 
 export default function MyPrescriptions() {
@@ -61,9 +62,7 @@ export default function MyPrescriptions() {
         {error && <p role="alert" className="text-red-500 font-semibold mb-6">{error}</p>}
 
         {loading ? (
-          <div className="flex justify-center p-10">
-            <div className="animate-spin w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full" />
-          </div>
+          <ThemedLoader variant="wallet" label="Loading your prescriptions…" />
         ) : prescriptions.length === 0 ? (
           <div className="glass-panel p-10 text-center text-gray-500">
             No prescriptions yet. They will appear here after a doctor consultation.

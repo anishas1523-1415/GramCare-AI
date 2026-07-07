@@ -10,6 +10,34 @@ export interface Pharmacy {
   lng?: number | null;
   phone?: string | null;
   is_active: boolean;
+  is_jan_aushadhi: boolean;
+}
+
+export interface InteractionWarning {
+  drug_a: string;
+  drug_b: string;
+  severity: 'HIGH' | 'MODERATE';
+  description: string;
+}
+
+export interface BatchRecall {
+  id: number;
+  medicine_name: string;
+  batch_number: string;
+  reason: string;
+  issued_by_user_id: number;
+  created_at: string;
+}
+
+export interface MedicinePreorder {
+  id: number;
+  patient_id: number;
+  pharmacy_id: number;
+  medicine_name: string;
+  quantity: number;
+  status: 'PENDING' | 'READY' | 'FULFILLED' | 'CANCELLED';
+  created_at: string;
+  fulfilled_at?: string | null;
 }
 
 export interface InventoryItem {
@@ -27,6 +55,15 @@ export interface InventoryItem {
 
 export interface ExpiringItem extends InventoryItem {
   days_left: number;
+}
+
+export interface MedicineInfo {
+  medicine_name: string;
+  purpose: string;
+  dosage_guidance: string;
+  side_effects: string;
+  precautions: string;
+  generated_by: string;
 }
 
 export interface MedicineItem {

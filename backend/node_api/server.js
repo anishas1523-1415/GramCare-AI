@@ -185,6 +185,22 @@ io.on("connection", (socket) => {
   socket.on("answer", (payload) => relayToRoom("answer", payload));
   socket.on("ice_candidate", (incoming) => relayToRoom("ice_candidate", incoming));
 
+  // Text-chat fallback for the consultation room's Adaptive Bandwidth
+  // Switching (planning doc: video -> audio -> text as network quality
+  // degrades). Room-scoped like the other signaling events; message content
+  // itself isn't persisted server-side, just relayed live.
+  socket.on("chat_message", (payload) => {
+    if (!requireAuth(socket, "chat_message")) return;
+    const roomId = payload?.roomId;
+    const text = typeof payload?.text === "string" ? payload.text.slice(0, 2000) : "";
+    if (typeof roomId !== "string" || !socket.rooms.has(roomId) || !text.trim()) return;
+    socket.to(roomId).emit("chat_message", {
+      text,
+      from: socket.user?.sub || socket.user?.id || "unknown",
+      at: new Date().toISOString(),
+    });
+  });
+
   // --- IOT VITALS STREAMING (PHASE 15) ---
   socket.on("vitals_update", (vitalsData) => {
     if (!requireAuth(socket, "vitals_update")) return;

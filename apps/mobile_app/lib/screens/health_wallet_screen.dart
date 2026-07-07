@@ -9,6 +9,7 @@ import '../services/api_service.dart';
 import '../services/app_strings.dart';
 import '../services/profile_service.dart';
 import '../services/sync_service.dart';
+import '../theme/neumorphic_colors.dart';
 
 /// Family Health Wallet — per-member, color-coded record list backed by the
 /// encrypted offline box, refreshed from the server when online.
@@ -67,19 +68,21 @@ class _HealthWalletScreenState extends State<HealthWalletScreen> {
   @override
   Widget build(BuildContext context) {
     final active = context.watch<ProfileService>().active;
+    final neu = Theme.of(context).extension<NeumorphicColors>()!;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFE0E5EC),
+      backgroundColor: neu.background,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Color(0xFF2D3748)),
+          icon: Icon(Icons.arrow_back, color: neu.foreground),
+          tooltip: 'Back',
           onPressed: () => context.pop(),
         ),
         title: Text(
           active == null ? 'My Health Wallet' : "${active.fullName}'s Wallet",
-          style: const TextStyle(color: Color(0xFF2D3748), fontWeight: FontWeight.bold),
+          style: TextStyle(color: neu.foreground, fontWeight: FontWeight.bold),
         ),
         actions: [
           IconButton(
@@ -88,7 +91,7 @@ class _HealthWalletScreenState extends State<HealthWalletScreen> {
                 ? const SizedBox(
                     width: 18, height: 18,
                     child: CircularProgressIndicator(strokeWidth: 2))
-                : const Icon(Icons.sync, color: Color(0xFF2D3748)),
+                : Icon(Icons.sync, color: neu.foreground),
             onPressed: _syncing ? null : _refresh,
           ),
         ],
@@ -111,14 +114,14 @@ class _HealthWalletScreenState extends State<HealthWalletScreen> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Icon(Icons.folder_open, size: 56, color: Color(0xFF718096)),
+                      Icon(Icons.folder_open, size: 56, color: neu.foregroundMuted),
                       const SizedBox(height: 12),
                       Text(
                         active == null
                             ? 'No records yet. Run a symptom check or scan a prescription.'
                             : 'No records for ${active.fullName} yet.',
                         textAlign: TextAlign.center,
-                        style: const TextStyle(color: Color(0xFF718096), fontSize: 16),
+                        style: TextStyle(color: neu.foregroundMuted, fontSize: 16),
                       ),
                     ],
                   ),
@@ -137,12 +140,12 @@ class _HealthWalletScreenState extends State<HealthWalletScreen> {
                   margin: const EdgeInsets.only(bottom: 16),
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFE0E5EC),
+                    color: neu.background,
                     borderRadius: BorderRadius.circular(16),
                     border: Border(left: BorderSide(color: color, width: 6)),
-                    boxShadow: const [
-                      BoxShadow(color: Color(0xFFA3B1C6), offset: Offset(4, 4), blurRadius: 8),
-                      BoxShadow(color: Color(0xFFFFFFFF), offset: Offset(-4, -4), blurRadius: 8),
+                    boxShadow: [
+                      BoxShadow(color: neu.shadowDark, offset: const Offset(4, 4), blurRadius: 8),
+                      BoxShadow(color: neu.shadowLight, offset: const Offset(-4, -4), blurRadius: 8),
                     ],
                   ),
                   child: Column(

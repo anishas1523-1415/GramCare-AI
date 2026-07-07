@@ -62,9 +62,11 @@ AndroidNotificationChannel _channelForType(String? type) {
     case 'sos_alert':
       return _emergencyChannel;
     case 'appointment_reminder':
+    case 'lab_report_ready':
       return _appointmentsChannel;
     case 'pharmacy_ready':
     case 'pharmacy_update':
+    case 'batch_recall':
       return _pharmacyChannel;
     default:
       return _generalChannel;
@@ -106,8 +108,10 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 /// closest existing screen:
 ///   sos_alert                       -> /emergency-contacts
 ///   appointment_reminder            -> /reminders
-///   doctor_message, prescription_*  -> /wallet   (Health Wallet)
+///   doctor_message, prescription_*,
+///   lab_report_ready                -> /wallet   (Health Wallet)
 ///   pharmacy_ready, pharmacy_update -> /pharmacy  (Pharmacy Search)
+///   batch_recall                    -> /  (Dashboard recall banner)
 ///   anything else / unknown         -> /  (Dashboard)
 class FirebaseNotificationService {
   static final FirebaseNotificationService _instance =
@@ -320,11 +324,17 @@ class FirebaseNotificationService {
         break;
       case 'doctor_message':
       case 'prescription_issued':
+      case 'lab_report_ready':
         appRouter.go('/wallet');
         break;
       case 'pharmacy_ready':
       case 'pharmacy_update':
         appRouter.go('/pharmacy');
+        break;
+      case 'batch_recall':
+        // The recall banner lives on the Dashboard (planning doc: patients
+        // must be alerted too, not just pharmacists) — see dashboard_screen.dart.
+        appRouter.go('/');
         break;
       default:
         appRouter.go('/');

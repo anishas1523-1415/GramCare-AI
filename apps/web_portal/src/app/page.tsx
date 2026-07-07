@@ -1,18 +1,37 @@
 "use client";
 
-import { motion } from "framer-motion";
-import { Activity, ShieldAlert, Radio } from "lucide-react";
-import { useState, useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Activity, ShieldAlert, Radio, Brain, ChevronDown, Stethoscope, Camera, X } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { io } from "socket.io-client";
 import api from "../lib/api";
 import { useProfile } from "../contexts/ProfileContext";
 
 export default function Home() {
   const { activeProfile } = useProfile();
+  const router = useRouter();
   const [symptoms, setSymptoms] = useState("");
   const [triageResult, setTriageResult] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [showExplanation, setShowExplanation] = useState(false);
+  // Optional symptom photo (planning doc: text/voice plus an optional
+  // image, e.g. a rash or visible wound, factored into the same AI
+  // severity assessment — distinct from prescription OCR).
+  const [symptomImage, setSymptomImage] = useState<{ preview: string; base64: string } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      setSymptomImage({ preview: result, base64: result.split(",")[1] });
+    };
+    reader.readAsDataURL(file);
+  };
   
   // Realtime Socket State
   const [alerts, setAlerts] = useState<any[]>([]);
@@ -62,6 +81,7 @@ export default function Home() {
     setLoading(true);
     setError("");
     setTriageResult(null);
+    setShowExplanation(false);
 
     try {
       // Connect to the FastAPI Backend (unified API)
@@ -70,6 +90,7 @@ export default function Home() {
         patient_id: "GUEST", // attribution happens server-side via the JWT when logged in
         age: activeProfile?.age ?? 30,
         family_profile_id: activeProfile?.id ?? null,
+        image_base64: symptomImage?.base64 ?? null,
       });
 
       const data = res.data;
@@ -168,13 +189,54 @@ export default function Home() {
               value={symptoms}
               onChange={(e) => setSymptoms(e.target.value)}
             />
-            
+
+            {/* Optional symptom photo */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleImageSelect}
+              className="hidden"
+            />
+            {symptomImage ? (
+              <div className="relative mb-4 rounded-xl overflow-hidden">
+                {/* eslint-disable-next-line @next/next/no-img-element -- user-selected local file preview, not a served asset */}
+                <img src={symptomImage.preview} alt="Symptom photo" className="w-full h-32 object-cover" />
+                <button
+                  onClick={() => { setSymptomImage(null); if (fileInputRef.current) fileInputRef.current.value = ""; }}
+                  className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/60 text-white flex items-center justify-center"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="w-full mb-4 py-2.5 rounded-xl border border-teal-400/50 text-teal-600 dark:text-teal-400 text-sm font-semibold flex items-center justify-center gap-2 hover:bg-teal-400/10 transition-colors"
+              >
+                <Camera size={16} /> Add a photo of the symptom (optional)
+              </button>
+            )}
+
             <button
               onClick={analyzeSymptoms}
               disabled={loading || !symptoms.trim()}
-              className="neu-button w-full py-3 bg-teal-500 text-white flex items-center justify-center disabled:opacity-50"
+              className="neu-button w-full py-3 bg-teal-500 text-white flex items-center justify-center gap-2 disabled:opacity-50"
             >
-              {loading ? <span className="animate-pulse">Analyzing...</span> : "Analyze with AI"}
+              {loading ? (
+                <>
+                  <motion.span
+                    animate={{ rotate: 360 }}
+                    transition={{ duration: 1.4, repeat: Infinity, ease: "linear" }}
+                    className="inline-flex"
+                  >
+                    <Brain size={18} />
+                  </motion.span>
+                  <span>AI is thinking…</span>
+                </>
+              ) : (
+                "Analyze with AI"
+              )}
             </button>
 
             {error && <p className="text-red-500 mt-4 text-sm font-semibold">{error}</p>}
@@ -204,6 +266,12 @@ export default function Home() {
                   <span className="font-bold">Recommendation: </span>
                   {triageResult.recommendation}
                 </div>
+                {triageResult.possible_causes && (
+                  <div className="mb-2">
+                    <span className="font-bold">Possible causes: </span>
+                    {triageResult.possible_causes}
+                  </div>
+                )}
                 {triageResult.first_aid && (
                   <div className="mb-2">
                     <span className="font-bold text-orange-600">First aid: </span>
@@ -222,12 +290,74 @@ export default function Home() {
                     {triageResult.specialist_type}
                   </div>
                 )}
+                {triageResult.untreated_outcome && (
+                  <div className="mb-2">
+                    <span className="font-bold text-red-500">If left untreated: </span>
+                    {triageResult.untreated_outcome}
+                  </div>
+                )}
+
+                {/* Explainable AI layer (planning doc: patients and doctors
+                    alike must be able to see the reasoning behind the AI's
+                    conclusion, not just the conclusion itself). */}
+                {triageResult.explanation && (
+                  <div className="mt-3 border-t border-white/20 pt-3">
+                    <button
+                      onClick={() => setShowExplanation((v) => !v)}
+                      className="w-full flex items-center justify-between text-sm font-bold text-teal-600 dark:text-teal-400"
+                    >
+                      <span className="flex items-center gap-2">
+                        <Brain size={15} /> Why does the AI think this?
+                        {typeof triageResult.confidence === "number" && (
+                          <span className="text-xs font-semibold text-gray-500">
+                            ({Math.round(triageResult.confidence * 100)}% confidence)
+                          </span>
+                        )}
+                      </span>
+                      <motion.span animate={{ rotate: showExplanation ? 180 : 0 }}>
+                        <ChevronDown size={16} />
+                      </motion.span>
+                    </button>
+                    <AnimatePresence initial={false}>
+                      {showExplanation && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: "auto", opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          className="overflow-hidden"
+                        >
+                          <p className="text-sm text-gray-600 dark:text-gray-300 mt-2">
+                            {triageResult.explanation}
+                          </p>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                )}
+
                 {triageResult.severity === 'CRITICAL' && (
                   <div className="mt-3 p-3 rounded-xl bg-red-500/15 border border-red-500/40 text-sm font-semibold text-red-600">
                     ⚠ This looks like an emergency. Call 108 or use the Emergency SOS
                     in the GramCare mobile app immediately.
                   </div>
                 )}
+
+                {/* Inter-module connection (planning doc): the specialist
+                    recommendation here feeds directly into doctor selection
+                    on the booking page, and the severity score rides along
+                    so the doctor's queue can be risk-sorted. */}
+                <button
+                  onClick={() => {
+                    const params = new URLSearchParams({ symptoms });
+                    if (triageResult.severity_score != null) params.set("severity", String(triageResult.severity_score));
+                    if (triageResult.specialist_type) params.set("specialist", triageResult.specialist_type);
+                    router.push(`/book?${params.toString()}`);
+                  }}
+                  className="neu-button w-full mt-4 py-3 bg-indigo-500 text-white font-bold rounded-xl flex items-center justify-center gap-2"
+                >
+                  <Stethoscope size={18} />
+                  {triageResult.specialist_type ? `Book a ${triageResult.specialist_type}` : "Book a Consultation"}
+                </button>
               </motion.div>
             )}
           </div>

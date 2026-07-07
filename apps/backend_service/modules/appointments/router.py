@@ -13,7 +13,7 @@ Planning doc rules implemented here:
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import update as sa_update
+from sqlalchemy import func, update as sa_update
 from sqlalchemy.orm import Session
 from typing import List
 
@@ -138,6 +138,7 @@ async def book_appointment(
         doctor_id=appointment.doctor_id,
         scheduled_at=scheduled_at,
         triage_summary=appointment.triage_summary,
+        triage_severity_score=appointment.triage_severity_score,
         status="CONFIRMED",
         payment_id=payment.id if payment else None,
     )
@@ -209,13 +210,19 @@ async def get_doctor_queue(
     ):
         raise HTTPException(status_code=403, detail="Not authorized to view this doctor's queue.")
 
+    # Predictive Risk Stratification (planning doc): high-severity patients
+    # surface first, regardless of slot order, so a doctor triages the
+    # riskiest case first rather than working strictly chronologically.
+    # Appointments with no AI severity data (walk-ins, legacy bookings)
+    # sort after any scored ones, then everything falls back to time.
+    severity_rank = func.coalesce(models.Appointment.triage_severity_score, -1)
     return (
         db.query(models.Appointment)
         .filter(
             models.Appointment.doctor_id == doctor_id,
             models.Appointment.status.in_(["PENDING", "CONFIRMED"]),
         )
-        .order_by(models.Appointment.scheduled_at)
+        .order_by(severity_rank.desc(), models.Appointment.scheduled_at)
         .all()
     )
 

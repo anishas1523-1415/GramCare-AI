@@ -1,6 +1,10 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 
@@ -9,6 +13,7 @@ import '../services/app_strings.dart';
 import '../services/profile_service.dart';
 import '../services/sos_service.dart';
 import '../services/sync_service.dart';
+import '../theme/neumorphic_colors.dart';
 
 /// AI Symptom Checker — voice-first per the planning doc ("ஆப் ஓபன் ஆனதும்
 /// அவங்க ஒரு பெரிய மைக் ஐகானை பார்க்கணும்... தமிழ்லயோ லோக்கல்
@@ -32,6 +37,10 @@ class _TriageScreenState extends State<TriageScreen> {
   bool _listening = false;
   Map<String, dynamic>? _result;
   String _error = '';
+  // Optional photo of a visible symptom (planning doc: "இமேஜும் ஆட்
+  // பண்ணலாம்") — distinct from the prescription scanner's OCR photo.
+  XFile? _symptomImage;
+  final ImagePicker _imagePicker = ImagePicker();
 
   // Module theme: teal (per-module color identity from the planning doc)
   static const _theme = Color(0xFF2DD4BF);
@@ -128,6 +137,15 @@ class _TriageScreenState extends State<TriageScreen> {
     }
   }
 
+  Future<void> _pickSymptomImage(ImageSource source) async {
+    try {
+      final img = await _imagePicker.pickImage(source: source, maxWidth: 1280, imageQuality: 75);
+      if (img != null) setState(() => _symptomImage = img);
+    } catch (_) {
+      // Camera/gallery unavailable — image stays optional, no error shown.
+    }
+  }
+
   Future<void> _analyze() async {
     if (_symptomsController.text.isEmpty) return;
     await _speech.stop();
@@ -143,6 +161,11 @@ class _TriageScreenState extends State<TriageScreen> {
     final active = context.read<ProfileService>().active;
 
     try {
+      String? imageBase64;
+      if (_symptomImage != null) {
+        final bytes = await File(_symptomImage!.path).readAsBytes();
+        imageBase64 = base64Encode(bytes);
+      }
       final response = await ApiService().client.post(
         '/triage/analyze',
         data: {
@@ -150,6 +173,7 @@ class _TriageScreenState extends State<TriageScreen> {
           'patient_id': 'self',
           'age': active?.age ?? 30,
           'family_profile_id': active?.id,
+          'image_base64': imageBase64,
         },
       );
 
@@ -200,19 +224,20 @@ class _TriageScreenState extends State<TriageScreen> {
   @override
   Widget build(BuildContext context) {
     final s = context.watch<LocaleService>();
+    final neu = Theme.of(context).extension<NeumorphicColors>()!;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFE0E5EC),
+      backgroundColor: neu.background,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Color(0xFF2D3748)),
+          icon: Icon(Icons.arrow_back, color: neu.foreground),
           onPressed: () => context.pop(),
         ),
         title: Text(
           s.t('symptom_checker'),
-          style: const TextStyle(color: Color(0xFF2D3748), fontWeight: FontWeight.bold),
+          style: TextStyle(color: neu.foreground, fontWeight: FontWeight.bold),
         ),
       ),
       body: SafeArea(
@@ -251,24 +276,24 @@ class _TriageScreenState extends State<TriageScreen> {
               Center(
                 child: Text(
                   _listening ? s.t('listening') : s.t('speak_symptoms'),
-                  style: const TextStyle(color: Color(0xFF718096), fontWeight: FontWeight.w600),
+                  style: TextStyle(color: neu.foregroundMuted, fontWeight: FontWeight.w600),
                 ),
               ),
               const SizedBox(height: 24),
 
               Text(
                 s.t('describe_symptoms'),
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF2D3748)),
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: neu.foreground),
               ),
               const SizedBox(height: 12),
 
               Container(
                 decoration: BoxDecoration(
-                  color: const Color(0xFFE0E5EC),
+                  color: neu.background,
                   borderRadius: BorderRadius.circular(16),
-                  boxShadow: const [
-                    BoxShadow(color: Color(0xFFA3B1C6), offset: Offset(4, 4), blurRadius: 8),
-                    BoxShadow(color: Color(0xFFFFFFFF), offset: Offset(-4, -4), blurRadius: 8),
+                  boxShadow: [
+                    BoxShadow(color: neu.shadowDark, offset: const Offset(4, 4), blurRadius: 8),
+                    BoxShadow(color: neu.shadowLight, offset: const Offset(-4, -4), blurRadius: 8),
                   ],
                 ),
                 child: TextField(
@@ -281,7 +306,38 @@ class _TriageScreenState extends State<TriageScreen> {
                   ),
                 ),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 16),
+
+              // Optional symptom photo (planning doc: text/voice plus an
+              // optional image — e.g. a rash or visible wound — that the AI
+              // factors into the same severity assessment).
+              if (_symptomImage == null)
+                OutlinedButton.icon(
+                  onPressed: () => _pickSymptomImage(ImageSource.camera),
+                  icon: const Icon(Icons.add_a_photo_outlined, size: 18),
+                  label: Text(s.t('add_symptom_photo')),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: _theme,
+                    side: BorderSide(color: _theme),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    minimumSize: const Size.fromHeight(0),
+                  ),
+                )
+              else
+                Stack(
+                  alignment: Alignment.topRight,
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(16),
+                      child: Image.file(File(_symptomImage!.path), height: 140, width: double.infinity, fit: BoxFit.cover),
+                    ),
+                    IconButton(
+                      icon: const CircleAvatar(backgroundColor: Colors.black54, child: Icon(Icons.close, color: Colors.white, size: 18)),
+                      onPressed: () => setState(() => _symptomImage = null),
+                    ),
+                  ],
+                ),
+              const SizedBox(height: 16),
 
               GestureDetector(
                 onTap: _isLoading ? null : _analyze,
@@ -291,8 +347,8 @@ class _TriageScreenState extends State<TriageScreen> {
                   decoration: BoxDecoration(
                     color: _theme,
                     borderRadius: BorderRadius.circular(16),
-                    boxShadow: const [
-                      BoxShadow(color: Color(0xFFA3B1C6), offset: Offset(4, 4), blurRadius: 8),
+                    boxShadow: [
+                      BoxShadow(color: neu.shadowDark, offset: const Offset(4, 4), blurRadius: 8),
                     ],
                   ),
                   child: Center(
@@ -357,6 +413,47 @@ class _TriageScreenState extends State<TriageScreen> {
                       _resultRow(s.t('untreated_outcome'), _result!['untreated_outcome'] as String?),
                       _resultRow(s.t('specialist'), _result!['specialist_type'] as String?, color: const Color(0xFF4F46E5)),
                       _resultRow(s.t('recovery_time'), _result!['recovery_time'] as String?),
+                      _resultRow(s.t('side_effects'), _result!['side_effects'] as String?, color: Colors.deepOrange),
+                      // Explainable AI layer (planning doc): the reasoning
+                      // behind the AI's conclusion must be visible, not just
+                      // the conclusion — collapsed by default to keep the
+                      // primary result scannable for rural/low-literacy users.
+                      if ((_result!['explanation'] as String?)?.isNotEmpty == true) ...[
+                        const Divider(height: 28),
+                        Theme(
+                          data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                          child: ExpansionTile(
+                            tilePadding: EdgeInsets.zero,
+                            childrenPadding: const EdgeInsets.only(bottom: 8),
+                            title: Row(
+                              children: [
+                                const Icon(Icons.psychology_alt_outlined, size: 18, color: _theme),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    s.t('why_ai_thinks_this'),
+                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                  ),
+                                ),
+                                if (_result!['confidence_score'] != null)
+                                  Text(
+                                    '${(((_result!['confidence_score'] as num).toDouble()) * 100).round()}%',
+                                    style: const TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.w600),
+                                  ),
+                              ],
+                            ),
+                            children: [
+                              Align(
+                                alignment: Alignment.centerLeft,
+                                child: Text(
+                                  _result!['explanation'] as String,
+                                  style: const TextStyle(fontSize: 14, color: Color(0xFF2D3748)),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                       if ((_result!['disclaimer'] as String?)?.isNotEmpty == true) ...[
                         const Divider(height: 28),
                         Text(

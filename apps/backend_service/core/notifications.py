@@ -112,3 +112,23 @@ class NotificationService:
             body=f"You have an upcoming appointment with {doctor_name} at {time_str}.",
             data={"type": "appointment_reminder"}
         )
+
+    def notify_lab_report_ready(self, user_id: int, test_name: str):
+        self.send_notification(
+            user_id=user_id,
+            title="Lab Report Ready",
+            body=f"Your {test_name} report is ready to view.",
+            data={"type": "lab_report_ready"}
+        )
+
+    def notify_batch_recall(self, user_id: int, medicine_name: str, is_pharmacist: bool):
+        self.send_notification(
+            user_id=user_id,
+            title="Medicine Recall Alert",
+            body=(
+                f"{medicine_name} has been recalled — check your stock and stop dispensing this batch."
+                if is_pharmacist else
+                f"{medicine_name}, which you were prescribed, has been recalled. Please check with your pharmacist."
+            ),
+            data={"type": "batch_recall", "medicine_name": medicine_name}
+        )

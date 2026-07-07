@@ -4,6 +4,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import 'package:speech_to_text/speech_to_text.dart' as stt;
 
 import '../services/api_service.dart';
 import '../services/app_strings.dart';
@@ -12,6 +13,7 @@ import '../services/profile_service.dart';
 import '../services/secure_store.dart';
 import '../services/sos_service.dart';
 import '../services/sync_service.dart';
+import '../theme/neumorphic_colors.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -24,6 +26,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool _sosInFlight = false;
   double _holdProgress = 0;
   Timer? _holdTimer;
+  final stt.SpeechToText _sosSpeech = stt.SpeechToText();
+  String _sosVoiceNote = '';
+  List<Map<String, dynamic>> _recallAlerts = [];
 
   static const _holdDuration = Duration(seconds: 3);
 
@@ -52,12 +57,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
       } catch (_) {
         await SyncService().pushUnsynced();
       }
+      _loadRecallAlerts();
     });
+  }
+
+  // Batch Recall Alerts (planning doc): "பார்மசிஸ்ட்களும் யூசர்களும் உடனே
+  // அலர்ட் ஆகணும்" — patients must be alerted too, not just pharmacists.
+  Future<void> _loadRecallAlerts() async {
+    try {
+      final res = await ApiService().client.get('/pharmacy/recalls/affecting-me');
+      if (mounted) setState(() => _recallAlerts = List<Map<String, dynamic>>.from(res.data as List));
+    } catch (_) {
+      // Silent — this is a supplementary alert, not core dashboard function.
+    }
   }
 
   @override
   void dispose() {
     _holdTimer?.cancel();
+    _sosSpeech.stop();
     super.dispose();
   }
 
@@ -71,12 +89,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   // --- Hold-to-activate SOS (planning doc: "Hold for 3 seconds" guard
   // against accidental / child presses) --------------------------------
+  //
+  // The planning doc also asks the AI Voice Assistant to ask "what
+  // happened?" and bundle the on-device transcription into the alert
+  // ("அந்த வாய்ஸை டெக்ஸ்டா மாத்தி ... அலர்ட்டோட சேர்த்து அனுப்பும்") — but
+  // a medical SOS "must happen in a fraction of a second", so we don't ask
+  // a separate question and wait. Instead, listening starts the instant the
+  // hold begins and runs concurrently with the 3-second accidental-press
+  // guard; whatever's been said by the time the hold completes rides along
+  // as the voice note, at zero added latency.
   void _startHold() {
     if (_sosInFlight) return;
     final s = context.read<LocaleService>();
     ScaffoldMessenger.of(context).hideCurrentSnackBar();
     const tick = Duration(milliseconds: 100);
     int elapsed = 0;
+    _sosVoiceNote = '';
+    _listenForSosNote(s);
     _holdTimer?.cancel();
     _holdTimer = Timer.periodic(tick, (timer) {
       elapsed += tick.inMilliseconds;
@@ -88,12 +117,30 @@ class _DashboardScreenState extends State<DashboardScreen> {
       }
     });
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(s.t('hold_to_sos')), duration: _holdDuration),
+      SnackBar(content: Text(s.t('hold_to_sos_listening')), duration: _holdDuration),
     );
+  }
+
+  Future<void> _listenForSosNote(LocaleService s) async {
+    try {
+      final available = await _sosSpeech.initialize();
+      if (!available || !mounted) return;
+      await _sosSpeech.listen(
+        listenOptions: stt.SpeechListenOptions(
+          partialResults: true,
+          localeId: s.isTamil ? 'ta-IN' : 'en-IN',
+        ),
+        onResult: (result) => _sosVoiceNote = result.recognizedWords,
+      );
+    } catch (_) {
+      // Never let a mic/permission failure block the emergency flow.
+    }
   }
 
   void _cancelHold() {
     _holdTimer?.cancel();
+    _sosSpeech.stop();
+    _sosVoiceNote = '';
     if (_holdProgress > 0) setState(() => _holdProgress = 0);
   }
 
@@ -102,8 +149,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
     setState(() => _sosInFlight = true);
     final s = context.read<LocaleService>();
     final activeProfile = context.read<ProfileService>().active;
+    await _sosSpeech.stop();
 
-    final result = await SosService().trigger(familyProfileId: activeProfile?.id);
+    final result = await SosService().trigger(
+      familyProfileId: activeProfile?.id,
+      voiceNote: _sosVoiceNote.isNotEmpty ? _sosVoiceNote : null,
+    );
 
     if (!mounted) return;
     if (result.sent) {
@@ -136,6 +187,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget build(BuildContext context) {
     final profiles = context.watch<ProfileService>();
     final s = context.watch<LocaleService>();
+    final neu = Theme.of(context).extension<NeumorphicColors>()!;
 
     return Scaffold(
       body: SafeArea(
@@ -168,10 +220,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     children: [
                       Text(
                         s.t('app_title'),
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 28,
                           fontWeight: FontWeight.w900,
-                          color: Color(0xFF2D3748),
+                          color: neu.foreground,
                           letterSpacing: -1,
                         ),
                       ),
@@ -201,11 +253,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFE0E5EC),
+                        color: neu.background,
                         borderRadius: BorderRadius.circular(30),
-                        boxShadow: const [
-                          BoxShadow(color: Color(0xFFA3B1C6), offset: Offset(3, 3), blurRadius: 6),
-                          BoxShadow(color: Color(0xFFFFFFFF), offset: Offset(-3, -3), blurRadius: 6),
+                        boxShadow: [
+                          BoxShadow(color: neu.shadowDark, offset: const Offset(3, 3), blurRadius: 6),
+                          BoxShadow(color: neu.shadowLight, offset: const Offset(-3, -3), blurRadius: 6),
                         ],
                       ),
                       child: Row(
@@ -225,15 +277,52 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             profiles.active == null
                                 ? s.t('acting_for_self')
                                 : '${s.t('acting_for')}: ${profiles.active!.fullName}',
-                            style: const TextStyle(
-                                fontWeight: FontWeight.bold, color: Color(0xFF2D3748)),
+                            style: TextStyle(
+                                fontWeight: FontWeight.bold, color: neu.foreground),
                           ),
                           const SizedBox(width: 6),
-                          const Icon(Icons.swap_horiz, size: 18, color: Color(0xFF718096)),
+                          Icon(Icons.swap_horiz, size: 18, color: neu.foregroundMuted),
                         ],
                       ),
                     ),
                   ),
+
+                  if (_recallAlerts.isNotEmpty) ...[
+                    const SizedBox(height: 16),
+                    ..._recallAlerts.map((r) => Container(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: Colors.red.shade50,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: Colors.red.shade300),
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Icon(Icons.warning_amber_rounded, color: Colors.red.shade700, size: 22),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      '${s.t('medicine_recall_alert')}: ${r['medicine_name']}',
+                                      style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red.shade800, fontSize: 13),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      r['reason'] as String? ?? '',
+                                      style: TextStyle(color: Colors.red.shade700, fontSize: 12),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        )),
+                  ],
+
                   const SizedBox(height: 32),
 
                   Expanded(
@@ -315,8 +404,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
           decoration: BoxDecoration(
             color: Colors.red,
             borderRadius: BorderRadius.circular(30),
-            boxShadow: const [
-              BoxShadow(color: Color(0xFFA3B1C6), offset: Offset(4, 4), blurRadius: 8),
+            boxShadow: [
+              BoxShadow(color: neu.shadowDark, offset: const Offset(4, 4), blurRadius: 8),
             ],
           ),
           child: Row(
@@ -360,13 +449,14 @@ class NeumorphicCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final neu = Theme.of(context).extension<NeumorphicColors>()!;
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFFE0E5EC),
+        color: neu.background,
         borderRadius: BorderRadius.circular(24),
-        boxShadow: const [
-          BoxShadow(color: Color(0xFFA3B1C6), offset: Offset(8, 8), blurRadius: 16),
-          BoxShadow(color: Color(0xFFFFFFFF), offset: Offset(-8, -8), blurRadius: 16),
+        boxShadow: [
+          BoxShadow(color: neu.shadowDark, offset: const Offset(8, 8), blurRadius: 16),
+          BoxShadow(color: neu.shadowLight, offset: const Offset(-8, -8), blurRadius: 16),
         ],
       ),
       child: Column(
@@ -374,12 +464,12 @@ class NeumorphicCard extends StatelessWidget {
         children: [
           Container(
             padding: const EdgeInsets.all(16),
-            decoration: const BoxDecoration(
-              color: Color(0xFFE0E5EC),
+            decoration: BoxDecoration(
+              color: neu.background,
               shape: BoxShape.circle,
               boxShadow: [
-                BoxShadow(color: Color(0xFFA3B1C6), offset: Offset(4, 4), blurRadius: 8),
-                BoxShadow(color: Color(0xFFFFFFFF), offset: Offset(-4, -4), blurRadius: 8),
+                BoxShadow(color: neu.shadowDark, offset: const Offset(4, 4), blurRadius: 8),
+                BoxShadow(color: neu.shadowLight, offset: const Offset(-4, -4), blurRadius: 8),
               ],
             ),
             child: Icon(icon, size: 32, color: iconColor),
@@ -390,10 +480,10 @@ class NeumorphicCard extends StatelessWidget {
             child: Text(
               title,
               textAlign: TextAlign.center,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.bold,
-                color: Color(0xFF2D3748),
+                color: neu.foreground,
               ),
             ),
           ),

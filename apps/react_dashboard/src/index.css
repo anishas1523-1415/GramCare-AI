@@ -4,10 +4,30 @@
   --primary: #10b981;
   --neu-light: #ffffff;
   --neu-dark: #a3b1c6;
-  
+
   --glass-bg: rgba(255, 255, 255, 0.4);
   --glass-border: rgba(255, 255, 255, 0.6);
   --glass-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.1);
+}
+
+/* Dark mode (planning doc UI/UX requirement) — this dashboard previously
+   had no dark theme at all, unlike web_portal/lab_portal. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #16211c;
+    --foreground: #e2e8f0;
+    --neu-light: #223027;
+    --neu-dark: #0c1310;
+
+    --glass-bg: rgba(16, 27, 21, 0.5);
+    --glass-border: rgba(255, 255, 255, 0.1);
+    --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.35);
+  }
+
+  .inventory-table td {
+    background: var(--background);
+    color: var(--foreground);
+  }
 }
 
 body {
@@ -17,6 +37,21 @@ body {
   background-color: var(--background);
   color: var(--foreground);
   font-family: 'Inter', system-ui, Avenir, Helvetica, Arial, sans-serif;
+}
+
+:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 .neo-glass-container {
@@ -44,8 +79,14 @@ body {
   transition: all 0.2s ease-in-out;
 }
 
+.neu-button:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.03);
+}
+
 .neu-button:active {
   box-shadow: inset 5px 5px 10px var(--neu-dark), inset -5px -5px 10px var(--neu-light);
+  transform: translateY(0) scale(0.98);
 }
 
 .glass-panel {

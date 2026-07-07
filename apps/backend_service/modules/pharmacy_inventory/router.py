@@ -13,10 +13,11 @@ Planning-doc features implemented here:
   pharmacy fulfilled it.
 """
 import math
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -25,8 +26,13 @@ import schemas
 from database import get_db
 from modules.auth.router import get_current_user, require_role
 from core.maps import maps_client
+from core.drug_interactions import check_interactions
+from core.ratelimit import rate_limit
+from core.notifications import NotificationService
+from ai import AITask, get_ai_manager
 
 router = APIRouter()
+ai_manager = get_ai_manager()
 
 
 # ==========================================================
@@ -338,12 +344,228 @@ async def fulfill_prescription(
     prescription.fulfilled_by_pharmacy_id = pharmacy.id
     db.commit()
 
+    names = [ (med.get("name") or "").strip() for med in (prescription.medicines or []) ]
+    interaction_warnings = check_interactions(names)
+
     return {
         "message": "Prescription marked as fulfilled",
         "id": prescription.id,
         "stock_decremented": decremented,
         "not_in_your_stock": missing,
+        "interaction_warnings": interaction_warnings,
     }
+
+
+# ==========================================================
+# Medicine Interaction Alerts (planning doc, standalone check)
+# ==========================================================
+
+class InteractionCheckRequest(BaseModel):
+    medicines: List[str]
+
+
+@router.post("/interactions/check")
+async def check_medicine_interactions(
+    body: InteractionCheckRequest,
+    current_user: models.User = Depends(get_current_user),
+):
+    """Ad-hoc interaction check for any list of medicine names — usable by
+    the pharmacist (fulfillment screen), the doctor (prescription writer),
+    or the patient app (medication list) alike."""
+    return {"warnings": check_interactions(body.medicines)}
+
+
+# ==========================================================
+# Batch Recall Alerts
+# ==========================================================
+
+@router.post("/recalls", response_model=schemas.BatchRecallResponse, status_code=201)
+async def issue_batch_recall(
+    body: schemas.BatchRecallCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_role("ADMIN")),
+):
+    """Government/regulator issues a recall for a medicine batch. Both the
+    pull-based GET /recalls/mine (pharmacist) / GET /recalls/affecting-me
+    (patient) endpoints AND an immediate push notification cover the
+    planning doc's "பார்மசிஸ்ட்களும் யூசர்களும் உடனே அலர்ட் ஆகணும்" —
+    pharmacists AND patients must be alerted right away, not just whenever
+    they next happen to open the app."""
+    recall = models.BatchRecall(issued_by_user_id=current_user.id, **body.model_dump())
+    db.add(recall)
+    db.commit()
+    db.refresh(recall)
+
+    notifier = NotificationService(db)
+    try:
+        pharmacist_ids = {
+            p.owner_user_id
+            for p in (
+                db.query(models.Pharmacy)
+                .join(models.PharmacyItem, models.PharmacyItem.pharmacy_id == models.Pharmacy.id)
+                .filter(
+                    func.lower(models.PharmacyItem.medicine_name) == recall.medicine_name.lower(),
+                    func.lower(models.PharmacyItem.batch_number) == recall.batch_number.lower(),
+                )
+                .all()
+            )
+        }
+        for pharmacist_id in pharmacist_ids:
+            notifier.notify_batch_recall(pharmacist_id, recall.medicine_name, is_pharmacist=True)
+
+        patient_ids = {
+            rx.patient_id
+            for rx in db.query(models.Prescription).all()
+            if any(
+                (med.get("name") or "").strip().lower() == recall.medicine_name.lower()
+                for med in (rx.medicines or [])
+            )
+        }
+        for patient_id in patient_ids:
+            notifier.notify_batch_recall(patient_id, recall.medicine_name, is_pharmacist=False)
+    except Exception:
+        pass  # notification failure must never block the recall itself
+
+    return recall
+
+
+@router.get("/recalls/mine", response_model=List[schemas.BatchRecallResponse])
+async def my_pharmacy_recalls(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_role("PHARMACIST")),
+):
+    """Active recalls that match a batch number currently in the caller's
+    own inventory."""
+    pharmacy = _my_pharmacy(current_user, db)
+    my_batches = {
+        (i.medicine_name.lower(), (i.batch_number or "").lower())
+        for i in db.query(models.PharmacyItem).filter(
+            models.PharmacyItem.pharmacy_id == pharmacy.id,
+            models.PharmacyItem.batch_number != None,  # noqa: E711
+        )
+    }
+    if not my_batches:
+        return []
+    recalls = db.query(models.BatchRecall).order_by(models.BatchRecall.created_at.desc()).all()
+    return [
+        r for r in recalls
+        if (r.medicine_name.lower(), r.batch_number.lower()) in my_batches
+    ]
+
+
+@router.get("/recalls/affecting-me", response_model=List[schemas.BatchRecallResponse])
+async def recalls_affecting_me(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_role("PATIENT")),
+):
+    """Active recalls matching a medicine the caller has actually been
+    prescribed (planning doc: recalls must reach "பார்மசிஸ்ட்களும்
+    யூசர்களும்" — pharmacists AND patients, not pharmacists alone).
+
+    Matched by medicine name only: prescriptions don't carry a batch number
+    (that's a pharmacy-inventory concept, set at dispense time), so this is
+    a name-level "you were prescribed this drug, and some batch of it was
+    just recalled" alert rather than a batch-exact one — still actionable,
+    since it tells the patient to check their own strip/bottle.
+    """
+    prescriptions = (
+        db.query(models.Prescription)
+        .filter(models.Prescription.patient_id == current_user.id)
+        .all()
+    )
+    my_medicine_names = {
+        (med.get("name") or "").strip().lower()
+        for rx in prescriptions
+        for med in (rx.medicines or [])
+        if med.get("name")
+    }
+    if not my_medicine_names:
+        return []
+    recalls = db.query(models.BatchRecall).order_by(models.BatchRecall.created_at.desc()).all()
+    return [r for r in recalls if r.medicine_name.lower() in my_medicine_names]
+
+
+# ==========================================================
+# Medicine Pre-order
+# ==========================================================
+
+@router.post(
+    "/preorders",
+    response_model=schemas.MedicinePreorderResponse,
+    status_code=201,
+    dependencies=[Depends(rate_limit("preorder", 20, 300))],
+)
+async def create_preorder(
+    body: schemas.MedicinePreorderCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_role("PATIENT")),
+):
+    """Patient reserves an out-of-stock medicine at a specific pharmacy
+    ("மருந்து இல்லாட்டி பேஷன்ட்ஸ் ப்ரீ-ஆர்டர் பண்ணி, ரீஸ்டாக் ஆனதும்
+    வாங்கலாம்")."""
+    pharmacy = db.query(models.Pharmacy).filter(models.Pharmacy.id == body.pharmacy_id).first()
+    if not pharmacy:
+        raise HTTPException(status_code=404, detail="Pharmacy not found")
+    preorder = models.MedicinePreorder(patient_id=current_user.id, **body.model_dump())
+    db.add(preorder)
+    db.commit()
+    db.refresh(preorder)
+    return preorder
+
+
+@router.get("/preorders/mine", response_model=List[schemas.MedicinePreorderResponse])
+async def my_preorders(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_role("PATIENT")),
+):
+    return (
+        db.query(models.MedicinePreorder)
+        .filter(models.MedicinePreorder.patient_id == current_user.id)
+        .order_by(models.MedicinePreorder.created_at.desc())
+        .all()
+    )
+
+
+@router.get("/preorders", response_model=List[schemas.MedicinePreorderResponse])
+async def pharmacy_preorders(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_role("PHARMACIST")),
+):
+    """Pending pre-orders placed against the caller's own pharmacy."""
+    pharmacy = _my_pharmacy(current_user, db)
+    return (
+        db.query(models.MedicinePreorder)
+        .filter(
+            models.MedicinePreorder.pharmacy_id == pharmacy.id,
+            models.MedicinePreorder.status.in_(["PENDING", "READY"]),
+        )
+        .order_by(models.MedicinePreorder.created_at.desc())
+        .all()
+    )
+
+
+@router.put("/preorders/{preorder_id}/fulfill", response_model=schemas.MedicinePreorderResponse)
+async def fulfill_preorder(
+    preorder_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_role("PHARMACIST")),
+):
+    pharmacy = _my_pharmacy(current_user, db)
+    preorder = (
+        db.query(models.MedicinePreorder)
+        .filter(
+            models.MedicinePreorder.id == preorder_id,
+            models.MedicinePreorder.pharmacy_id == pharmacy.id,
+        )
+        .first()
+    )
+    if not preorder:
+        raise HTTPException(status_code=404, detail="Pre-order not found")
+    preorder.status = "FULFILLED"
+    preorder.fulfilled_at = datetime.utcnow()
+    db.commit()
+    db.refresh(preorder)
+    return preorder
 
 
 # ==========================================================
@@ -484,8 +706,57 @@ async def search_medicine(
             substitutes=substitutes,
             lat=pharmacy.lat,
             lng=pharmacy.lng,
+            is_jan_aushadhi=pharmacy.is_jan_aushadhi,
         ))
 
     # Available first, then nearest
     results.sort(key=lambda r: (not r.available, r.distance_km if r.distance_km is not None else 1e9))
     return results
+
+
+# ==========================================================
+# Medicine Information Assistant
+# ==========================================================
+
+class MedicineInfo(BaseModel):
+    medicine_name: str
+    purpose: str
+    dosage_guidance: str
+    side_effects: str
+    precautions: str = ""
+    generated_by: str  # 'gemini' | 'openai' | ... | 'mock'
+
+
+@router.get("/medicine-info", response_model=MedicineInfo)
+async def medicine_info(
+    medicine: str = Query(..., min_length=2, max_length=120),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Explains a scanned/typed medicine — what it's for, dosage guidance,
+    and side effects (planning doc: "பார்மசிஸ்ட்களோ இல்ல பேஷன்ட்ஸோ
+    மருந்துச் சீட்டை ஸ்கேன் பண்ணா, அந்த மருந்து எதற்காகப் பயன்படுது,
+    டோசேஜ் என்ன, சைடு எஃபெக்ட்ஸ் என்னன்னு ஆப்ல சொல்லும்"). Usable by both
+    the patient app (after OCR-scanning a prescription) and the pharmacist
+    dashboard (fulfillment screen)."""
+    prompt = (
+        "You are a medical information assistant. For the medicine named "
+        f'"{medicine}", respond ONLY with JSON in this exact shape: '
+        '{"purpose": "<what it treats, 1-2 plain-language sentences>", '
+        '"dosage_guidance": "<general dosage guidance — always tell the '
+        'reader to follow their prescription/pharmacist, do not invent a '
+        'specific mg amount>", '
+        '"side_effects": "<common side effects to watch for>", '
+        '"precautions": "<key precautions, e.g. interactions or conditions '
+        'to be careful with, empty string if none notable>"}. '
+        "This is for patient education only, not a substitute for medical advice."
+    )
+    outcome = await ai_manager.run(AITask.MEDICINE_INFO, prompt=prompt)
+    data = outcome.data or {}
+    return MedicineInfo(
+        medicine_name=medicine,
+        purpose=str(data.get("purpose", "")),
+        dosage_guidance=str(data.get("dosage_guidance", "")),
+        side_effects=str(data.get("side_effects", "")),
+        precautions=str(data.get("precautions", "")),
+        generated_by=outcome.provider_used,
+    )

@@ -11,6 +11,7 @@ import 'services/app_strings.dart';
 import 'services/firebase_notification_service.dart';
 import 'services/profile_service.dart';
 import 'services/secure_store.dart';
+import 'theme/neumorphic_colors.dart';
 
 void main() async {
   // runZonedGuarded, not a plain try/catch around main()'s body: this also
@@ -79,7 +80,17 @@ class GramCareApp extends StatelessWidget {
         primaryColor: const Color(0xFF4F46E5),
         fontFamily: 'Inter',
         useMaterial3: true,
+        extensions: const [NeumorphicColors.light],
       ),
+      darkTheme: ThemeData(
+        scaffoldBackgroundColor: NeumorphicColors.dark.background,
+        primaryColor: const Color(0xFF4F46E5),
+        fontFamily: 'Inter',
+        useMaterial3: true,
+        brightness: Brightness.dark,
+        extensions: const [NeumorphicColors.dark],
+      ),
+      themeMode: ThemeMode.system,
       routerConfig: appRouter,
     );
   }

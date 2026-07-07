@@ -127,3 +127,62 @@ def test_search_availability_and_substitutes(client, patient_token):
     subs = client.get("/api/v1/pharmacy/substitutes", headers=auth(patient_token),
                       params={"medicine": "Calpol 650"}).json()
     assert any(s["name"] == "Dolo 650" for s in subs)
+
+
+def test_batch_recall_alerts_reach_both_pharmacist_and_patient(client):
+    """Planning doc: recalls must reach "பார்மசிஸ்ட்களும் யூசர்களும்" —
+    pharmacists AND patients, not pharmacists alone."""
+    pharma_token, pharmacy_id = _setup_pharmacy(client, "p5_recall_pharma")
+    client.post("/api/v1/pharmacy/items", headers=auth(pharma_token), json={
+        "medicine_name": "Ranitidine 150mg",
+        "stock_count": 20,
+        "batch_number": "BATCH-XYZ-1",
+    })
+
+    admin_token = _register_and_login(client, "p5_recall_admin", "ADMIN")
+    issued = client.post("/api/v1/pharmacy/recalls", headers=auth(admin_token), json={
+        "medicine_name": "Ranitidine 150mg",
+        "batch_number": "BATCH-XYZ-1",
+        "reason": "Impurity detected above safety threshold",
+    })
+    assert issued.status_code == 201, issued.text
+
+    # Reaches the pharmacist holding that exact batch
+    pharma_recalls = client.get("/api/v1/pharmacy/recalls/mine", headers=auth(pharma_token)).json()
+    assert any(r["medicine_name"] == "Ranitidine 150mg" for r in pharma_recalls)
+
+    # Reaches a patient who was prescribed that medicine (name-level match)
+    patient_token = _register_and_login(client, "p5_recall_patient", "PATIENT")
+    me = client.get("/api/v1/auth/me", headers=auth(patient_token)).json()
+    doctor_token = _register_and_login(client, "p5_recall_doctor", "DOCTOR")
+    rx = client.post("/api/v1/ehr/issue_prescription", headers=auth(doctor_token), json={
+        "patient_id": me["id"],
+        "medicines": [{"name": "Ranitidine 150mg", "dosage": "150mg",
+                       "frequency": "1-0-1", "duration": "10 days"}],
+        "diagnosis": "Acid reflux",
+    })
+    assert rx.status_code == 200, rx.text
+
+    affecting_me = client.get("/api/v1/pharmacy/recalls/affecting-me", headers=auth(patient_token)).json()
+    assert any(r["medicine_name"] == "Ranitidine 150mg" for r in affecting_me)
+
+    # A patient never prescribed it sees nothing
+    other_patient = _register_and_login(client, "p5_recall_unaffected", "PATIENT")
+    unaffected = client.get("/api/v1/pharmacy/recalls/affecting-me", headers=auth(other_patient)).json()
+    assert unaffected == []
+
+
+def test_medicine_info_assistant(client):
+    """Medicine Information Assistant — provider-agnostic assertions since
+    a dev environment's real (non-Gemini) AI keys may legitimately answer
+    this instead of the mock fallback (same philosophy as
+    test_triage_mock_persists_log)."""
+    token = _register_and_login(client, "p5_info_patient", "PATIENT")
+    res = client.get("/api/v1/pharmacy/medicine-info", headers=auth(token),
+                     params={"medicine": "Paracetamol 500mg"})
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["medicine_name"] == "Paracetamol 500mg"
+    assert body["purpose"]
+    assert body["dosage_guidance"]
+    assert body["generated_by"]

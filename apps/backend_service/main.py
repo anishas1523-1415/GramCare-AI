@@ -23,6 +23,7 @@ from modules.family.router import router as family_router
 from modules.doctors.router import router as doctors_router
 from modules.ai_assist.router import router as ai_assist_router
 from modules.analytics.router import router as analytics_router
+from modules.lab.router import router as lab_router
 
 
 async def _sos_escalation_loop():
@@ -86,6 +87,7 @@ app.include_router(family_router, prefix="/api/v1/family", tags=["Family Profile
 app.include_router(doctors_router, prefix="/api/v1/doctors", tags=["Doctor Directory"])
 app.include_router(ai_assist_router, prefix="/api/v1/assist", tags=["AI Doctor Assistant"])
 app.include_router(analytics_router, prefix="/api/v1/analytics", tags=["Community Health Intelligence"])
+app.include_router(lab_router, prefix="/api/v1/lab", tags=["Laboratory"])
 
 
 
