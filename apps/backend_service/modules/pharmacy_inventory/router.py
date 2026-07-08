@@ -29,6 +29,7 @@ from core.maps import maps_client
 from core.drug_interactions import check_interactions
 from core.ratelimit import rate_limit
 from core.notifications import NotificationService
+from core.cloudinary_service import cloudinary_client
 from ai import AITask, get_ai_manager
 
 router = APIRouter()
@@ -391,7 +392,20 @@ async def issue_batch_recall(
     planning doc's "பார்மசிஸ்ட்களும் யூசர்களும் உடனே அலர்ட் ஆகணும்" —
     pharmacists AND patients must be alerted right away, not just whenever
     they next happen to open the app."""
-    recall = models.BatchRecall(issued_by_user_id=current_user.id, **body.model_dump())
+    notice_url = None
+    if body.notice_base64:
+        uploaded = cloudinary_client.upload_base64(
+            body.notice_base64, folder="gramcare/recall_notices", resource_type="auto"
+        )
+        if not uploaded:
+            raise HTTPException(status_code=503, detail="Notice upload is temporarily unavailable.")
+        notice_url = uploaded["url"]
+
+    recall = models.BatchRecall(
+        issued_by_user_id=current_user.id,
+        **body.model_dump(exclude={"notice_base64"}),
+        notice_url=notice_url,
+    )
     db.add(recall)
     db.commit()
     db.refresh(recall)

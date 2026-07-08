@@ -82,6 +82,8 @@ razorpay==1.4.2
 # Image Processing & OCR
 # NEW exact pin (dependency audit) — was previously unpinned.
 Pillow==12.3.0
+cloudinary==1.41.0
+filetype==1.2.0
 
 # Environment
 python-dotenv==1.1.1

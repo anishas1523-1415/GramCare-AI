@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 import models
 from ai import AITask, get_ai_manager
 from core.ratelimit import rate_limit
+from core.cloudinary_service import cloudinary_client
 from database import get_db
 from modules.auth.router import get_current_user_optional
 
@@ -61,6 +62,9 @@ class TriageResponse(BaseModel):
     specialist_type: str = ""       # e.g. Dermatologist, Cardiologist, General Physician
     language_detected: str = ""
     disclaimer: str
+    # Cloudinary URL of the submitted symptom photo, if one was provided and
+    # storage is configured — None otherwise (never blocks the analysis).
+    image_url: Optional[str] = None
 
 
 # ============================================================
@@ -112,6 +116,7 @@ def _persist_triage_log(
     request: TriageRequest,
     user: Optional[models.User],
     data: dict,
+    image_url: Optional[str] = None,
 ) -> None:
     """Persist every analysis to TriageLog — the data backbone for the AI
     Doctor Assistant and Community Health Intelligence (planning doc). The
@@ -128,6 +133,7 @@ def _persist_triage_log(
                 ai_confidence=float(data.get("confidence_score", 0.0)),
                 ai_explanation=str(data.get("explanation", "")),
                 language_detected=data.get("language_detected"),
+                image_url=image_url,
             )
         )
         db.commit()
@@ -161,6 +167,7 @@ async def analyze_symptoms(
     - Persists every analysis to TriageLog (attributed when authenticated)
     """
     image_base64 = None
+    image_url = None
     if request.image_base64:
         try:
             import base64
@@ -168,6 +175,13 @@ async def analyze_symptoms(
             base64.b64decode(image_base64)
         except Exception:
             raise HTTPException(status_code=400, detail="Invalid Base64 image provided.")
+
+        # Persist the original symptom photo (previously analyzed once and
+        # discarded) so it's retrievable later — e.g. a doctor confirming
+        # what the AI actually saw. Best-effort: never blocks the analysis.
+        uploaded = cloudinary_client.upload_base64(image_base64, folder="gramcare/symptom_photos")
+        if uploaded:
+            image_url = uploaded["url"]
 
     prompt = TRIAGE_PROMPT_TEMPLATE.format(
         age=request.age,
@@ -222,7 +236,8 @@ async def analyze_symptoms(
             disclaimer=MEDICAL_DISCLAIMER,
         )
 
-    _persist_triage_log(db, request, current_user, result.model_dump())
+    result.image_url = image_url
+    _persist_triage_log(db, request, current_user, result.model_dump(), image_url=image_url)
     return result
 
 
@@ -237,6 +252,11 @@ class OCRResponse(BaseModel):
     extracted_text: str
     medicines_parsed: list[str]
     confidence: float = Field(..., ge=0.0, le=1.0)
+    # Cloudinary URL of the scanned image, if storage is configured. This
+    # single endpoint backs the patient app's prescription scanner AND the
+    # pharmacy dashboard's invoice scanner — both photos were previously
+    # discarded immediately after OCR ran; now both are retrievable.
+    image_url: Optional[str] = None
 
 
 OCR_PROMPT = """
@@ -273,16 +293,22 @@ async def extract_prescription_text(request: OCRRequest):
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid Base64 Image provided to OCR.")
 
+    # Best-effort: never blocks OCR if storage is unconfigured/unreachable.
+    uploaded = cloudinary_client.upload_base64(request.image_base64, folder="gramcare/ocr_scans")
+    image_url = uploaded["url"] if uploaded else None
+
     outcome = await ai_manager.run(AITask.OCR, prompt=OCR_PROMPT, image_base64=request.image_base64)
     data = dict(outcome.data)
 
     try:
         data["confidence"] = max(0.0, min(1.0, float(data.get("confidence", 0.8))))
-        return OCRResponse(**data)
+        result = OCRResponse(**data)
     except Exception as e:
         logger.error("request_id=%s Failed to parse OCR response: %s", outcome.request_id, str(e))
-        return OCRResponse(
+        result = OCRResponse(
             extracted_text="[AI response could not be validated]",
             medicines_parsed=[],
             confidence=0.0,
         )
+    result.image_url = image_url
+    return result

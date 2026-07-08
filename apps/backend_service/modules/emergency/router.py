@@ -208,6 +208,14 @@ async def respond_to_sos(
     sos.responded_by = current_user.id
     db.commit()
     db.refresh(sos)
+    
+    from core.notifications import NotificationService
+    NotificationService(db).notify_sos_alert(
+        user_id=sos.patient_id,
+        hospital_name=current_user.full_name or "Emergency Desk",
+        status="RESPONDED"
+    )
+    
     return sos
 
 
@@ -229,6 +237,14 @@ async def resolve_sos(
     sos.resolved_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(sos)
+    
+    from core.notifications import NotificationService
+    NotificationService(db).notify_sos_alert(
+        user_id=sos.patient_id,
+        hospital_name=current_user.full_name or "Emergency Desk",
+        status="RESOLVED"
+    )
+    
     return sos
 
 

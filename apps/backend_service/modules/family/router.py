@@ -15,6 +15,7 @@ import models
 import schemas
 from database import get_db
 from modules.auth.router import get_current_user
+from core.cloudinary_service import cloudinary_client
 
 router = APIRouter()
 
@@ -90,6 +91,35 @@ async def update_profile(
     profile = resolve_owned_profile(profile_id, current_user, db)
     for field, value in update.model_dump(exclude_unset=True).items():
         setattr(profile, field, value)
+    db.commit()
+    db.refresh(profile)
+    return profile
+
+
+@router.post("/{profile_id}/photo", response_model=schemas.FamilyProfileResponse)
+async def upload_profile_photo(
+    profile_id: int,
+    body: schemas.ImageUploadRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Uploads a family member's photo to Cloudinary and sets it as their
+    profile picture in one call — used as the low-literacy "photo button"
+    for family-member selection (planning doc: "எழுத்து படிக்க தெரியாதவங்க
+    கூட புகைப்படத்தைப் பார்த்து தேர்ந்தெடுக்கலாம்")."""
+    # profile_id is a required path param (never None here), so
+    # resolve_owned_profile always either returns the owned profile or
+    # raises 403/404 — it never falls through the "None = caller themself"
+    # branch that a null family_profile_id would take elsewhere.
+    profile = resolve_owned_profile(profile_id, current_user, db)
+
+    uploaded = cloudinary_client.upload_base64(
+        body.image_base64, folder=f"gramcare/family_photos/{current_user.id}"
+    )
+    if not uploaded:
+        raise HTTPException(status_code=503, detail="Photo upload is temporarily unavailable.")
+
+    profile.photo_url = uploaded["url"]
     db.commit()
     db.refresh(profile)
     return profile

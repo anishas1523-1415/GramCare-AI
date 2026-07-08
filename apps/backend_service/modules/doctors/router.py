@@ -16,6 +16,7 @@ import models
 import schemas
 from database import get_db
 from modules.auth.router import get_current_user, require_role
+from core.cloudinary_service import cloudinary_client
 
 router = APIRouter()
 
@@ -47,6 +48,7 @@ def _to_public(user: models.User, profile: models.DoctorProfile) -> dict:
         "consultation_fee": profile.consultation_fee if profile.consultation_fee is not None else 150.0,
         "languages": profile.languages,
         "is_available": bool(profile.is_available),
+        "photo_url": profile.photo_url,
     }
 
 
@@ -95,6 +97,27 @@ async def update_my_profile(
     profile = _ensure_profile(current_user, db)
     for field, value in update.model_dump(exclude_unset=True).items():
         setattr(profile, field, value)
+    db.commit()
+    db.refresh(profile)
+    return _to_public(current_user, profile)
+
+
+@router.post("/me/photo", response_model=schemas.DoctorPublic)
+async def upload_my_photo(
+    body: schemas.ImageUploadRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_role("DOCTOR")),
+):
+    """Uploads the doctor's own profile photo, shown in the patient-facing
+    directory alongside specialty/experience/fee (planning doc booking flow)."""
+    profile = _ensure_profile(current_user, db)
+    uploaded = cloudinary_client.upload_base64(
+        body.image_base64, folder=f"gramcare/doctor_photos/{current_user.id}"
+    )
+    if not uploaded:
+        raise HTTPException(status_code=503, detail="Photo upload is temporarily unavailable.")
+
+    profile.photo_url = uploaded["url"]
     db.commit()
     db.refresh(profile)
     return _to_public(current_user, profile)

@@ -180,6 +180,18 @@ async def book_appointment(
     logger.info("Appointment %d booked by patient %d (payment=%s, slot=%s).",
                 db_appointment.id, current_user.id,
                 payment.order_id if payment else "free", slot.id if slot else "legacy")
+                
+    try:
+        from core.notifications import NotificationService
+        time_str = scheduled_at.strftime("%I:%M %p on %b %d")
+        NotificationService(db).notify_appointment_reminder(
+            user_id=current_user.id,
+            doctor_name=doctor.full_name or "Doctor",
+            time_str=time_str
+        )
+    except Exception as e:
+        logger.error(f"Failed to send appointment notification: {e}")
+        
     return db_appointment
 
 

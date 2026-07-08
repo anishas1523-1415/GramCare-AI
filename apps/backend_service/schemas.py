@@ -76,6 +76,7 @@ class DoctorProfileUpdate(BaseModel):
     bio: Optional[str] = None
     languages: Optional[str] = None
     is_available: Optional[bool] = None
+    photo_url: Optional[str] = None
 
 class DoctorPublic(BaseModel):
     """What patients see when choosing a doctor (planning doc: specialty,
@@ -88,6 +89,17 @@ class DoctorPublic(BaseModel):
     consultation_fee: float
     languages: Optional[str] = None
     is_available: bool
+    photo_url: Optional[str] = None
+
+# ==========================================
+# File Upload Schemas (Cloudinary — core/cloudinary_service.py)
+# ==========================================
+class ImageUploadRequest(BaseModel):
+    image_base64: str = Field(..., min_length=10, description="Raw base64 or data-URI encoded image")
+
+class ImageUploadResponse(BaseModel):
+    url: str
+    public_id: str
 
 class SlotCreate(BaseModel):
     start_time: datetime
@@ -252,9 +264,17 @@ class BatchRecallCreate(BaseModel):
     medicine_name: str = Field(..., min_length=1, max_length=120)
     batch_number: str = Field(..., min_length=1, max_length=80)
     reason: str = Field(..., min_length=3, max_length=500)
+    # Optional scanned official circular, uploaded to Cloudinary and stored
+    # as notice_url — never itself persisted (write-only, like file_base64
+    # elsewhere).
+    notice_base64: Optional[str] = None
 
-class BatchRecallResponse(BatchRecallCreate):
+class BatchRecallResponse(BaseModel):
     id: int
+    medicine_name: str
+    batch_number: str
+    reason: str
+    notice_url: Optional[str] = None
     issued_by_user_id: int
     created_at: datetime
 
@@ -410,7 +430,11 @@ class LabResultValue(BaseModel):
 class LabReportSubmit(BaseModel):
     values: List[LabResultValue] = []
     summary: Optional[str] = None
+    # Either pass an already-hosted URL directly, or a base64 scan/PDF to be
+    # uploaded to Cloudinary server-side (core/cloudinary_service.py) — the
+    # latter takes precedence if both are supplied.
     file_url: Optional[str] = None
+    file_base64: Optional[str] = None
 
 class LabBookingResponse(BaseModel):
     id: int

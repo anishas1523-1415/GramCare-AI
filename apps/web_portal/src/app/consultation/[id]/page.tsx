@@ -88,10 +88,20 @@ export default function ConsultationRoom({ params }: { params: Promise<{ id: str
         // Join Room
         socketRef.current?.emit("join_room", roomId);
 
-        // WebRTC Setup
-        peerRef.current = new RTCPeerConnection({
-          iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
-        });
+        // WebRTC Setup - Fetch dynamic TURN credentials from signaling server
+        let iceServers = [{ urls: "stun:stun.l.google.com:19302" }]; // fallback
+        try {
+          // WS_URL is our signaling server (e.g. localhost:4000) where the /api/webrtc/turn-credentials route lives
+          const res = await fetch(`${WS_URL}/api/webrtc/turn-credentials`);
+          const data = await res.json();
+          if (data.iceServers && Array.isArray(data.iceServers) && data.iceServers.length > 0) {
+            iceServers = data.iceServers;
+          }
+        } catch (e) {
+          console.warn("Failed to fetch TURN credentials from signaling server, using basic STUN fallback", e);
+        }
+
+        peerRef.current = new RTCPeerConnection({ iceServers });
 
         stream.getTracks().forEach(track => {
           if (peerRef.current && localStreamRef.current) {

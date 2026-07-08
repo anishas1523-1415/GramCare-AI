@@ -97,6 +97,9 @@ class DoctorProfile(Base):
     bio = Column(Text, nullable=True)
     languages = Column(String, nullable=True)  # comma-separated, e.g. "Tamil,English"
     is_available = Column(Boolean, default=True)
+    # Cloudinary-hosted profile photo, shown in the patient-facing doctor
+    # directory (schemas.DoctorPublic) — mirrors FamilyProfile.photo_url.
+    photo_url = Column(String, nullable=True)
     created_at = Column(DateTime, default=_utcnow)
 
     user = relationship("User", back_populates="doctor_profile")
@@ -271,6 +274,10 @@ class TriageLog(Base):
     ai_confidence = Column(Float)
     ai_explanation = Column(Text)
     language_detected = Column(String, nullable=True)
+    # Cloudinary URL of the submitted symptom photo, if any — previously the
+    # image was sent to the AI for analysis and then discarded; this keeps it
+    # retrievable (e.g. for a doctor to later verify what the AI actually saw).
+    image_url = Column(String, nullable=True)
     created_at = Column(DateTime, default=_utcnow)
 
 
@@ -361,6 +368,9 @@ class BatchRecall(Base):
     medicine_name = Column(String, index=True)
     batch_number = Column(String, index=True)
     reason = Column(String)
+    # Cloudinary URL of a scanned official recall circular/notice, if the
+    # issuing authority attaches one (Government Portal).
+    notice_url = Column(String, nullable=True)
     issued_by_user_id = Column(Integer, ForeignKey("users.id"))
     created_at = Column(DateTime, default=_utcnow)
 

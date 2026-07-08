@@ -27,6 +27,7 @@ from modules.family.router import resolve_owned_profile
 from core.lab_tests import search_tests, get_test, full_catalog
 from core.notifications import NotificationService
 from core.ratelimit import rate_limit
+from core.cloudinary_service import cloudinary_client
 
 router = APIRouter()
 
@@ -235,7 +236,21 @@ async def submit_report(
     if booking.status == "COMPLETED":
         raise HTTPException(status_code=400, detail="Booking already completed")
 
-    booking.report_payload = body.model_dump()
+    # A scanned/PDF report takes precedence over a pre-supplied URL. Upload
+    # server-side so the raw base64 never lands in the JSON payload column —
+    # only the resulting Cloudinary URL is stored.
+    file_url = body.file_url
+    if body.file_base64:
+        uploaded = cloudinary_client.upload_base64(
+            body.file_base64,
+            folder=f"gramcare/lab_reports/{lab.id}",
+            resource_type="auto",  # PDF or image, whichever the lab scanned
+        )
+        if not uploaded:
+            raise HTTPException(status_code=503, detail="Report file upload is temporarily unavailable.")
+        file_url = uploaded["url"]
+
+    booking.report_payload = body.model_dump(exclude={"file_base64"}) | {"file_url": file_url}
     booking.report_ready_at = datetime.utcnow()
     booking.status = "REPORT_READY"
 
@@ -255,7 +270,7 @@ async def submit_report(
             "test_name": booking.test_name,
             "values": [v.model_dump() for v in body.values],
             "summary": body.summary,
-            "file_url": body.file_url,
+            "file_url": file_url,
             "lab_center_id": lab.id,
             "lab_center_name": lab.name,
         },

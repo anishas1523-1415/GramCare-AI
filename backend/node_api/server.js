@@ -336,21 +336,46 @@ app.post("/api/sos/trigger", requireJwtAuth, async (req, res) => {
 
 // ICE server configuration for WebRTC. STUN alone fails behind symmetric
 // NAT — common on rural mobile networks, this platform's exact audience —
-// so a TURN relay is configurable via env (coturn, Twilio NTS, or any
-// provider). Without TURN_URL set, clients still get STUN (dev fallback).
-app.get("/api/webrtc/turn-credentials", (req, res) => {
-  const iceServers = [
-    { urls: "stun:stun.l.google.com:19302" },
-    { urls: "stun:stun1.l.google.com:19302" }
-  ];
-  if (process.env.TURN_URL && process.env.TURN_USERNAME && process.env.TURN_CREDENTIAL) {
-    iceServers.push({
-      urls: process.env.TURN_URL,
-      username: process.env.TURN_USERNAME,
-      credential: process.env.TURN_CREDENTIAL
-    });
+// This now dynamically fetches production TURN credentials from Metered.live.
+app.get("/api/webrtc/turn-credentials", async (req, res) => {
+  try {
+    const meteredDomain = process.env.METERED_DOMAIN || "gramcareai.metered.live";
+    const apiKey = process.env.METERED_API_KEY || "23816ffe3b9d86735741551f2855d89a303a";
+    
+    // Using dynamic fetch from Metered REST API for rotating credentials/load balancing
+    const response = await fetch(`https://${meteredDomain}/api/v1/turn/credentials?apiKey=${apiKey}`);
+    const iceServers = await response.json();
+    
+    res.json({ iceServers });
+  } catch (error) {
+    console.error("Failed to fetch dynamic TURN credentials from Metered:", error);
+    
+    // Safe fallback to the static credentials provided
+    const fallbackServers = [
+      { urls: "stun:stun.relay.metered.ca:80" },
+      {
+        urls: "turn:global.relay.metered.ca:80",
+        username: "d4b2caec759c5ca31ab26c83",
+        credential: "yHHfjzfaVx7rDglm",
+      },
+      {
+        urls: "turn:global.relay.metered.ca:80?transport=tcp",
+        username: "d4b2caec759c5ca31ab26c83",
+        credential: "yHHfjzfaVx7rDglm",
+      },
+      {
+        urls: "turn:global.relay.metered.ca:443",
+        username: "d4b2caec759c5ca31ab26c83",
+        credential: "yHHfjzfaVx7rDglm",
+      },
+      {
+        urls: "turns:global.relay.metered.ca:443?transport=tcp",
+        username: "d4b2caec759c5ca31ab26c83",
+        credential: "yHHfjzfaVx7rDglm",
+      }
+    ];
+    res.json({ iceServers: fallbackServers });
   }
-  res.json({ iceServers });
 });
 
 // Express-level error handler: catches CORS rejections (thrown by the

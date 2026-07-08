@@ -8,6 +8,9 @@ Contract summary (all under /api/v1/ehr):
 - POST /record              (auth)     patient-created record (OCR scan / note)
 - POST /sync                (auth)     idempotent batch upload of offline-created records
 - POST /vitals              (auth)     IoT vitals ingestion
+- POST /upload               (auth)     Cloudinary image upload; returns a URL to embed
+                                        in a record's `payload` (e.g. the original
+                                        prescription/lab photo alongside its OCR text)
 """
 from typing import List, Optional
 
@@ -23,6 +26,7 @@ from database import get_db
 from modules.auth.router import get_current_user, require_role
 from modules.family.router import resolve_owned_profile
 from core.drug_interactions import check_interactions
+from core.cloudinary_service import cloudinary_client
 from modules.ai_assist.router import _parse_duration_days
 
 router = APIRouter()
@@ -182,6 +186,24 @@ async def list_recent_records(
         .limit(limit)
         .all()
     )
+
+
+@router.post("/upload", response_model=schemas.ImageUploadResponse)
+async def upload_wallet_image(
+    body: schemas.ImageUploadRequest,
+    current_user: models.User = Depends(get_current_user),
+):
+    """Uploads an image (e.g. a photographed prescription or lab report) to
+    Cloudinary for the Family Health Wallet. Returns a URL the client embeds
+    in `payload.image_url` when creating the record via POST /record or
+    /sync — keeping the original scan retrievable alongside its OCR text,
+    which was previously discarded once /triage/ocr finished reading it."""
+    uploaded = cloudinary_client.upload_base64(
+        body.image_base64, folder=f"gramcare/health_wallet/{current_user.id}"
+    )
+    if not uploaded:
+        raise HTTPException(status_code=503, detail="Image upload is temporarily unavailable.")
+    return schemas.ImageUploadResponse(url=uploaded["url"], public_id=uploaded["public_id"])
 
 
 @router.post("/record", response_model=schemas.EHRRecordResponse, status_code=201)
