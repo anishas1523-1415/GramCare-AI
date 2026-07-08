@@ -20,9 +20,10 @@ from typing import List
 from database import get_db
 import models
 import schemas
-from modules.auth.router import get_current_user
+from modules.auth.router import get_current_user, require_role
 from modules.family.router import resolve_owned_profile
 from modules.payments.router import _do_refund
+from core.ratelimit import rate_limit
 
 router = APIRouter()
 logger = logging.getLogger("gramcare.appointments")
@@ -37,15 +38,13 @@ def _doctor_fee(db: Session, doctor_id: int) -> float:
     return profile.consultation_fee if profile and profile.consultation_fee is not None else 150.0
 
 
-@router.post("/book", response_model=schemas.AppointmentResponse)
+@router.post("/book", response_model=schemas.AppointmentResponse, dependencies=[Depends(rate_limit("appointment_book", 5, 300))])
 async def book_appointment(
     appointment: schemas.AppointmentCreate,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
+    current_user: models.User = Depends(require_role("PATIENT")),
 ):
     """Book a consultation as a patient."""
-    if current_user.role != "PATIENT":
-        raise HTTPException(status_code=403, detail="Only patients can book appointments.")
 
     doctor = (
         db.query(models.User)
@@ -214,12 +213,10 @@ async def my_appointments(
 async def get_doctor_queue(
     doctor_id: int,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
+    current_user: models.User = Depends(require_role("DOCTOR")),
 ):
     """Get the queue of upcoming appointments for a doctor."""
-    if current_user.role not in ["DOCTOR", "ADMIN"] or (
-        current_user.role == "DOCTOR" and current_user.id != doctor_id
-    ):
+    if current_user.role == "DOCTOR" and current_user.id != doctor_id:
         raise HTTPException(status_code=403, detail="Not authorized to view this doctor's queue.")
 
     # Predictive Risk Stratification (planning doc): high-severity patients

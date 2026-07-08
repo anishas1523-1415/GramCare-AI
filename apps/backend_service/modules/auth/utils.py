@@ -1,7 +1,9 @@
 from datetime import datetime, timedelta, timezone
 from typing import Optional
-from jose import JWTError, jwt
+import jwt
+from jwt import PyJWTError as JWTError, ExpiredSignatureError
 import bcrypt
+import secrets
 import os
 
 # Secret key for JWT.
@@ -34,7 +36,9 @@ elif SECRET_KEY == _DEV_DEFAULT_SECRET and _ENVIRONMENT == "production":
         "`python -c \"import secrets; print(secrets.token_urlsafe(48))\"`)."
     )
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", str(60 * 24 * 7)))  # 7 days default
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "15"))  # 15 minutes default
+REFRESH_TOKEN_EXPIRE_DAYS = 7
+
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -54,9 +58,14 @@ def get_password_hash(password: str) -> str:
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     """Create a JWT access token."""
     to_encode = data.copy()
-    expire = datetime.now(timezone.utc) + (expires_delta or timedelta(minutes=15))
+    expire = datetime.now(timezone.utc) + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
+
+def create_refresh_token() -> str:
+    """Create a cryptographically secure random string for use as a refresh token."""
+    return secrets.token_urlsafe(64)
 
 
 def decode_access_token(token: str) -> Optional[dict]:
@@ -66,3 +75,4 @@ def decode_access_token(token: str) -> Optional[dict]:
         return payload
     except JWTError:
         return None
+

@@ -15,6 +15,7 @@ import base64
 import io
 import logging
 import os
+import filetype
 from typing import Any, Dict, Optional
 
 import cloudinary
@@ -57,18 +58,37 @@ class CloudinaryClient:
         self,
         data: str,
         folder: str,
-        resource_type: str = "image",
+        resource_type: str = "auto",
         public_id: Optional[str] = None,
+        max_size_bytes: int = 10 * 1024 * 1024,
+        allowed_mimes: Optional[list[str]] = None
     ) -> Optional[Dict[str, Any]]:
         """Uploads a base64-encoded file and returns `{"url", "public_id",
         "resource_type", "bytes"}`, or None if Cloudinary isn't configured or
         the upload fails — callers must treat storage as best-effort and
         never let it block the primary action (AI analysis, record
         creation, etc.), same convention as NotificationService."""
+        if allowed_mimes is None:
+            allowed_mimes = ["image/jpeg", "image/png", "image/webp", "application/pdf"]
+            
         if not self.configured:
             return None
         try:
             file_bytes = self._decode(data)
+            
+            # Size validation
+            if len(file_bytes) > max_size_bytes:
+                logger.error("Upload rejected: File size %d exceeds limit of %d bytes", len(file_bytes), max_size_bytes)
+                return None
+                
+            # MIME type validation
+            kind = filetype.guess(file_bytes)
+            mime_type = kind.mime if kind else None
+            
+            if not mime_type or mime_type not in allowed_mimes:
+                logger.error("Upload rejected: Invalid MIME type %s", mime_type)
+                return None
+
             result = cloudinary.uploader.upload(
                 io.BytesIO(file_bytes),
                 folder=folder,

@@ -15,17 +15,11 @@ class ApiService {
     return _instance;
   }
 
-  ApiService._internal() {
-    // For Android emulator to reach localhost, use 10.0.2.2.
-    // For iOS emulator or physical device on same network, use local IP.
-    // Overridable at build time: flutter build --dart-define=API_BASE_URL=...
-    const configured = String.fromEnvironment('API_BASE_URL');
-    final String baseUrl = configured.isNotEmpty
-        ? configured
-        : (Platform.isAndroid
-            ? 'http://10.0.2.2:8000/api/v1'
-            : 'http://localhost:8000/api/v1');
+  static String get baseUrl {
+    return 'https://gramcare-fastapi.onrender.com/api/v1';
+  }
 
+  ApiService._internal() {
     _dio = Dio(
       BaseOptions(
         baseUrl: baseUrl,

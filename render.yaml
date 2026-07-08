@@ -76,3 +76,15 @@ services:
     envVars:
       - key: VITE_API_URL
         value: "https://gramcare-fastapi.onrender.com/api/v1"
+
+  # 5. Lab Portal (Next.js)
+  - type: web
+    name: gramcare-lab
+    env: node
+    plan: free
+    rootDir: apps/lab_portal
+    buildCommand: npm ci && npm run build
+    startCommand: npm run start
+    envVars:
+      - key: NEXT_PUBLIC_API_URL
+        value: "https://gramcare-fastapi.onrender.com/api/v1"

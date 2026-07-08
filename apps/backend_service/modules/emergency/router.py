@@ -25,9 +25,10 @@ from datetime import datetime, timezone, timedelta
 from database import get_db
 import models
 import schemas
-from modules.auth.router import get_current_user
+from modules.auth.router import get_current_user, require_role
 from modules.family.router import resolve_owned_profile
 from core.maps import maps_client
+from core.ratelimit import rate_limit
 
 router = APIRouter()
 logger = logging.getLogger("gramcare.emergency")
@@ -114,16 +115,14 @@ def escalate_stale_sos(db: Session) -> int:
 # SOS lifecycle
 # ==========================================================
 
-@router.post("/trigger", response_model=schemas.EmergencySOSResponse)
+@router.post("/trigger", response_model=schemas.EmergencySOSResponse, dependencies=[Depends(rate_limit("sos_trigger", 3, 60))])
 async def trigger_sos(
     sos_data: schemas.EmergencySOSCreate,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
+    current_user: models.User = Depends(require_role("PATIENT"))
 ):
     """Trigger an Emergency SOS alert (Patient only). Immediately assigned
     to the nearest hospital's emergency desk."""
-    if current_user.role != "PATIENT":
-        raise HTTPException(status_code=403, detail="Only patients can trigger SOS.")
 
     resolve_owned_profile(sos_data.family_profile_id, current_user, db)
     hospital = _nearest_hospital(db, sos_data.location_lat, sos_data.location_lng, [])
@@ -157,11 +156,9 @@ async def trigger_sos(
 @router.get("/active", response_model=List[schemas.EmergencySOSResponse])
 async def get_active_emergencies(
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
+    current_user: models.User = Depends(require_role(["DOCTOR", "HOSPITAL"]))
 ):
     """All active SOS emergencies (Doctor/Hospital desk/Admin)."""
-    if current_user.role not in ["DOCTOR", "HOSPITAL", "ADMIN"]:
-        raise HTTPException(status_code=403, detail="Not authorized to view active emergencies.")
 
     return (
         db.query(models.EmergencySOS)
@@ -191,11 +188,9 @@ async def my_sos_history(
 async def respond_to_sos(
     sos_id: int,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
+    current_user: models.User = Depends(require_role(["DOCTOR", "HOSPITAL"]))
 ):
     """A doctor or hospital desk accepts an SOS ("Help En Route")."""
-    if current_user.role not in ["DOCTOR", "HOSPITAL"]:
-        raise HTTPException(status_code=403, detail="Only doctors or hospital desks can respond to SOS.")
 
     sos = db.query(models.EmergencySOS).filter(models.EmergencySOS.id == sos_id).first()
     if not sos:

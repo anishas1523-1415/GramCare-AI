@@ -87,21 +87,55 @@ jobs:
         npm install
         npm run build
 
-  build-mobile-app:
+  build-mobile-apps:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
     
+    - name: Setup Java
+      uses: actions/setup-java@v3
+      with:
+        distribution: 'zulu'
+        java-version: '17'
+        
     - name: Setup Flutter
       uses: subosito/flutter-action@v2
       with:
-        # No pinned version: pubspec.yaml requires Dart ^3.10 (Flutter 3.38+),
-        # but the previous pin (3.19.0 / Dart 3.3) could never resolve deps.
         channel: 'stable'
         cache: true
         
-    - name: Install & Analyze
+    - name: Build Patient App APK
       working-directory: ./apps/mobile_app
       run: |
         flutter pub get
-        flutter analyze
+        flutter build apk --release
+        
+    - name: Build Doctor App APK
+      working-directory: ./apps/doctor_mobile_app
+      run: |
+        flutter pub get
+        flutter build apk --release
+        
+    - name: Build Pharmacy App APK
+      working-directory: ./apps/pharmacy_mobile_app
+      run: |
+        flutter pub get
+        flutter build apk --release
+        
+    - name: Upload Patient APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: patient-app-apk
+        path: apps/mobile_app/build/app/outputs/flutter-apk/app-release.apk
+        
+    - name: Upload Doctor APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: doctor-app-apk
+        path: apps/doctor_mobile_app/build/app/outputs/flutter-apk/app-release.apk
+        
+    - name: Upload Pharmacy APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: pharmacy-app-apk
+        path: apps/pharmacy_mobile_app/build/app/outputs/flutter-apk/app-release.apk

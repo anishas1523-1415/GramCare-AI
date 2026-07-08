@@ -7,6 +7,8 @@ from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
+from core.security_middleware import SecurityHeadersMiddleware
+
 load_dotenv()
 
 logger = logging.getLogger("gramcare.main")
@@ -74,6 +76,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(SecurityHeadersMiddleware)
 
 # Include Routers
 app.include_router(auth_router, prefix="/api/v1/auth", tags=["Authentication"])

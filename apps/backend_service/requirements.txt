@@ -53,7 +53,7 @@ passlib[bcrypt]==1.7.4
 # specifically a dependency-metadata change (see project CHANGELOG: "Upgrade
 # to pyasn1 0.5.1+") with no public API changes — this app only calls jose's
 # public `jwt.encode`/`jwt.decode`/`JWTError`, none of which changed.
-python-jose[cryptography]==3.5.0
+PyJWT[crypto]==2.8.0
 # NEW explicit pin (dependency audit). Previously only ever resolved
 # transitively; pinning it directly because it's the exact point of the
 # jose/google-auth conflict above. 0.6.3 satisfies both jose 3.5.0's

@@ -16,7 +16,7 @@ import math
 from datetime import datetime
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
 import models
@@ -223,6 +223,7 @@ async def update_booking_status(
 @router.post("/bookings/{booking_id}/report", response_model=schemas.LabBookingResponse)
 async def submit_report(
     booking_id: int,
+    request: Request,
     body: schemas.LabReportSubmit,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(require_role("LAB")),
@@ -279,6 +280,16 @@ async def submit_report(
     db.add(wallet_record)
     db.commit()
     db.refresh(booking)
+    
+    db.add(models.AuditLog(
+        user_id=current_user.id,
+        action="CREATE",
+        resource="LabReport",
+        resource_id=str(booking.id),
+        details={"test_name": booking.test_name, "patient_id": booking.patient_id},
+        ip_address=request.client.host if request.client else None
+    ))
+    db.commit()
 
     try:
         NotificationService(db).notify_lab_report_ready(booking.patient_id, booking.test_name)

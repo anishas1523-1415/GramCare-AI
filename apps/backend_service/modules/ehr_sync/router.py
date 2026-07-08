@@ -14,7 +14,7 @@ Contract summary (all under /api/v1/ehr):
 """
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -34,6 +34,7 @@ router = APIRouter()
 
 @router.post("/issue_prescription", response_model=schemas.PrescriptionResponse)
 async def issue_prescription(
+    request: Request,
     prescription: schemas.PrescriptionCreate,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(require_role("DOCTOR")),
@@ -85,6 +86,17 @@ async def issue_prescription(
     db.add(ehr_record)
     db.commit()
     db.refresh(db_prescription)
+    
+    # Audit log
+    db.add(models.AuditLog(
+        user_id=current_user.id,
+        action="CREATE",
+        resource="Prescription",
+        resource_id=str(db_prescription.id),
+        details={"patient_id": prescription.patient_id, "diagnosis": prescription.diagnosis},
+        ip_address=request.client.host if request.client else None
+    ))
+    db.commit()
 
     # Medicine Interaction Alerts: check the newly-prescribed medicines
     # against whatever else this patient is currently, actively taking
@@ -117,6 +129,7 @@ async def issue_prescription(
 @router.get("/patient/{patient_id}", response_model=List[schemas.EHRRecordResponse])
 async def get_patient_records(
     patient_id: int,
+    request: Request,
     family_profile_id: Optional[int] = Query(None),
     record_type: Optional[str] = Query(None),
     skip: int = Query(0, ge=0),
@@ -135,6 +148,16 @@ async def get_patient_records(
         q = q.filter(models.EHRRecord.family_profile_id == family_profile_id)
     if record_type:
         q = q.filter(models.EHRRecord.record_type == record_type)
+        
+    db.add(models.AuditLog(
+        user_id=current_user.id,
+        action="READ",
+        resource="EHRRecord",
+        details={"patient_id": patient_id, "family_profile_id": family_profile_id},
+        ip_address=request.client.host if request.client else None
+    ))
+    db.commit()
+    
     return (
         q.order_by(models.EHRRecord.record_date.desc())
         .offset(skip)
@@ -172,13 +195,11 @@ async def list_recent_records(
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user),
+    current_user: models.User = Depends(require_role(["DOCTOR", "ADMIN"])),
 ):
     """Recent records across all patients — feeds the doctor portal's
     patient directory. (The directory page previously called this route
     while it didn't exist; every request 404'd.)"""
-    if current_user.role not in ("DOCTOR", "ADMIN"):
-        raise HTTPException(status_code=403, detail="Doctors only")
     return (
         db.query(models.EHRRecord)
         .order_by(models.EHRRecord.created_at.desc())
@@ -208,6 +229,7 @@ async def upload_wallet_image(
 
 @router.post("/record", response_model=schemas.EHRRecordResponse, status_code=201)
 async def create_record(
+    request: Request,
     record: schemas.EHRRecordCreate,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
@@ -240,6 +262,17 @@ async def create_record(
     db.add(db_record)
     db.commit()
     db.refresh(db_record)
+    
+    db.add(models.AuditLog(
+        user_id=current_user.id,
+        action="CREATE",
+        resource="EHRRecord",
+        resource_id=str(db_record.id),
+        details={"type": record.record_type, "title": record.title},
+        ip_address=request.client.host if request.client else None
+    ))
+    db.commit()
+    
     return db_record
 
 

@@ -32,6 +32,7 @@ class User(Base):
     appointments_as_patient = relationship("Appointment", foreign_keys="[Appointment.patient_id]", back_populates="patient")
     appointments_as_doctor = relationship("Appointment", foreign_keys="[Appointment.doctor_id]", back_populates="doctor")
     push_tokens = relationship("UserPushToken", back_populates="user")
+    sessions = relationship("UserSession", back_populates="user")
 
 
 class UserPushToken(Base):
@@ -482,3 +483,43 @@ class IoTVitals(Base):
     sleep_deep_hours = Column(Float, nullable=True)
     sleep_light_hours = Column(Float, nullable=True)
     timestamp = Column(DateTime, default=_utcnow)
+
+
+class UserSession(Base):
+    __tablename__ = "user_sessions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), index=True)
+    refresh_token = Column(String, unique=True, index=True)
+    device_info = Column(String, nullable=True)
+    ip_address = Column(String, nullable=True)
+    expires_at = Column(DateTime)
+    is_revoked = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=_utcnow)
+
+    user = relationship("User", back_populates="sessions")
+
+
+class PasswordResetToken(Base):
+    __tablename__ = "password_reset_tokens"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), index=True)
+    token = Column(String, unique=True, index=True)
+    expires_at = Column(DateTime)
+    is_used = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=_utcnow)
+
+
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    action = Column(String, index=True)
+    resource = Column(String, index=True)
+    resource_id = Column(String, nullable=True, index=True)
+    details = Column(JSON, nullable=True)
+    ip_address = Column(String, nullable=True)
+    created_at = Column(DateTime, default=_utcnow)
+
