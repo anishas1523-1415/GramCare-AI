@@ -26,6 +26,37 @@ from modules.doctors.router import router as doctors_router
 from modules.ai_assist.router import router as ai_assist_router
 from modules.analytics.router import router as analytics_router
 from modules.lab.router import router as lab_router
+from modules.hospital.router import router as hospital_router
+
+
+def _seed_government_whitelist():
+    """Idempotently seeds AuthorizedGovernmentEmail from
+    GOVERNMENT_WHITELIST_EMAILS (comma-separated) — the only way to obtain
+    a Government Portal (ADMIN) account is POST /auth/register/government
+    with a whitelisted email, and there's no self-serve application flow to
+    populate this table, so it must be seeded somewhere. Safe to run on
+    every startup: only inserts emails not already present."""
+    import models
+    from database import SessionLocal
+
+    raw = os.getenv("GOVERNMENT_WHITELIST_EMAILS", "")
+    emails = [e.strip().lower() for e in raw.split(",") if e.strip()]
+    if not emails:
+        return
+    db = SessionLocal()
+    try:
+        existing = {
+            e.lower() for (e,) in db.query(models.AuthorizedGovernmentEmail.email).all()
+        }
+        for email in emails:
+            if email not in existing:
+                db.add(models.AuthorizedGovernmentEmail(email=email, note="seeded from GOVERNMENT_WHITELIST_EMAILS"))
+        db.commit()
+    except Exception as e:  # never block app startup over this
+        logger.error("Failed to seed government email whitelist: %s", e)
+        db.rollback()
+    finally:
+        db.close()
 
 
 async def _sos_escalation_loop():
@@ -48,14 +79,39 @@ async def _sos_escalation_loop():
         await asyncio.sleep(60)
 
 
+async def _appointment_reminder_loop():
+    """Background watchdog: SMS patients ahead of an upcoming confirmed
+    appointment. Polled every 15 minutes — reminders fire hours ahead of
+    time, so unlike the SOS watchdog this doesn't need 60s granularity."""
+    from database import SessionLocal
+    from modules.appointments.router import send_due_appointment_reminders
+
+    while True:
+        try:
+            db = SessionLocal()
+            try:
+                sent = await send_due_appointment_reminders(db)
+                if sent:
+                    logger.info("Appointment reminder watchdog sent %d SMS.", sent)
+            finally:
+                db.close()
+        except Exception as e:  # the watchdog must never die
+            logger.error("Appointment reminder loop error: %s", e)
+        await asyncio.sleep(900)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    task = None
-    # Disabled under pytest (TESTING=1) — tests call escalate_stale_sos directly.
+    _seed_government_whitelist()
+    tasks = []
+    # Disabled under pytest (TESTING=1) — tests call the watchdog functions directly.
     if os.getenv("TESTING") != "1":
-        task = asyncio.create_task(_sos_escalation_loop())
+        tasks = [
+            asyncio.create_task(_sos_escalation_loop()),
+            asyncio.create_task(_appointment_reminder_loop()),
+        ]
     yield
-    if task:
+    for task in tasks:
         task.cancel()
 
 
@@ -91,6 +147,7 @@ app.include_router(doctors_router, prefix="/api/v1/doctors", tags=["Doctor Direc
 app.include_router(ai_assist_router, prefix="/api/v1/assist", tags=["AI Doctor Assistant"])
 app.include_router(analytics_router, prefix="/api/v1/analytics", tags=["Community Health Intelligence"])
 app.include_router(lab_router, prefix="/api/v1/lab", tags=["Laboratory"])
+app.include_router(hospital_router, prefix="/api/v1/hospital", tags=["Hospital"])
 
 
 

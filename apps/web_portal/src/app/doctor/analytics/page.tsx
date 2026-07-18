@@ -7,10 +7,138 @@
 
 import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { BarChart3, AlertTriangle, Activity, Building2, Pill, Siren, CheckCircle2 } from 'lucide-react';
+import { BarChart3, AlertTriangle, Activity, Building2, Pill, Siren, CheckCircle2, Stethoscope, FileText, ThumbsUp, ThumbsDown } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
 import ThemedLoader from '../../../components/ThemedLoader';
 import api from '../../../lib/api';
+
+interface PendingDoctor {
+  id: number;
+  full_name: string;
+  specialty: string;
+  qualifications?: string | null;
+  experience_years: number;
+  languages?: string | null;
+  license_number?: string | null;
+  license_document_url?: string | null;
+  service_hours?: string | null;
+  verification_status: string;
+}
+
+/** Government doctor verification — the other missing half of the
+ * anti-fake-doctor workflow: DoctorProfile.verification_status and the
+ * approve/reject endpoints existed backend-only with no reviewer UI to
+ * drive them, so no doctor could ever actually get approved through the
+ * app. ADMIN-only, mirrors BatchRecallIssuer's placement/gating below. */
+function DoctorVerificationPanel() {
+  const [pending, setPending] = useState<PendingDoctor[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [actingOn, setActingOn] = useState<number | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await api.get<PendingDoctor[]>('/doctors/pending');
+        setPending(res.data);
+      } catch {
+        setError('Could not load pending doctor applications.');
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  const approve = async (doctorId: number) => {
+    setActingOn(doctorId);
+    try {
+      await api.put(`/doctors/${doctorId}/approve`);
+      setPending((prev) => prev.filter((d) => d.id !== doctorId));
+    } catch {
+      setError('Could not approve this doctor.');
+    } finally {
+      setActingOn(null);
+    }
+  };
+
+  const reject = async (doctorId: number) => {
+    const reason = window.prompt('Reason for rejecting this application (shown to the doctor):');
+    if (!reason || reason.trim().length < 3) return;
+    setActingOn(doctorId);
+    try {
+      await api.put(`/doctors/${doctorId}/reject`, { reason: reason.trim() });
+      setPending((prev) => prev.filter((d) => d.id !== doctorId));
+    } catch {
+      setError('Could not reject this doctor.');
+    } finally {
+      setActingOn(null);
+    }
+  };
+
+  return (
+    <div className="glass-panel p-6 mb-10">
+      <h2 className="text-xl font-bold flex items-center gap-2 mb-1 text-indigo-500">
+        <Stethoscope size={22} /> Doctor Verification Queue
+      </h2>
+      <p className="text-sm text-gray-500 mb-4">
+        A doctor is invisible to patients and blocked from prescriptions/appointments/SOS response until approved here.
+      </p>
+      {error && <p role="alert" className="text-red-500 text-sm font-semibold mb-3">{error}</p>}
+      {loading ? (
+        <p className="text-sm text-gray-500">Loading…</p>
+      ) : pending.length === 0 ? (
+        <p className="text-sm text-gray-500">No applications waiting for review.</p>
+      ) : (
+        <div className="space-y-3">
+          {pending.map((d) => (
+            <div key={d.id} className="p-4 rounded-xl bg-white/40 dark:bg-black/30 border border-white/10">
+              <div className="flex flex-wrap justify-between items-start gap-3">
+                <div>
+                  <h3 className="font-bold">{d.full_name}</h3>
+                  <p className="text-sm text-gray-500">
+                    {d.specialty}{d.qualifications ? ` · ${d.qualifications}` : ''} · {d.experience_years} yrs experience
+                  </p>
+                  {d.languages && <p className="text-xs text-gray-500">Speaks: {d.languages}</p>}
+                  {d.service_hours && <p className="text-xs text-gray-500">Hours: {d.service_hours}</p>}
+                  <p className="text-sm mt-1">
+                    <strong>License #:</strong> {d.license_number || <span className="text-red-500">not provided</span>}
+                  </p>
+                  {d.license_document_url ? (
+                    <a
+                      href={d.license_document_url}
+                      target="_blank" rel="noreferrer"
+                      className="text-sm text-indigo-500 underline flex items-center gap-1 mt-1"
+                    >
+                      <FileText size={14} /> View license document
+                    </a>
+                  ) : (
+                    <p className="text-xs text-red-500 mt-1">No license document uploaded</p>
+                  )}
+                </div>
+                <div className="flex gap-2 shrink-0">
+                  <button
+                    disabled={actingOn === d.id}
+                    onClick={() => approve(d.id)}
+                    className="px-3 py-2 bg-emerald-500 text-white rounded-lg text-sm font-bold flex items-center gap-1.5 disabled:opacity-50"
+                  >
+                    <ThumbsUp size={15} /> Approve
+                  </button>
+                  <button
+                    disabled={actingOn === d.id}
+                    onClick={() => reject(d.id)}
+                    className="px-3 py-2 border border-red-500/40 text-red-500 rounded-lg text-sm font-bold flex items-center gap-1.5 disabled:opacity-50 hover:bg-red-500/10"
+                  >
+                    <ThumbsDown size={15} /> Reject
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 interface IssuedRecall {
   id: number;
@@ -179,9 +307,10 @@ export default function HealthIntelligence() {
 
       {error && <p role="alert" className="text-red-500 font-semibold mb-6">{error}</p>}
 
-      {/* Recall issuance is a health-authority action, not a clinician one —
-          this same component is shared with the Doctor analytics route, so
-          it's gated to ADMIN accounts only. */}
+      {/* Doctor verification + recall issuance are health-authority actions,
+          not clinician ones — this same component is shared with the
+          Doctor analytics route, so both are gated to ADMIN accounts only. */}
+      {user?.role === 'ADMIN' && <DoctorVerificationPanel />}
       {user?.role === 'ADMIN' && <BatchRecallIssuer />}
 
       {loading ? (

@@ -64,6 +64,16 @@ def _status_for(stock_count: int) -> str:
     return "Optimal"
 
 
+def _notify_if_newly_low(db: Session, owner_user_id: int, item: "models.PharmacyItem", old_count: int):
+    """Push a low-stock alert only on the transition INTO Low/Out of Stock
+    (old count was Optimal, new count isn't) — not on every subsequent sale
+    once already low, matching how expiry/recall alerts are one push per
+    event rather than a repeat per action. A restock can only move a count
+    up, so this can never misfire on a shipment delta."""
+    if _status_for(old_count) == "Optimal" and _status_for(item.stock_count) != "Optimal":
+        NotificationService(db).notify_low_stock(owner_user_id, item.medicine_name, item.stock_count)
+
+
 def _haversine_km(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
     r = 6371.0
     p1, p2 = math.radians(lat1), math.radians(lat2)
@@ -210,6 +220,7 @@ async def update_stock(
     if quantity_added == 0:
         raise HTTPException(status_code=400, detail="quantity_added must be non-zero")
     item = _owned_item(medicine_id, current_user, db)
+    old_count = item.stock_count
     new_count = item.stock_count + quantity_added
     if new_count < 0:
         raise HTTPException(
@@ -219,6 +230,7 @@ async def update_stock(
     item.stock_count = new_count
     db.commit()
     db.refresh(item)
+    _notify_if_newly_low(db, current_user.id, item, old_count)
     return {"message": f"Stock updated successfully. New quantity: {item.stock_count}", "id": item.id}
 
 
@@ -232,8 +244,10 @@ async def set_stock(
     """Absolute end-of-day count — the planning doc's rural entry mode for
     shops without billing systems."""
     item = _owned_item(medicine_id, current_user, db)
+    old_count = item.stock_count
     item.stock_count = count
     db.commit()
+    _notify_if_newly_low(db, current_user.id, item, old_count)
     return {"message": f"Stock set to {count}", "id": item.id}
 
 
@@ -246,8 +260,10 @@ async def decrement_stock(
 ):
     """Tap-to-decrement on sale — the planning doc's other rural entry mode."""
     item = _owned_item(medicine_id, current_user, db)
+    old_count = item.stock_count
     item.stock_count = max(0, item.stock_count - count)
     db.commit()
+    _notify_if_newly_low(db, current_user.id, item, old_count)
     return {"message": f"Sold {count}. Remaining: {item.stock_count}", "id": item.id}
 
 
@@ -323,6 +339,7 @@ async def fulfill_prescription(
         raise HTTPException(status_code=400, detail="Prescription already fulfilled")
 
     decremented, missing = [], []
+    newly_low_items: list[tuple[models.PharmacyItem, int]] = []
     for med in (prescription.medicines or []):
         name = (med.get("name") or "").strip()
         if not name:
@@ -336,6 +353,7 @@ async def fulfill_prescription(
             .first()
         )
         if item and item.stock_count > 0:
+            newly_low_items.append((item, item.stock_count))
             item.stock_count -= 1
             decremented.append(name)
         else:
@@ -344,6 +362,8 @@ async def fulfill_prescription(
     prescription.is_fulfilled = True
     prescription.fulfilled_by_pharmacy_id = pharmacy.id
     db.commit()
+    for item, old_count in newly_low_items:
+        _notify_if_newly_low(db, pharmacy.owner_user_id, item, old_count)
 
     names = [ (med.get("name") or "").strip() for med in (prescription.medicines or []) ]
     interaction_warnings = check_interactions(names)

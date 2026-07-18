@@ -140,32 +140,32 @@ export default function FamilyProfiles() {
             <div className="absolute inset-0 bg-white/40 dark:bg-black/40 z-0"></div>
             <div className="relative z-10 grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label className="block text-sm font-semibold mb-2">Full Name</label>
-                <input required type="text" value={formData.full_name} onChange={(e) => setFormData({ ...formData, full_name: e.target.value })} className="w-full p-3 rounded-xl bg-white/50 dark:bg-black/20 border border-white/20 focus:ring-2 focus:ring-indigo-500 outline-none" />
+                <label htmlFor="family-fullname" className="block text-sm font-semibold mb-2">Full Name</label>
+                <input id="family-fullname" required type="text" value={formData.full_name} onChange={(e) => setFormData({ ...formData, full_name: e.target.value })} className="w-full p-3 rounded-xl bg-white/50 dark:bg-black/20 border border-white/20 focus:ring-2 focus:ring-indigo-500 outline-none" />
               </div>
               <div>
-                <label className="block text-sm font-semibold mb-2">Relationship</label>
-                <input required type="text" value={formData.relation} onChange={(e) => setFormData({ ...formData, relation: e.target.value })} placeholder="e.g. Mother, Son, Spouse" className="w-full p-3 rounded-xl bg-white/50 dark:bg-black/20 border border-white/20 focus:ring-2 focus:ring-indigo-500 outline-none" />
+                <label htmlFor="family-relation" className="block text-sm font-semibold mb-2">Relationship</label>
+                <input id="family-relation" required type="text" value={formData.relation} onChange={(e) => setFormData({ ...formData, relation: e.target.value })} placeholder="e.g. Mother, Son, Spouse" className="w-full p-3 rounded-xl bg-white/50 dark:bg-black/20 border border-white/20 focus:ring-2 focus:ring-indigo-500 outline-none" />
               </div>
               <div>
-                <label className="block text-sm font-semibold mb-2">Age</label>
-                <input required type="number" min={0} max={150} value={formData.age} onChange={(e) => setFormData({ ...formData, age: e.target.value })} className="w-full p-3 rounded-xl bg-white/50 dark:bg-black/20 border border-white/20 focus:ring-2 focus:ring-indigo-500 outline-none" />
+                <label htmlFor="family-age" className="block text-sm font-semibold mb-2">Age</label>
+                <input id="family-age" required type="number" min={0} max={150} value={formData.age} onChange={(e) => setFormData({ ...formData, age: e.target.value })} className="w-full p-3 rounded-xl bg-white/50 dark:bg-black/20 border border-white/20 focus:ring-2 focus:ring-indigo-500 outline-none" />
               </div>
               <div>
-                <label className="block text-sm font-semibold mb-2">Gender</label>
-                <select value={formData.gender} onChange={(e) => setFormData({ ...formData, gender: e.target.value })} className="w-full p-3 rounded-xl bg-white/50 dark:bg-black/20 border border-white/20 focus:ring-2 focus:ring-indigo-500 outline-none">
+                <label htmlFor="family-gender" className="block text-sm font-semibold mb-2">Gender</label>
+                <select id="family-gender" value={formData.gender} onChange={(e) => setFormData({ ...formData, gender: e.target.value })} className="w-full p-3 rounded-xl bg-white/50 dark:bg-black/20 border border-white/20 focus:ring-2 focus:ring-indigo-500 outline-none">
                   <option>Male</option>
                   <option>Female</option>
                   <option>Other</option>
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-semibold mb-2">Blood Group (Optional)</label>
-                <input type="text" value={formData.blood_group} onChange={(e) => setFormData({ ...formData, blood_group: e.target.value })} placeholder="e.g. O+" className="w-full p-3 rounded-xl bg-white/50 dark:bg-black/20 border border-white/20 focus:ring-2 focus:ring-indigo-500 outline-none" />
+                <label htmlFor="family-blood" className="block text-sm font-semibold mb-2">Blood Group (Optional)</label>
+                <input id="family-blood" type="text" value={formData.blood_group} onChange={(e) => setFormData({ ...formData, blood_group: e.target.value })} placeholder="e.g. O+" className="w-full p-3 rounded-xl bg-white/50 dark:bg-black/20 border border-white/20 focus:ring-2 focus:ring-indigo-500 outline-none" />
               </div>
               <div>
-                <label className="block text-sm font-semibold mb-2">Chronic Conditions (Optional)</label>
-                <input type="text" value={formData.chronic_conditions} onChange={(e) => setFormData({ ...formData, chronic_conditions: e.target.value })} className="w-full p-3 rounded-xl bg-white/50 dark:bg-black/20 border border-white/20 focus:ring-2 focus:ring-indigo-500 outline-none" />
+                <label htmlFor="family-conditions" className="block text-sm font-semibold mb-2">Chronic Conditions (Optional)</label>
+                <input id="family-conditions" type="text" value={formData.chronic_conditions} onChange={(e) => setFormData({ ...formData, chronic_conditions: e.target.value })} className="w-full p-3 rounded-xl bg-white/50 dark:bg-black/20 border border-white/20 focus:ring-2 focus:ring-indigo-500 outline-none" />
               </div>
               <div className="md:col-span-2 flex justify-end">
                 <button type="submit" disabled={submitting} className="neu-button px-8 py-3 bg-indigo-500 text-white font-bold rounded-xl disabled:opacity-50">

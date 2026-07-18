@@ -25,7 +25,7 @@ from sqlalchemy.orm import Session
 import models
 from ai import AITask, get_ai_manager
 from database import get_db
-from modules.auth.router import require_role
+from modules.auth.router import require_approved_doctor
 
 # Previously imported `gemini_client` directly from modules.ai_triage.router
 # — a second, informal AI entry point that bypassed any central provider
@@ -81,7 +81,7 @@ async def patient_summary(
     patient_id: int,
     family_profile_id: Optional[int] = None,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(require_role("DOCTOR")),
+    current_user: models.User = Depends(require_approved_doctor()),
 ):
     patient = (
         db.query(models.User)

@@ -14,6 +14,9 @@ interface User {
   // get them and fell back to hardcoded placeholder strings instead.
   email?: string;
   full_name?: string;
+  phone?: string | null;
+  is_verified?: boolean;
+  phone_verified?: boolean;
 }
 
 interface AuthContextType {

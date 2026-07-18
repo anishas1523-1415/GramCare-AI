@@ -7,6 +7,7 @@
 
 import { useEffect } from "react";
 import { motion } from "framer-motion";
+import Link from "next/link";
 import { AlertTriangle, RotateCcw, Home } from "lucide-react";
 
 export default function Error({
@@ -17,7 +18,6 @@ export default function Error({
   reset: () => void;
 }) {
   useEffect(() => {
-    // eslint-disable-next-line no-console
     console.error("GramCare AI — unhandled page error:", error);
   }, [error]);
 
@@ -41,12 +41,12 @@ export default function Error({
           >
             <RotateCcw size={16} /> Try again
           </button>
-          <a
+          <Link
             href="/"
             className="flex-1 py-3 rounded-xl border border-white/30 font-bold flex items-center justify-center gap-2"
           >
             <Home size={16} /> Home
-          </a>
+          </Link>
         </div>
       </motion.div>
     </div>

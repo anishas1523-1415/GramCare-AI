@@ -72,17 +72,111 @@ def db():
         session.close()
 
 
-def _register_and_login(client, username, role, email=None):
-    client.post(
-        "/api/v1/auth/register",
-        json={
+def _register_and_login(client, username, role, email=None, phone=None):
+    """Test-only account creation. A few roles need a side channel around the
+    real (intentionally restricted) public API:
+
+    - ADMIN accounts can no longer self-register via POST /auth/register at
+      all (that hole is closed) — the only real path is
+      POST /auth/register/government, gated by a whitelist tests don't
+      populate. Callers that need an ADMIN token are testing *other*
+      endpoints (e.g. batch recall issuance), not the whitelist itself, so
+      this writes the User row directly.
+    - DOCTOR accounts now start PENDING and are blocked from patient-facing
+      actions (appointment queue, prescriptions, SOS response, publishing
+      slots — see require_approved_doctor) until a government reviewer
+      approves them. Every test using doctor_token / this helper predates
+      that gate and expects an immediately-usable doctor, so this
+      auto-approves right after registration. Tests that specifically
+      exercise the approval workflow itself (pending/approve/reject) should
+      NOT go through this helper for that part — they register normally
+      and drive the real /doctors/pending, /doctors/{id}/approve,
+      /doctors/{id}/reject endpoints instead.
+    - Every non-PATIENT role now must verify its email before /auth/login
+      succeeds (see login() in modules/auth/router.py). Real registration
+      sends a token by email, which tests can't click through, so this
+      flips is_verified on directly after registration — the same kind of
+      test-only bypass as the DOCTOR auto-approve above, not a bypass in
+      the app itself. DOCTOR/HOSPITAL additionally require a verified
+      phone at registration time; a `phone` kwarg lets a test supply one,
+      and this seeds a matching already-used PhoneOTP row so the real
+      registration endpoint's check passes without going through SMS.
+    """
+    from database import SessionLocal
+
+    if role == "ADMIN":
+        session = SessionLocal()
+        try:
+            if not session.query(models.User).filter(models.User.username == username).first():
+                from modules.auth.utils import get_password_hash
+                session.add(models.User(
+                    username=username,
+                    email=email or f"{username}@test.gramcare.in",
+                    hashed_password=get_password_hash("strongpass123"),
+                    full_name=username.title(),
+                    role="ADMIN",
+                    is_verified=True,
+                ))
+                session.commit()
+        finally:
+            session.close()
+    else:
+        payload = {
             "username": username,
             "email": email or f"{username}@test.gramcare.in",
             "password": "strongpass123",
             "full_name": username.title(),
             "role": role,
-        },
-    )
+        }
+        if role in ("DOCTOR", "HOSPITAL"):
+            from datetime import datetime, timezone, timedelta
+            test_phone = phone or f"+91900000{abs(hash(username)) % 10000:04d}"
+            session = SessionLocal()
+            try:
+                session.add(models.PhoneOTP(
+                    phone=test_phone,
+                    otp_code="000000",
+                    expires_at=datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(minutes=10),
+                    is_used=True,
+                ))
+                session.commit()
+            finally:
+                session.close()
+            payload["phone"] = test_phone
+
+        # Deliberately NOT asserting this succeeded: several call sites
+        # (e.g. test_phase4_booking.py's _setup_doctor_with_slot) call this
+        # helper multiple times with the same username across different
+        # test functions, relying on "already registered" (400) being a
+        # harmless no-op that falls through to reusing the existing account
+        # below — that register-or-reuse idempotency predates this
+        # verification/phone logic and must keep working. Only a genuinely
+        # unexpected failure (e.g. the phone-verification check itself
+        # rejecting the seeded PhoneOTP) should surface, which the register
+        # response no longer being trustworthy here doesn't hide — the
+        # subsequent login assert below still fails loudly if the account
+        # never ended up in a usable state.
+        client.post("/api/v1/auth/register", json=payload)
+
+        session = SessionLocal()
+        try:
+            user = session.query(models.User).filter(models.User.username == username).first()
+            if user:
+                user.is_verified = True
+                if role == "DOCTOR":
+                    profile = (
+                        session.query(models.DoctorProfile)
+                        .filter(models.DoctorProfile.user_id == user.id)
+                        .first()
+                    )
+                    if not profile:
+                        profile = models.DoctorProfile(user_id=user.id)
+                        session.add(profile)
+                    profile.verification_status = "APPROVED"
+                session.commit()
+        finally:
+            session.close()
+
     res = client.post(
         "/api/v1/auth/login",
         data={"username": username, "password": "strongpass123"},

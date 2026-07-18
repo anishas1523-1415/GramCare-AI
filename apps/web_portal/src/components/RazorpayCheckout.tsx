@@ -5,6 +5,47 @@ import Script from 'next/script';
 import api from '../lib/api';
 import { useAuth } from '../contexts/AuthContext';
 
+interface RazorpayPaymentResponse {
+  razorpay_order_id: string;
+  razorpay_payment_id: string;
+  razorpay_signature: string;
+}
+
+interface RazorpayFailureResponse {
+  error?: { description?: string };
+}
+
+interface RazorpayOptions {
+  key: string | undefined;
+  amount: number;
+  currency: string;
+  name: string;
+  description: string;
+  order_id: string;
+  handler: (response: RazorpayPaymentResponse) => void | Promise<void>;
+  prefill: { name: string; email: string; contact: string };
+  theme: { color: string };
+  retry: { enabled: boolean };
+  timeout: number;
+  modal: { ondismiss: () => void };
+}
+
+interface RazorpayInstance {
+  open: () => void;
+  on: (event: 'payment.failed', handler: (response: RazorpayFailureResponse) => void) => void;
+}
+
+declare global {
+  interface Window {
+    Razorpay: new (options: RazorpayOptions) => RazorpayInstance;
+  }
+}
+
+function errorDetail(err: unknown): string | undefined {
+  const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+  return typeof detail === 'string' ? detail : undefined;
+}
+
 interface RazorpayCheckoutProps {
   amount: number; // in INR
   /** Called with the ORDER id after successful verification — the booking
@@ -59,14 +100,14 @@ export default function RazorpayCheckout({ amount, onSuccess, onError }: Razorpa
       }
 
       // 2. Open Razorpay Checkout Modal for real payment
-      const options = {
-        key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID, 
+      const options: RazorpayOptions = {
+        key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
         amount: order.amount,
         currency: order.currency,
         name: "GramCare AI",
         description: "Telehealth Consultation",
         order_id: order.order_id,
-        handler: async function (response: any) {
+        handler: async (response) => {
           setModalOpen(false);
           try {
             // 3. Verify Payment Signature on Backend
@@ -81,7 +122,7 @@ export default function RazorpayCheckout({ amount, onSuccess, onError }: Razorpa
             } else {
               onError("Payment verification failed.");
             }
-          } catch (err: any) {
+          } catch (err) {
             // The charge may still have gone through on Razorpay's side even
             // though this network call failed (dropped connection, backend
             // restart, etc). /webhook is the server-side safety net that
@@ -89,25 +130,21 @@ export default function RazorpayCheckout({ amount, onSuccess, onError }: Razorpa
             // /payments/{order_id}/status lets a future retry check before
             // re-charging — surface that instead of implying the money was
             // definitely NOT taken.
-            const detail = err.response?.data?.detail;
             onError(
-              typeof detail === 'string'
-                ? detail
-                : 'Could not confirm your payment due to a network error. If you were charged, it will be reconciled automatically — please check your booking status before paying again.'
+              errorDetail(err)
+                ?? 'Could not confirm your payment due to a network error. If you were charged, it will be reconciled automatically — please check your booking status before paying again.'
             );
           }
         },
         // Previously hardcoded placeholder values ("Patient Name",
         // patient@example.com) regardless of who was actually paying — real
         // payment records/receipts would show fake customer info. Now
-        // sourced from the authenticated user; contact number still falls
-        // back to a placeholder since phone number isn't currently part of
-        // the User model (schemas.UserCreate has no phone field either) —
-        // tracked as a follow-up.
+        // sourced from the authenticated user, including the real phone
+        // number where the account has a verified one.
         prefill: {
           name: user?.full_name || user?.username || "Patient",
           email: user?.email || "",
-          contact: "9999999999"
+          contact: user?.phone || "9999999999"
         },
         theme: {
           color: "#14b8a6" // teal-500
@@ -134,16 +171,16 @@ export default function RazorpayCheckout({ amount, onSuccess, onError }: Razorpa
         },
       };
 
-      const rzp = new (window as any).Razorpay(options);
-      rzp.on('payment.failed', function (response: any) {
+      const rzp = new window.Razorpay(options);
+      rzp.on('payment.failed', (response) => {
         setModalOpen(false);
         onError(response.error?.description || "Payment failed. Please try again.");
       });
       setModalOpen(true);
       rzp.open();
 
-    } catch (err: any) {
-      onError(err.response?.data?.detail || "Failed to initiate payment.");
+    } catch (err) {
+      onError(errorDetail(err) || "Failed to initiate payment.");
     } finally {
       setLoading(false);
     }

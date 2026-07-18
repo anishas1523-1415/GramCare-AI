@@ -131,7 +131,7 @@ export default function ConsultationRoom({ params }: { params: Promise<{ id: str
           socketRef.current?.emit("offer", { offer, roomId });
         });
 
-        socketRef.current?.on("offer", async (data: any) => {
+        socketRef.current?.on("offer", async (data: { offer: RTCSessionDescriptionInit }) => {
           // I received an offer
           if (!peerRef.current) return;
           await peerRef.current.setRemoteDescription(new RTCSessionDescription(data.offer));
@@ -140,12 +140,12 @@ export default function ConsultationRoom({ params }: { params: Promise<{ id: str
           socketRef.current?.emit("answer", { answer, roomId });
         });
 
-        socketRef.current?.on("answer", async (data: any) => {
+        socketRef.current?.on("answer", async (data: { answer: RTCSessionDescriptionInit }) => {
           if (!peerRef.current) return;
           await peerRef.current.setRemoteDescription(new RTCSessionDescription(data.answer));
         });
 
-        socketRef.current?.on("ice_candidate", async (data: any) => {
+        socketRef.current?.on("ice_candidate", async (data: { candidate: RTCIceCandidateInit }) => {
           if (!peerRef.current) return;
           try {
             await peerRef.current.addIceCandidate(new RTCIceCandidate(data.candidate));

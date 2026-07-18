@@ -80,8 +80,9 @@ export default function PrescriptionWriter({ params }: { params: Promise<{ appoi
       // against the patient's other currently-active medicines.
       setInteractionWarnings(res.data?.interaction_warnings || []);
       setIssued(true);
-    } catch (error: any) {
-      setSubmitError(error?.response?.data?.detail || "Failed to issue prescription.");
+    } catch (error) {
+      const detail = (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      setSubmitError(detail || "Failed to issue prescription.");
     } finally {
       setLoading(false);
     }
@@ -145,20 +146,22 @@ export default function PrescriptionWriter({ params }: { params: Promise<{ appoi
             <h2 className="text-xl font-bold mb-4">Diagnosis & Notes</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label className="block text-sm font-semibold mb-2">Primary Diagnosis</label>
-                <input 
+                <label htmlFor="rx-diagnosis" className="block text-sm font-semibold mb-2">Primary Diagnosis</label>
+                <input
+                  id="rx-diagnosis"
                   required
-                  type="text" 
-                  value={diagnosis} 
+                  type="text"
+                  value={diagnosis}
                   onChange={e => setDiagnosis(e.target.value)}
                   placeholder="e.g. Viral Infection"
-                  className="w-full p-3 rounded-xl bg-white/50 dark:bg-black/20 border border-white/20 focus:ring-2 focus:ring-indigo-500 outline-none" 
+                  className="w-full p-3 rounded-xl bg-white/50 dark:bg-black/20 border border-white/20 focus:ring-2 focus:ring-indigo-500 outline-none"
                 />
               </div>
               <div>
-                <label className="block text-sm font-semibold mb-2">Clinical Notes</label>
-                <textarea 
-                  value={notes} 
+                <label htmlFor="rx-notes" className="block text-sm font-semibold mb-2">Clinical Notes</label>
+                <textarea
+                  id="rx-notes"
+                  value={notes}
                   onChange={e => setNotes(e.target.value)}
                   placeholder="Additional observations..."
                   className="w-full p-3 rounded-xl bg-white/50 dark:bg-black/20 border border-white/20 focus:ring-2 focus:ring-indigo-500 outline-none resize-none" 
@@ -189,31 +192,34 @@ export default function PrescriptionWriter({ params }: { params: Promise<{ appoi
                   className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end bg-white/40 dark:bg-black/40 p-4 rounded-xl border border-white/20 relative"
                 >
                   <div className="md:col-span-4">
-                    <label className="block text-xs font-semibold mb-1 text-gray-500">Medicine Name</label>
-                    <input 
+                    <label htmlFor={`med-name-${index}`} className="block text-xs font-semibold mb-1 text-gray-500">Medicine Name</label>
+                    <input
+                      id={`med-name-${index}`}
                       required
-                      type="text" 
-                      value={med.name} 
+                      type="text"
+                      value={med.name}
                       onChange={e => updateMedicine(index, 'name', e.target.value)}
                       placeholder="e.g. Paracetamol"
-                      className="w-full p-2 rounded-lg bg-[var(--background)] border border-transparent focus:ring-2 focus:ring-teal-500 outline-none" 
+                      className="w-full p-2 rounded-lg bg-[var(--background)] border border-transparent focus:ring-2 focus:ring-teal-500 outline-none"
                     />
                   </div>
                   <div className="md:col-span-2">
-                    <label className="block text-xs font-semibold mb-1 text-gray-500">Dosage</label>
-                    <input 
+                    <label htmlFor={`med-dosage-${index}`} className="block text-xs font-semibold mb-1 text-gray-500">Dosage</label>
+                    <input
+                      id={`med-dosage-${index}`}
                       required
-                      type="text" 
-                      value={med.dosage} 
+                      type="text"
+                      value={med.dosage}
                       onChange={e => updateMedicine(index, 'dosage', e.target.value)}
                       placeholder="500mg"
-                      className="w-full p-2 rounded-lg bg-[var(--background)] border border-transparent focus:ring-2 focus:ring-teal-500 outline-none" 
+                      className="w-full p-2 rounded-lg bg-[var(--background)] border border-transparent focus:ring-2 focus:ring-teal-500 outline-none"
                     />
                   </div>
                   <div className="md:col-span-3">
-                    <label className="block text-xs font-semibold mb-1 text-gray-500">Frequency</label>
-                    <select 
-                      value={med.frequency} 
+                    <label htmlFor={`med-frequency-${index}`} className="block text-xs font-semibold mb-1 text-gray-500">Frequency</label>
+                    <select
+                      id={`med-frequency-${index}`}
+                      value={med.frequency}
                       onChange={e => updateMedicine(index, 'frequency', e.target.value)}
                       className="w-full p-2 rounded-lg bg-[var(--background)] border border-transparent focus:ring-2 focus:ring-teal-500 outline-none" 
                     >
@@ -225,11 +231,12 @@ export default function PrescriptionWriter({ params }: { params: Promise<{ appoi
                     </select>
                   </div>
                   <div className="md:col-span-2">
-                    <label className="block text-xs font-semibold mb-1 text-gray-500">Duration</label>
-                    <input 
+                    <label htmlFor={`med-duration-${index}`} className="block text-xs font-semibold mb-1 text-gray-500">Duration</label>
+                    <input
+                      id={`med-duration-${index}`}
                       required
-                      type="text" 
-                      value={med.duration} 
+                      type="text"
+                      value={med.duration}
                       onChange={e => updateMedicine(index, 'duration', e.target.value)}
                       placeholder="5 days"
                       className="w-full p-2 rounded-lg bg-[var(--background)] border border-transparent focus:ring-2 focus:ring-teal-500 outline-none" 

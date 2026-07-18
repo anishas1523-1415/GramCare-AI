@@ -132,3 +132,20 @@ class NotificationService:
             ),
             data={"type": "batch_recall", "medicine_name": medicine_name}
         )
+
+    def notify_low_stock(self, pharmacist_user_id: int, medicine_name: str, stock_count: int):
+        """Pushed to the pharmacy's own owner the moment a decrement/set
+        crosses below the low-stock threshold (modules/pharmacy_inventory's
+        _status_for) — previously stock status was only a passive label a
+        pharmacist saw if they happened to look at their own inventory list,
+        unlike expiry and batch-recall alerts, which both proactively push."""
+        self.send_notification(
+            user_id=pharmacist_user_id,
+            title="Low Stock Alert",
+            body=(
+                f"{medicine_name} is out of stock."
+                if stock_count <= 0 else
+                f"{medicine_name} is running low — {stock_count} unit{'s' if stock_count != 1 else ''} left."
+            ),
+            data={"type": "pharmacy_update", "medicine_name": medicine_name, "stock_count": str(stock_count)}
+        )

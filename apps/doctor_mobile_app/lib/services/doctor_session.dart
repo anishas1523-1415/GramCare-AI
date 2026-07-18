@@ -17,6 +17,12 @@ class DoctorSession extends ChangeNotifier {
   bool get loading => _loading;
   int? get doctorId => _profile?.id;
 
+  /// Whether the queue/prescriptions/AI-summary/SOS endpoints will actually
+  /// let this doctor through — mirrors require_approved_doctor() server
+  /// side, so screens can show a clear reason instead of firing a request
+  /// that's guaranteed to 403.
+  bool get isApproved => _profile?.isApproved ?? false;
+
   Future<void> loadProfile() async {
     _loading = true;
     notifyListeners();
@@ -32,6 +38,18 @@ class DoctorSession extends ChangeNotifier {
 
   Future<void> updateProfile(Map<String, dynamic> body) async {
     final res = await ApiService().client.put('/doctors/me', data: body);
+    _profile = DoctorProfile.fromJson(res.data as Map<String, dynamic>);
+    notifyListeners();
+  }
+
+  Future<void> uploadPhoto(String imageBase64) async {
+    final res = await ApiService().client.post('/doctors/me/photo', data: {'image_base64': imageBase64});
+    _profile = DoctorProfile.fromJson(res.data as Map<String, dynamic>);
+    notifyListeners();
+  }
+
+  Future<void> uploadLicenseDocument(String imageBase64) async {
+    final res = await ApiService().client.post('/doctors/me/license-document', data: {'image_base64': imageBase64});
     _profile = DoctorProfile.fromJson(res.data as Map<String, dynamic>);
     notifyListeners();
   }

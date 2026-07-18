@@ -22,13 +22,32 @@ class User(Base):
     full_name = Column(String)
     role = Column(String)  # 'PATIENT', 'DOCTOR', 'PHARMACIST', 'HOSPITAL', 'ADMIN', 'LAB'
     is_active = Column(Boolean, default=True)
+    # Every non-PATIENT role (DOCTOR/HOSPITAL/PHARMACIST/LAB/ADMIN) must
+    # verify their email before /auth/login succeeds — closes "register
+    # under an email you don't own" for every operator-facing account.
+    # PATIENT stays ungated deliberately: low-friction access matters more
+    # than email verification for rural self-service registration, and a
+    # patient account can't approve doctors, dispense medicine, or touch
+    # government data. New rows default False; existing rows are backfilled
+    # to True by the migration that adds this column so no one already
+    # registered gets retroactively locked out.
+    is_verified = Column(Boolean, default=False)
+    phone = Column(String, nullable=True)
+    phone_verified = Column(Boolean, default=False)
     created_at = Column(DateTime, default=_utcnow)
 
     # Relationships
     family_profiles = relationship("FamilyProfile", back_populates="user")
-    doctor_profile = relationship("DoctorProfile", back_populates="user", uselist=False)
+    doctor_profile = relationship(
+        "DoctorProfile", back_populates="user", uselist=False,
+        foreign_keys="[DoctorProfile.user_id]",
+    )
     pharmacy = relationship("Pharmacy", back_populates="owner", uselist=False)
     lab_center = relationship("LabCenter", back_populates="owner", uselist=False)
+    hospital = relationship(
+        "Hospital", back_populates="owner", uselist=False,
+        foreign_keys="[Hospital.owner_user_id]",
+    )
     appointments_as_patient = relationship("Appointment", foreign_keys="[Appointment.patient_id]", back_populates="patient")
     appointments_as_doctor = relationship("Appointment", foreign_keys="[Appointment.doctor_id]", back_populates="doctor")
     push_tokens = relationship("UserPushToken", back_populates="user")
@@ -101,9 +120,25 @@ class DoctorProfile(Base):
     # Cloudinary-hosted profile photo, shown in the patient-facing doctor
     # directory (schemas.DoctorPublic) — mirrors FamilyProfile.photo_url.
     photo_url = Column(String, nullable=True)
+
+    # --- Government verification (anti-fake-doctor gate) --------------------
+    # A doctor account exists and can log in the moment it's registered, but
+    # cannot reach patient-facing actions (appointment queue, prescriptions,
+    # SOS response, publishing slots) or appear in the public directory
+    # until a government reviewer approves it. See
+    # modules.auth.router.require_approved_doctor and
+    # modules/doctors/router.py's approve/reject endpoints.
+    license_number = Column(String, nullable=True, unique=True, index=True)
+    license_document_url = Column(String, nullable=True)  # Cloudinary scan of the license/ID
+    service_hours = Column(String, nullable=True)  # free text, e.g. "Mon-Sat 9am-1pm"
+    verification_status = Column(String, default="PENDING", index=True)  # PENDING/APPROVED/REJECTED
+    rejection_reason = Column(Text, nullable=True)
+    reviewed_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    reviewed_at = Column(DateTime, nullable=True)
+
     created_at = Column(DateTime, default=_utcnow)
 
-    user = relationship("User", back_populates="doctor_profile")
+    user = relationship("User", back_populates="doctor_profile", foreign_keys=[user_id])
     slots = relationship("AvailabilitySlot", back_populates="doctor_profile")
 
 
@@ -156,6 +191,10 @@ class Appointment(Base):
     # (planning doc: fee must be paid BEFORE the call; refund if unattended).
     payment_id = Column(Integer, ForeignKey("payments.id"), nullable=True)
     created_at = Column(DateTime, default=_utcnow)
+    # Set once the pre-appointment SMS reminder has been sent (or attempted
+    # with nothing to send to, e.g. no phone on file) so the reminder
+    # watchdog never double-sends. NULL = not yet due / not yet attempted.
+    reminder_sent_at = Column(DateTime, nullable=True)
 
     patient = relationship("User", foreign_keys=[patient_id], back_populates="appointments_as_patient")
     doctor = relationship("User", foreign_keys=[doctor_id], back_populates="appointments_as_doctor")
@@ -400,17 +439,32 @@ class Hospital(Base):
     Planning doc: SOS alerts go to the hospital's central emergency desk
     (not individual doctors), with escalation to the next-nearest hospital
     if unacknowledged.
+
+    Previously seeded/managed only internally (no HOSPITAL-role user ever
+    owned or self-registered one) — owner_user_id + the richer profile
+    fields below back the new self-service registration flow
+    (modules/hospital/router.py), mirroring Pharmacy/LabCenter's existing
+    owner-registers-their-own-record pattern. Data-collection only for now
+    (instant access, no government approval gate) — unlike DoctorProfile.
     """
     __tablename__ = "hospitals"
 
     id = Column(Integer, primary_key=True, index=True)
+    owner_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, unique=True, index=True)
     name = Column(String)
     address = Column(String, nullable=True)
     lat = Column(Float, nullable=True)
     lng = Column(Float, nullable=True)
     phone = Column(String, nullable=True)
+    established_year = Column(Integer, nullable=True)
+    service_timing = Column(String, nullable=True)  # e.g. "24/7" or "Mon-Sat 8am-8pm"
+    specializations = Column(String, nullable=True)  # comma-separated departments
+    license_number = Column(String, nullable=True)
+    license_document_url = Column(String, nullable=True)  # Cloudinary scan
     emergency_desk_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, unique=True)
     created_at = Column(DateTime, default=_utcnow)
+
+    owner = relationship("User", back_populates="hospital", foreign_keys=[owner_user_id])
 
 
 class LabCenter(Base):
@@ -510,6 +564,47 @@ class PasswordResetToken(Base):
     is_used = Column(Boolean, default=False)
     created_at = Column(DateTime, default=_utcnow)
 
+    # Was missing entirely — modules/auth/router.py's reset_password() reads
+    # token_entry.user directly, which raised AttributeError on every real
+    # (non-enumeration-guarded) password reset attempt. Unidirectional is
+    # enough; User doesn't need a back-reference to its reset tokens.
+    user = relationship("User")
+
+
+class EmailVerificationToken(Base):
+    """Mirrors PasswordResetToken exactly — same shape, different purpose:
+    proves the caller controls the email address on a newly-registered
+    account before that account (if non-PATIENT) can log in."""
+    __tablename__ = "email_verification_tokens"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), index=True)
+    token = Column(String, unique=True, index=True)
+    expires_at = Column(DateTime)
+    is_used = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=_utcnow)
+
+    user = relationship("User")
+
+
+class PhoneOTP(Base):
+    """Short-lived OTP proving control of a phone number, delivered via
+    core.sms_service (MSG91). A verified row (is_used=True) within the last
+    15 minutes is the proof /auth/register checks before attaching `phone`
+    to a new DOCTOR/HOSPITAL account — same pattern as email verification,
+    but phone-first since MSG91's OTP API generates/tracks the code
+    itself; we still keep our own row to rate-limit and to check "was THIS
+    phone verified recently" at registration time."""
+    __tablename__ = "phone_otps"
+
+    id = Column(Integer, primary_key=True, index=True)
+    phone = Column(String, index=True)
+    otp_code = Column(String)
+    expires_at = Column(DateTime)
+    is_used = Column(Boolean, default=False)
+    attempt_count = Column(Integer, default=0)
+    created_at = Column(DateTime, default=_utcnow)
+
 
 class AuditLog(Base):
     __tablename__ = "audit_logs"
@@ -521,5 +616,25 @@ class AuditLog(Base):
     resource_id = Column(String, nullable=True, index=True)
     details = Column(JSON, nullable=True)
     ip_address = Column(String, nullable=True)
+    created_at = Column(DateTime, default=_utcnow)
+
+
+class AuthorizedGovernmentEmail(Base):
+    """Whitelist gating Government Portal (ADMIN role) account creation.
+
+    Registering as ADMIN through the public /auth/register endpoint is
+    disallowed entirely (schemas.UserCreate.role no longer accepts it) —
+    the ONLY way to obtain an ADMIN account is POST /auth/register/government,
+    which requires the caller's email to already exist in this table.
+    Pre-provisioned (there is no self-serve "apply to be a government
+    official" flow, unlike doctors) — seeded via
+    GOVERNMENT_WHITELIST_EMAILS in .env at startup (see main.py) and
+    otherwise managed directly against this table.
+    """
+    __tablename__ = "authorized_government_emails"
+
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String, unique=True, index=True, nullable=False)
+    note = Column(String, nullable=True)
     created_at = Column(DateTime, default=_utcnow)
 

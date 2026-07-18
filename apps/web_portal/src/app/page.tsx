@@ -8,11 +8,40 @@ import { io } from "socket.io-client";
 import api from "../lib/api";
 import { useProfile } from "../contexts/ProfileContext";
 
+interface TriageResult {
+  severity: 'CRITICAL' | 'HIGH' | 'MODERATE' | 'LOW';
+  severity_score?: number;
+  department: string;
+  recommendation: string;
+  home_remedies?: string;
+  first_aid?: string;
+  possible_causes?: string;
+  specialist_type?: string;
+  untreated_outcome?: string;
+  confidence?: number;
+  explanation?: string;
+}
+
+interface TriageAlert {
+  id: string;
+  time: string;
+  severity: string;
+  department: string;
+  symptoms: string;
+  isEmergency?: boolean;
+}
+
+// Module-level: this never changes across renders, so defining it inside
+// the component (as it previously was, twice, under two different names)
+// either duplicated the value or forced a choice between silencing
+// exhaustive-deps and recreating the socket connection every render.
+const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "https://gramcare-signaling.onrender.com";
+
 export default function Home() {
   const { activeProfile } = useProfile();
   const router = useRouter();
   const [symptoms, setSymptoms] = useState("");
-  const [triageResult, setTriageResult] = useState<any>(null);
+  const [triageResult, setTriageResult] = useState<TriageResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [showExplanation, setShowExplanation] = useState(false);
@@ -34,14 +63,12 @@ export default function Home() {
   };
   
   // Realtime Socket State
-  const [alerts, setAlerts] = useState<any[]>([]);
+  const [alerts, setAlerts] = useState<TriageAlert[]>([]);
   const [socketConnected, setSocketConnected] = useState(false);
-
-  const WS_URL_EFFECT = process.env.NEXT_PUBLIC_WS_URL || "https://gramcare-signaling.onrender.com";
 
   useEffect(() => {
     // Connect to Node.js Realtime Server
-    const socket = io(WS_URL_EFFECT);
+    const socket = io(WS_URL);
 
     socket.on("connect", () => {
       setSocketConnected(true);
@@ -59,11 +86,11 @@ export default function Home() {
     });
 
     // Listen for triage updates (simulated emergency alerts)
-    socket.on("triage_update", (data) => {
+    socket.on("triage_update", (data: TriageAlert) => {
       setAlerts((prev) => [data, ...prev].slice(0, 5)); // Keep last 5
     });
 
-    socket.on("emergency_alert", (data) => {
+    socket.on("emergency_alert", (data: TriageAlert) => {
       setAlerts((prev) => [{ ...data, isEmergency: true }, ...prev].slice(0, 5));
     });
 
@@ -71,9 +98,6 @@ export default function Home() {
       socket.disconnect();
     };
   }, []);
-
-  // (unused API_URL constant removed — all REST calls go through lib/api)
-  const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "https://gramcare-signaling.onrender.com";
 
   const analyzeSymptoms = async () => {
     if (!symptoms.trim()) return;
@@ -126,8 +150,8 @@ export default function Home() {
       });
       setTimeout(() => socket.disconnect(), 1000);
 
-    } catch (err: any) {
-      setError(err.message || "An error occurred");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "An error occurred");
     } finally {
       setLoading(false);
     }

@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../models/appointment.dart';
+import '../models/doctor_profile.dart';
 import '../services/api_service.dart';
 import '../services/app_strings.dart';
 import '../services/doctor_session.dart';
@@ -47,6 +48,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
       setState(() {
         _loading = false;
         _error = context.read<LocaleService>().t('error_generic');
+      });
+      return;
+    }
+    // The queue endpoint 403s for any doctor not yet APPROVED — checking
+    // this first avoids firing a request guaranteed to fail and lets
+    // _buildBody show a clear "under review" state instead of a generic
+    // error with an infinite Retry loop (what happened here before).
+    if (!session.isApproved) {
+      setState(() {
+        _loading = false;
+        _error = null;
       });
       return;
     }
@@ -97,23 +109,85 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildBody(LocaleService locale, DoctorSession session) {
-    if (_loading) {
+    if (_loading || session.loading) {
       return const Center(child: CircularProgressIndicator());
     }
+    final profile = session.profile;
+    if (profile != null && !profile.isApproved) {
+      return _buildVerificationGate(locale, profile);
+    }
     if (_error != null) {
-      return ListView(
-        children: [
-          const SizedBox(height: 120),
-          Icon(Icons.error_outline, size: 48, color: Colors.grey.shade400),
-          const SizedBox(height: 12),
-          Center(child: Text(_error!)),
-          const SizedBox(height: 12),
-          Center(
-            child: OutlinedButton(onPressed: _loadQueue, child: Text(locale.t('retry'))),
+      return _buildErrorBody(locale);
+    }
+    return _buildQueueBody(locale);
+  }
+
+  Widget _buildVerificationGate(LocaleService locale, DoctorProfile profile) {
+    final rejected = profile.isRejected;
+    return ListView(
+      padding: const EdgeInsets.symmetric(horizontal: 32),
+      children: [
+        const SizedBox(height: 100),
+        Icon(
+          rejected ? Icons.error_outline : Icons.hourglass_top_outlined,
+          size: 56,
+          color: rejected ? AppTheme.cancelledRed : AppTheme.pendingAmber,
+        ),
+        const SizedBox(height: 20),
+        Text(
+          rejected ? locale.t('application_rejected_title') : locale.t('application_under_review_title'),
+          textAlign: TextAlign.center,
+          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 10),
+        Text(
+          rejected ? locale.t('application_rejected_body') : locale.t('application_under_review_body'),
+          textAlign: TextAlign.center,
+          style: const TextStyle(color: Colors.black54),
+        ),
+        if (rejected && profile.rejectionReason != null) ...[
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppTheme.cancelledRed.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Text(
+              '${locale.t('rejection_reason')}: ${profile.rejectionReason}',
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 13),
+            ),
           ),
         ],
-      );
-    }
+        const SizedBox(height: 24),
+        Center(
+          child: ElevatedButton.icon(
+            onPressed: () => context.push('/profile'),
+            icon: const Icon(Icons.person_outline, size: 18),
+            label: Text(locale.t('go_to_profile')),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildErrorBody(LocaleService locale) {
+    return ListView(
+      children: [
+        const SizedBox(height: 120),
+        Icon(Icons.error_outline, size: 48, color: Colors.grey.shade400),
+        const SizedBox(height: 12),
+        Center(child: Text(_error!)),
+        const SizedBox(height: 12),
+        Center(
+          child: OutlinedButton(onPressed: _loadQueue, child: Text(locale.t('retry'))),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildQueueBody(LocaleService locale) {
     if (_appointments.isEmpty) {
       return ListView(
         children: [

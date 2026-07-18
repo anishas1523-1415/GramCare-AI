@@ -23,7 +23,7 @@ from datetime import datetime, timedelta
 import models
 import schemas
 from database import get_db
-from modules.auth.router import get_current_user, require_role
+from modules.auth.router import get_current_user, require_role, require_approved_doctor
 from modules.family.router import resolve_owned_profile
 from core.drug_interactions import check_interactions
 from core.cloudinary_service import cloudinary_client
@@ -37,7 +37,7 @@ async def issue_prescription(
     request: Request,
     prescription: schemas.PrescriptionCreate,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(require_role("DOCTOR")),
+    current_user: models.User = Depends(require_approved_doctor()),
 ):
     """Called by the Doctor portal when a consultation ends. Writes the
     structured Prescription row (read by the pharmacy queue) plus a
@@ -195,7 +195,7 @@ async def list_recent_records(
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(require_role(["DOCTOR", "ADMIN"])),
+    current_user: models.User = Depends(require_approved_doctor("ADMIN")),
 ):
     """Recent records across all patients — feeds the doctor portal's
     patient directory. (The directory page previously called this route

@@ -59,8 +59,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
-              ? Center(child: Text(locale.t('no_profile')))
-              : ListView(
+              // Previously a dead end: no RefreshIndicator and no Retry
+              // button here, unlike every other screen in this app — a
+              // pharmacist who hit a transient failure had to navigate
+              // away and back to try again.
+              ? RefreshIndicator(
+                  onRefresh: _load,
+                  child: ListView(
+                    children: [
+                      const SizedBox(height: 120),
+                      Icon(Icons.error_outline, size: 48, color: Colors.grey.shade400),
+                      const SizedBox(height: 12),
+                      Center(child: Text(locale.t('no_profile'))),
+                      const SizedBox(height: 12),
+                      Center(
+                        child: OutlinedButton(onPressed: _load, child: Text(locale.t('retry'))),
+                      ),
+                    ],
+                  ),
+                )
+              : RefreshIndicator(
+                  onRefresh: _load,
+                  child: ListView(
                   padding: const EdgeInsets.all(20),
                   children: [
                     Center(
@@ -104,6 +124,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       style: ElevatedButton.styleFrom(backgroundColor: PharmacyTheme.statusOut),
                     ),
                   ],
+                  ),
                 ),
     );
   }

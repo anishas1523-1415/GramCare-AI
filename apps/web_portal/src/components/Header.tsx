@@ -3,8 +3,15 @@
 // Site-wide navigation. Previously there was no way to reach /login (which
 // itself didn't exist) or any other page from the homepage — no header/nav
 // component existed anywhere in the app.
+//
+// Grew role-by-role (patient links, doctor links, hospital links, profile
+// switcher, device manager, sign out) into a single flat row that wraps
+// messily on anything narrower than a wide desktop — collapses into a
+// toggleable menu below the `md` breakpoint instead.
 
+import { useState } from 'react';
 import Link from 'next/link';
+import { Menu, X } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useProfile } from '../contexts/ProfileContext';
 
@@ -22,7 +29,7 @@ function ProfileSwitcher() {
         const id = e.target.value;
         setActiveProfile(id === '' ? null : profiles.find((p) => p.id === Number(id)) || null);
       }}
-      className="px-3 py-2 rounded-lg bg-white/50 dark:bg-black/20 border border-white/20 text-sm font-semibold"
+      className="w-full md:w-auto px-3 py-2 rounded-lg bg-white/50 dark:bg-black/20 border border-white/20 text-sm font-semibold"
       style={activeProfile?.color_tag ? { borderColor: activeProfile.color_tag } : undefined}
     >
       <option value="">Myself</option>
@@ -35,55 +42,97 @@ function ProfileSwitcher() {
   );
 }
 
+const ROLE_LABEL: Record<string, string> = {
+  PATIENT: 'Patient',
+  DOCTOR: 'Doctor',
+  HOSPITAL: 'Hospital',
+  PHARMACIST: 'Pharmacist',
+  LAB: 'Lab',
+  ADMIN: 'Government',
+};
+
 export default function Header() {
   const { user, loading, logout } = useAuth();
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  const navLinks = user ? (
+    <>
+      {user.role === 'PATIENT' && (
+        <>
+          <Link href="/book" className="hover:text-teal-500 transition-colors" onClick={() => setMenuOpen(false)}>Book Consultation</Link>
+          <Link href="/family" className="hover:text-teal-500 transition-colors" onClick={() => setMenuOpen(false)}>Family Profiles</Link>
+          <Link href="/prescriptions" className="hover:text-teal-500 transition-colors" onClick={() => setMenuOpen(false)}>My Prescriptions</Link>
+          <Link href="/pharmacy" className="hover:text-teal-500 transition-colors" onClick={() => setMenuOpen(false)}>Find Medicine</Link>
+          <ProfileSwitcher />
+        </>
+      )}
+      {user.role === 'DOCTOR' && (
+        <>
+          <Link href="/doctor/dashboard" className="hover:text-teal-500 transition-colors" onClick={() => setMenuOpen(false)}>Doctor Dashboard</Link>
+          <Link href="/doctor/profile" className="hover:text-indigo-500 transition-colors" onClick={() => setMenuOpen(false)}>My Profile</Link>
+          <Link href="/hospital" className="hover:text-red-500 transition-colors" onClick={() => setMenuOpen(false)}>Emergency Desk</Link>
+        </>
+      )}
+      {(user.role === 'HOSPITAL' || user.role === 'ADMIN') && (
+        <>
+          <Link href="/hospital" className="hover:text-red-500 transition-colors font-bold" onClick={() => setMenuOpen(false)}>Emergency Desk</Link>
+          <Link href="/authority" className="hover:text-purple-500 transition-colors" onClick={() => setMenuOpen(false)}>Health Intelligence</Link>
+        </>
+      )}
+      {user.role === 'HOSPITAL' && (
+        <Link href="/hospital/profile" className="hover:text-red-500 transition-colors" onClick={() => setMenuOpen(false)}>Hospital Profile</Link>
+      )}
+      <span className="text-gray-500 md:order-last">
+        {user.full_name || user.username} ({ROLE_LABEL[user.role] || user.role})
+      </span>
+      <Link href="/account/sessions" className="hover:text-teal-500 transition-colors" title="Manage signed-in devices" onClick={() => setMenuOpen(false)}>
+        My Devices
+      </Link>
+      <button
+        onClick={() => { setMenuOpen(false); logout(); }}
+        className="neu-button px-4 py-2 font-bold rounded-lg w-full md:w-auto"
+      >
+        Sign Out
+      </button>
+    </>
+  ) : (
+    <Link href="/login" className="neu-button px-4 py-2 bg-indigo-500 text-white font-bold rounded-lg w-full md:w-auto text-center" onClick={() => setMenuOpen(false)}>
+      Sign In
+    </Link>
+  );
 
   return (
-    <header className="w-full flex items-center justify-between px-6 py-4 relative z-20">
-      <Link href="/" className="font-extrabold text-lg text-[var(--foreground)]">
-        GramCare <span className="text-teal-500">AI</span>
-      </Link>
+    <header className="w-full px-6 py-4 relative z-20">
+      <div className="flex items-center justify-between">
+        <Link href="/" className="font-extrabold text-lg text-[var(--foreground)]">
+          GramCare <span className="text-teal-500">AI</span>
+        </Link>
 
-      <nav className="flex items-center gap-4 text-sm font-semibold">
-        {loading ? null : user ? (
-          <>
-            {user.role === 'PATIENT' && (
-              <>
-                <Link href="/book" className="hover:text-teal-500 transition-colors">Book Consultation</Link>
-                <Link href="/family" className="hover:text-teal-500 transition-colors">Family Profiles</Link>
-                <Link href="/prescriptions" className="hover:text-teal-500 transition-colors">My Prescriptions</Link>
-                <Link href="/pharmacy" className="hover:text-teal-500 transition-colors">Find Medicine</Link>
-                <ProfileSwitcher />
-              </>
-            )}
-            {user.role === 'DOCTOR' && (
-              <>
-                <Link href="/doctor/dashboard" className="hover:text-teal-500 transition-colors">Doctor Dashboard</Link>
-                <Link href="/hospital" className="hover:text-red-500 transition-colors">Emergency Desk</Link>
-              </>
-            )}
-            {(user.role === 'HOSPITAL' || user.role === 'ADMIN') && (
-              <>
-                <Link href="/hospital" className="hover:text-red-500 transition-colors font-bold">Emergency Desk</Link>
-                <Link href="/authority" className="hover:text-purple-500 transition-colors">Health Intelligence</Link>
-              </>
-            )}
-            <span className="text-gray-500">
-              {user.full_name || user.username} ({user.role})
-            </span>
-            <button
-              onClick={logout}
-              className="neu-button px-4 py-2 font-bold rounded-lg"
-            >
-              Sign Out
-            </button>
-          </>
-        ) : (
-          <Link href="/login" className="neu-button px-4 py-2 bg-indigo-500 text-white font-bold rounded-lg">
-            Sign In
-          </Link>
+        {/* Desktop: full row, unchanged. Below `md`, the row gets replaced
+            by a toggle button so a role with many links never wraps into a
+            crowded multi-line mess on a phone-width screen. */}
+        <nav className="hidden md:flex items-center gap-4 text-sm font-semibold">
+          {loading ? null : navLinks}
+        </nav>
+
+        {!loading && (
+          <button
+            type="button"
+            className="md:hidden neu-button p-2 rounded-lg"
+            onClick={() => setMenuOpen((v) => !v)}
+            aria-expanded={menuOpen}
+            aria-label={menuOpen ? 'Close menu' : 'Open menu'}
+          >
+            {menuOpen ? <X size={22} /> : <Menu size={22} />}
+          </button>
         )}
-      </nav>
+      </div>
+
+      {!loading && menuOpen && (
+        <nav className="md:hidden flex flex-col items-stretch gap-3 text-sm font-semibold mt-4 pb-2">
+          {navLinks}
+        </nav>
+      )}
     </header>
   );
 }

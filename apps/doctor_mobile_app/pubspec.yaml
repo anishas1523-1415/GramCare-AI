@@ -45,6 +45,8 @@ dependencies:
   flutter_secure_storage: ^9.2.2
   # Client-generated ids where useful (e.g. FCM device id)
   uuid: ^4.4.0
+  # Profile photo + license document capture (matches pharmacy_mobile_app's version)
+  image_picker: ^1.1.2
   # Read-aloud support for parity with the patient app's accessibility bar
   flutter_tts: ^4.1.0
   intl: ^0.20.2

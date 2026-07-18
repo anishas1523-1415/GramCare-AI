@@ -10,7 +10,41 @@ class UserCreate(BaseModel):
     email: EmailStr
     password: str = Field(..., min_length=8)
     full_name: str
-    role: str = Field(..., pattern="^(PATIENT|DOCTOR|PHARMACIST|HOSPITAL|ADMIN|LAB)$")
+    # ADMIN deliberately excluded — previously any unauthenticated caller
+    # could self-register as ADMIN via this endpoint (real vulnerability,
+    # closed here). The only path to an ADMIN account is now
+    # POST /auth/register/government, gated by AuthorizedGovernmentEmail.
+    role: str = Field(..., pattern="^(PATIENT|DOCTOR|PHARMACIST|HOSPITAL|LAB)$")
+    # Required for DOCTOR/HOSPITAL (checked in the router, since Pydantic
+    # can't cleanly express "required only when role=X"), optional for the
+    # rest. Must match a phone that completed POST /auth/phone/verify-otp
+    # in the last 15 minutes.
+    phone: Optional[str] = None
+
+class VerifyEmailRequest(BaseModel):
+    token: str
+
+class ResendVerificationRequest(BaseModel):
+    email: EmailStr
+
+class PhoneSendOTPRequest(BaseModel):
+    phone: str = Field(..., min_length=8, max_length=15)
+
+class PhoneVerifyOTPRequest(BaseModel):
+    phone: str = Field(..., min_length=8, max_length=15)
+    otp: str = Field(..., min_length=4, max_length=8)
+
+class PhoneUpdate(BaseModel):
+    phone: str = Field(..., min_length=8, max_length=15)
+
+class GovernmentRegisterCreate(BaseModel):
+    """Government Portal registration — the caller's email must already be
+    present in AuthorizedGovernmentEmail (pre-provisioned, no self-serve
+    application flow)."""
+    username: str = Field(..., min_length=3, max_length=50)
+    email: EmailStr
+    password: str = Field(..., min_length=8)
+    full_name: str
 
 class UserResponse(BaseModel):
     id: int
@@ -19,6 +53,9 @@ class UserResponse(BaseModel):
     full_name: str
     role: str
     is_active: bool
+    is_verified: bool
+    phone: Optional[str] = None
+    phone_verified: bool = False
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -34,6 +71,19 @@ class RefreshTokenRequest(BaseModel):
 
 class LogoutRequest(BaseModel):
     refresh_token: str
+
+class UserSessionResponse(BaseModel):
+    """One row of GET /auth/sessions — lets a user see and revoke their own
+    logged-in devices without needing that device's refresh token (the only
+    way /auth/logout could revoke a session before this existed)."""
+    id: int
+    device_info: Optional[str] = None
+    ip_address: Optional[str] = None
+    created_at: datetime
+    expires_at: datetime
+
+    class Config:
+        from_attributes = True
 
 class ForgotPasswordRequest(BaseModel):
     email: EmailStr
@@ -83,6 +133,9 @@ class FamilyProfileResponse(FamilyProfileCreate):
 # Doctor Directory Schemas
 # ==========================================
 class DoctorProfileUpdate(BaseModel):
+    """Self-editable fields. verification_status/rejection_reason/
+    reviewed_by/reviewed_at are deliberately absent — only the government
+    approve/reject endpoints (modules/doctors/router.py) may change those."""
     specialty: Optional[str] = None
     qualifications: Optional[str] = None
     experience_years: Optional[int] = Field(None, ge=0, le=80)
@@ -91,19 +144,64 @@ class DoctorProfileUpdate(BaseModel):
     languages: Optional[str] = None
     is_available: Optional[bool] = None
     photo_url: Optional[str] = None
+    license_number: Optional[str] = Field(None, max_length=80)
+    service_hours: Optional[str] = Field(None, max_length=200)
 
 class DoctorPublic(BaseModel):
     """What patients see when choosing a doctor (planning doc: specialty,
-    experience, fee must be visible before booking)."""
+    experience, fee must be visible before booking). Only ever populated
+    for APPROVED doctors — GET /doctors filters unverified ones out
+    entirely, so there's no verification_status field here to leak."""
     id: int                      # user id (used for booking)
     full_name: str
     specialty: str
     qualifications: Optional[str] = None
     experience_years: int
     consultation_fee: float
+    bio: Optional[str] = None
     languages: Optional[str] = None
     is_available: bool
     photo_url: Optional[str] = None
+
+class DoctorSelfResponse(DoctorPublic):
+    """GET/PUT /doctors/me — the doctor's own view of their profile,
+    additionally showing the government verification state that
+    DoctorPublic hides from patients."""
+    license_number: Optional[str] = None
+    license_document_url: Optional[str] = None
+    service_hours: Optional[str] = None
+    verification_status: str = "PENDING"
+    rejection_reason: Optional[str] = None
+
+class DoctorApprovalAction(BaseModel):
+    """Government reviewer's rejection reason (approve needs no body)."""
+    reason: str = Field(..., min_length=3, max_length=500)
+
+# ==========================================
+# Hospital Schemas
+# ==========================================
+class HospitalCreate(BaseModel):
+    """Self-registration for a HOSPITAL-role account (modules/hospital/router.py).
+    Data-collection only for now — instant access, no government approval
+    gate (unlike DoctorProfile)."""
+    name: str = Field(..., min_length=2, max_length=150)
+    address: Optional[str] = None
+    lat: Optional[float] = Field(None, ge=-90, le=90)
+    lng: Optional[float] = Field(None, ge=-180, le=180)
+    phone: Optional[str] = None
+    established_year: Optional[int] = Field(None, ge=1800, le=2100)
+    service_timing: Optional[str] = Field(None, max_length=200)
+    specializations: Optional[str] = Field(None, max_length=500)
+    license_number: Optional[str] = Field(None, max_length=80)
+
+class HospitalResponse(HospitalCreate):
+    id: int
+    owner_user_id: Optional[int] = None
+    license_document_url: Optional[str] = None
+    emergency_desk_user_id: Optional[int] = None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
 
 # ==========================================
 # File Upload Schemas (Cloudinary — core/cloudinary_service.py)

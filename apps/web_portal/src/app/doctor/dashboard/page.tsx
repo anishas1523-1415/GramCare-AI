@@ -7,7 +7,7 @@ import { useAuth } from '../../../contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import api from '../../../lib/api';
 import { io } from 'socket.io-client';
-import type { Slot } from '../../../types';
+import type { Slot, Appointment, EmergencySOS } from '../../../types';
 import { APIProvider, Map, Marker } from '@vis.gl/react-google-maps';
 import { SkeletonList } from '../../../components/Skeleton';
 
@@ -107,7 +107,9 @@ function SlotManager({ doctorId }: { doctorId: number }) {
     }
   }, [doctorId]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    (async () => { await load(); })();
+  }, [load]);
 
   const addSlot = async () => {
     if (!newStart) return;
@@ -199,10 +201,17 @@ export default function DoctorDashboard() {
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
 
-  const [appointments, setAppointments] = useState<any[]>([]);
-  const [activeSOS, setActiveSOS] = useState<any[]>([]);
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [activeSOS, setActiveSOS] = useState<EmergencySOS[]>([]);
   const [loading, setLoading] = useState(true);
   const [socketConnected, setSocketConnected] = useState(false);
+  // Government verification gate: a doctor account works the moment it's
+  // registered, but is PENDING until a government reviewer approves it —
+  // the backend blocks the queue/SOS-response endpoints for anyone not
+  // APPROVED (require_approved_doctor), so this dashboard must know that
+  // state up front rather than let those calls silently 403.
+  const [verificationStatus, setVerificationStatus] = useState<string | null>(null);
+  const [rejectionReason, setRejectionReason] = useState<string | null>(null);
 
   useEffect(() => {
     if (authLoading) return;
@@ -215,6 +224,15 @@ export default function DoctorDashboard() {
 
     const fetchData = async () => {
       try {
+        const me = await api.get('/doctors/me');
+        setVerificationStatus(me.data.verification_status);
+        setRejectionReason(me.data.rejection_reason ?? null);
+
+        if (me.data.verification_status !== 'APPROVED') {
+          setLoading(false);
+          return;
+        }
+
         // Fetch queue and SOS from actual backend.
         // Previously hardcoded to 2 regardless of who was logged in — the
         // backend's GET /appointments/doctor/{doctor_id}/queue rejects the
@@ -258,7 +276,7 @@ export default function DoctorDashboard() {
 
     socket.on("disconnect", () => setSocketConnected(false));
 
-    socket.on("emergency_alert", (data) => {
+    socket.on("emergency_alert", () => {
       // Refresh active SOS list
       fetchData();
     });
@@ -273,7 +291,7 @@ export default function DoctorDashboard() {
       await api.put(`/sos/${sosId}/respond`);
       setActiveSOS(activeSOS.filter(sos => sos.id !== sosId));
       alert("You have responded to the SOS. Routing to patient location...");
-    } catch (error) {
+    } catch {
       alert("Failed to respond to SOS.");
     }
   };
@@ -282,7 +300,7 @@ export default function DoctorDashboard() {
     try {
       await api.put(`/appointments/${apptId}`, { status: "COMPLETED" });
       setAppointments(appointments.filter(app => app.id !== apptId));
-    } catch (error) {
+    } catch {
       alert("Failed to complete appointment.");
     }
   };
@@ -304,6 +322,47 @@ export default function DoctorDashboard() {
             <SkeletonList count={2} />
           </div>
         </div>
+      </div>
+    );
+  }
+
+  // Government verification gate — a PENDING/REJECTED doctor never reaches
+  // the queue/SOS-response UI below (the backend would 403 those calls
+  // anyway); show them a clear status screen instead.
+  if (verificationStatus && verificationStatus !== 'APPROVED') {
+    const isRejected = verificationStatus === 'REJECTED';
+    return (
+      <div className="min-h-screen flex items-center justify-center p-8">
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="glass-panel p-10 max-w-lg text-center"
+        >
+          {isRejected ? (
+            <AlertTriangle className="mx-auto mb-4 text-red-500" size={48} />
+          ) : (
+            <Clock className="mx-auto mb-4 text-amber-500" size={48} />
+          )}
+          <h1 className="text-2xl font-bold mb-2">
+            {isRejected ? 'Application Not Approved' : 'Application Under Review'}
+          </h1>
+          <p className="text-gray-500 mb-4">
+            {isRejected
+              ? 'Your doctor account was not approved by the government reviewer.'
+              : 'Your doctor account is pending government verification. You’ll be notified by email once it’s reviewed, and can log in normally after approval.'}
+          </p>
+          {isRejected && rejectionReason && (
+            <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-sm text-left mb-4">
+              <strong>Reason:</strong> {rejectionReason}
+            </div>
+          )}
+          <p className="text-sm text-gray-500">
+            You can still update your profile details (specialty, qualifications, license number,
+            and license document) from{' '}
+            <a href="/doctor/profile" className="underline text-indigo-500">your profile page</a>{' '}
+            {isRejected ? 'and resubmit for review.' : 'while you wait.'}
+          </p>
+        </motion.div>
       </div>
     );
   }
@@ -344,7 +403,7 @@ export default function DoctorDashboard() {
               <Map
                 defaultZoom={12}
                 defaultCenter={
-                  activeSOS.length > 0 && activeSOS[0].location_lat
+                  activeSOS.length > 0 && activeSOS[0].location_lat != null && activeSOS[0].location_lng != null
                   ? { lat: activeSOS[0].location_lat, lng: activeSOS[0].location_lng }
                   : { lat: 12.9716, lng: 77.5946 }
                 }
@@ -379,7 +438,7 @@ export default function DoctorDashboard() {
                 {sos.voice_note && (
                   <p className="text-sm italic text-gray-700 dark:text-gray-200 mb-1">&ldquo;{sos.voice_note}&rdquo;</p>
                 )}
-                {sos.escalation_level > 0 && (
+                {(sos.escalation_level ?? 0) > 0 && (
                   <p className="text-xs font-bold text-orange-600 mb-1">Escalated ×{sos.escalation_level} (unanswered)</p>
                 )}
                 <p className="text-xs text-gray-500 mb-6">Triggered at: {new Date(sos.created_at).toLocaleTimeString()}</p>

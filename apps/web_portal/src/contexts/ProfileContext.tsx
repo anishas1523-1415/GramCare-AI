@@ -63,7 +63,7 @@ export const ProfileProvider = ({ children }: { children: React.ReactNode }) => 
   }, [user]);
 
   useEffect(() => {
-    refreshProfiles();
+    (async () => { await refreshProfiles(); })();
   }, [refreshProfiles]);
 
   const setActiveProfile = (p: FamilyProfile | null) => {

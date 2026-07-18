@@ -11,6 +11,8 @@ Planning doc rules implemented here:
   discussion's practical implementation).
 """
 import logging
+import os
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, update as sa_update
@@ -20,13 +22,16 @@ from typing import List
 from database import get_db
 import models
 import schemas
-from modules.auth.router import get_current_user, require_role
+from modules.auth.router import get_current_user, require_role, require_approved_doctor
 from modules.family.router import resolve_owned_profile
 from modules.payments.router import _do_refund
 from core.ratelimit import rate_limit
+from core.sms_service import SMSService
 
 router = APIRouter()
 logger = logging.getLogger("gramcare.appointments")
+
+REMINDER_HOURS_BEFORE = float(os.getenv("APPOINTMENT_REMINDER_HOURS_BEFORE", "24"))
 
 
 def _doctor_fee(db: Session, doctor_id: int) -> float:
@@ -36,6 +41,60 @@ def _doctor_fee(db: Session, doctor_id: int) -> float:
         .first()
     )
     return profile.consultation_fee if profile and profile.consultation_fee is not None else 150.0
+
+
+async def send_due_appointment_reminders(db: Session) -> int:
+    """SMS reminder for every CONFIRMED appointment now within
+    REMINDER_HOURS_BEFORE hours of its scheduled_at that hasn't been
+    reminded yet. Called by the startup background loop and directly
+    testable. Returns the number of SMS actually sent — a patient with no
+    phone on file is marked reminded (nothing to retry) but not counted.
+
+    Fires "at least once with enough lead time" rather than at a precise
+    T-minus mark, which is robust to the poll loop running late or the
+    process having restarted mid-window.
+    """
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    window_end = now + timedelta(hours=REMINDER_HOURS_BEFORE)
+    due = (
+        db.query(models.Appointment)
+        .filter(
+            models.Appointment.status == "CONFIRMED",
+            models.Appointment.reminder_sent_at.is_(None),
+            models.Appointment.scheduled_at > now,
+            models.Appointment.scheduled_at <= window_end,
+        )
+        .all()
+    )
+    if not due:
+        return 0
+
+    sms_service = SMSService()
+    sent = 0
+    for appt in due:
+        patient = db.query(models.User).filter(models.User.id == appt.patient_id).first()
+        if not patient or not patient.phone:
+            appt.reminder_sent_at = now
+            continue
+
+        doctor = db.query(models.User).filter(models.User.id == appt.doctor_id).first()
+        time_str = appt.scheduled_at.strftime("%I:%M %p on %b %d")
+        message = (
+            f"GramCare AI: Reminder - you have an appointment with "
+            f"Dr. {doctor.full_name if doctor else 'your doctor'} at {time_str}."
+        )
+        try:
+            await sms_service.send_sms(patient.phone, message)
+        except Exception as e:
+            # Leave reminder_sent_at unset so the next poll retries — a
+            # provider outage shouldn't permanently silence the reminder.
+            logger.error("Failed to send appointment reminder SMS for appointment %d: %s", appt.id, e)
+            continue
+        appt.reminder_sent_at = now
+        sent += 1
+
+    db.commit()
+    return sent
 
 
 @router.post("/book", response_model=schemas.AppointmentResponse, dependencies=[Depends(rate_limit("appointment_book", 5, 300))])
@@ -213,7 +272,7 @@ async def my_appointments(
 async def get_doctor_queue(
     doctor_id: int,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(require_role("DOCTOR")),
+    current_user: models.User = Depends(require_approved_doctor()),
 ):
     """Get the queue of upcoming appointments for a doctor."""
     if current_user.role == "DOCTOR" and current_user.id != doctor_id:

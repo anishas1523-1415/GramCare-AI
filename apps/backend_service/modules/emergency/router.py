@@ -25,7 +25,7 @@ from datetime import datetime, timezone, timedelta
 from database import get_db
 import models
 import schemas
-from modules.auth.router import get_current_user, require_role
+from modules.auth.router import get_current_user, require_role, require_approved_doctor
 from modules.family.router import resolve_owned_profile
 from core.maps import maps_client
 from core.ratelimit import rate_limit
@@ -188,7 +188,7 @@ async def my_sos_history(
 async def respond_to_sos(
     sos_id: int,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(require_role(["DOCTOR", "HOSPITAL"]))
+    current_user: models.User = Depends(require_approved_doctor("HOSPITAL"))
 ):
     """A doctor or hospital desk accepts an SOS ("Help En Route")."""
 

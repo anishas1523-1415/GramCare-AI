@@ -51,7 +51,7 @@ export default function HospitalEmergencyDesk() {
       return;
     }
 
-    fetchSos();
+    (async () => { await fetchSos(); })();
     // Safety net alongside the socket: the desk must never silently go
     // stale during an emergency, even if the socket drops.
     const poll = setInterval(fetchSos, 30_000);
@@ -93,8 +93,17 @@ export default function HospitalEmergencyDesk() {
     }
   };
 
+  // Reading Date.now() directly inside a function called during render is
+  // an impure read React's purity rules flag — track "now" as state instead
+  // (refreshed on the same cadence as the SOS poll) so ageMinutes derives
+  // from render inputs only.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const tick = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(tick);
+  }, []);
   const ageMinutes = (iso: string) =>
-    Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
+    Math.max(0, Math.round((now - new Date(iso).getTime()) / 60000));
 
   if (authLoading || loading) {
     return (

@@ -1,0 +1,10 @@
+{
+  "name": "gramcare-ai",
+  "private": true,
+  "workspaces": [
+    "apps/web_portal",
+    "apps/react_dashboard",
+    "apps/lab_portal",
+    "packages/*"
+  ]
+}

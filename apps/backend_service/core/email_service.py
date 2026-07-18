@@ -10,11 +10,19 @@ class EmailService:
         self.api_key = os.getenv("RESEND_API_KEY")
         self.base_url = "https://api.resend.com"
 
-    async def send_email(self, to_email: str, subject: str, html_content: str, from_email: str = "onboarding@resend.dev") -> dict:
+    async def send_email(self, to_email: str, subject: str, html_content: str, from_email: str | None = None) -> dict:
         """
         Sends an email using the Resend REST API.
-        Prepared for onboarding, auth, and notifications.
+
+        Default sender is Resend's own sandbox address (onboarding@resend.dev),
+        which Resend only delivers from to the account owner's own verified
+        inbox — every other recipient gets a 403. Set RESEND_FROM_EMAIL (e.g.
+        "GramCare AI <no-reply@yourdomain.com>") once a real sending domain
+        is verified in the Resend dashboard; until then, password reset,
+        email verification, and doctor-approval emails will not reach real
+        users' inboxes.
         """
+        from_email = from_email or os.getenv("RESEND_FROM_EMAIL", "onboarding@resend.dev")
         if not self.api_key:
             logger.warning("RESEND_API_KEY not set. Skipping email send.")
             return {"status": "skipped", "message": "No API key configured"}

@@ -8,7 +8,7 @@
 
 import React, { Suspense, useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Stethoscope, CalendarDays, CheckCircle, ArrowLeft, Sparkles } from 'lucide-react';
+import { Stethoscope, CalendarDays, CheckCircle, ArrowLeft, Sparkles, MessageSquareText } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
 import { useAuth } from '../../contexts/AuthContext';
 import { useProfile } from '../../contexts/ProfileContext';
@@ -51,6 +51,27 @@ function BookingFlow() {
   const [symptoms, setSymptoms] = useState(searchParams.get('symptoms') || '');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  // Registration never asks a PATIENT for a phone number (deliberately
+  // low-friction), so anyone who registered before SMS reminders existed
+  // has no way to receive them — offer it here, right where it's relevant.
+  const [reminderPhone, setReminderPhone] = useState('');
+  const [savingPhone, setSavingPhone] = useState(false);
+  const [phoneSaved, setPhoneSaved] = useState(false);
+
+  const saveReminderPhone = async () => {
+    if (!reminderPhone) return;
+    setSavingPhone(true);
+    setError('');
+    try {
+      await api.put('/auth/me/phone', { phone: reminderPhone });
+      setPhoneSaved(true);
+    } catch {
+      setError('Could not save your phone number. Please try again.');
+    } finally {
+      setSavingPhone(false);
+    }
+  };
 
   useEffect(() => {
     if (!user) return;
@@ -136,6 +157,41 @@ function BookingFlow() {
 
           {error && <p role="alert" className="text-red-500 font-semibold mb-6">{error}</p>}
 
+          {step === 'doctor' && !user.phone && !phoneSaved && (
+            <div className="mb-6 p-4 rounded-2xl bg-teal-500/10 border border-teal-500/30 flex flex-col sm:flex-row sm:items-center gap-3">
+              <MessageSquareText size={22} className="text-teal-500 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold">Get an SMS reminder before your appointment</p>
+                <p className="text-xs text-gray-500">Add a phone number — optional, and you can always do this later.</p>
+              </div>
+              <div className="flex gap-2 shrink-0">
+                <label htmlFor="book-reminder-phone" className="sr-only">Phone number for SMS reminders</label>
+                <input
+                  id="book-reminder-phone"
+                  type="tel"
+                  placeholder="+91XXXXXXXXXX"
+                  value={reminderPhone}
+                  onChange={(e) => setReminderPhone(e.target.value)}
+                  className="w-40 p-2 rounded-lg bg-white/60 dark:bg-black/30 border border-white/20 text-sm focus:ring-2 focus:ring-teal-400 outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={saveReminderPhone}
+                  disabled={!reminderPhone || savingPhone}
+                  className="neu-button px-3 py-2 text-xs font-bold rounded-lg whitespace-nowrap disabled:opacity-50"
+                >
+                  {savingPhone ? 'Saving…' : 'Save'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {phoneSaved && step === 'doctor' && (
+            <p role="status" className="text-emerald-500 text-sm font-semibold mb-6">
+              Phone number saved — you&apos;ll get an SMS ahead of your appointment.
+            </p>
+          )}
+
           {/* STEP 1 — choose doctor */}
           {step === 'doctor' && (
             loading ? (
@@ -212,8 +268,9 @@ function BookingFlow() {
                 </div>
               )}
 
-              <label className="block text-sm font-semibold mb-2">Describe the problem (shared with the doctor)</label>
+              <label htmlFor="book-symptoms" className="block text-sm font-semibold mb-2">Describe the problem (shared with the doctor)</label>
               <textarea
+                id="book-symptoms"
                 value={symptoms}
                 onChange={(e) => setSymptoms(e.target.value)}
                 rows={3}

@@ -9,6 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@gramcare/api-client": "*",
     "axios": "^1.18.1",
     "framer-motion": "^12.42.0",
     "lucide-react": "^1.22.0",
