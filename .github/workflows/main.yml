@@ -68,19 +68,19 @@ jobs:
         cache: 'npm'
         cache-dependency-path: './package-lock.json'
 
-    # Two-pass install: lightningcss/rolldown/etc. ship per-platform native
-    # binaries as optionalDependencies, and npm has a long-standing bug
-    # (npm/cli#4828) where a lockfile generated on one OS doesn't reliably
-    # pull in another platform's optional binary on first install — CI
-    # (Linux) failed with "Cannot find module '.../lightningcss.linux-x64-
-    # gnu.node'" even though the lockfile correctly lists that variant. A
-    # second install against the already-populated node_modules resolves
-    # it; this only touches the ephemeral CI runner, never the committed
-    # lockfile.
+    # package-lock.json was generated locally on Windows. lightningcss/
+    # rolldown ship per-platform native binaries as optionalDependencies,
+    # and npm only writes a lockfile `packages` entry for the platform
+    # variants it actually resolved on the generating machine — Windows
+    # here, so the Linux entry (e.g. lightningcss-linux-x64-gnu) is simply
+    # absent from the committed lockfile, not just "not installed". No
+    # amount of retrying `npm install` against that lockfile can fetch an
+    # entry that was never written. Deleting the lockfile before install
+    # (CI-runner-only — never pushed back) makes CI resolve fresh against
+    # package.json's version ranges on its own platform instead.
     - name: Install workspace dependencies
       run: |
-        npm install
-        rm -rf node_modules
+        rm -f package-lock.json
         npm install
 
     - name: Build
@@ -99,19 +99,19 @@ jobs:
         cache: 'npm'
         cache-dependency-path: './package-lock.json'
 
-    # Two-pass install: lightningcss/rolldown/etc. ship per-platform native
-    # binaries as optionalDependencies, and npm has a long-standing bug
-    # (npm/cli#4828) where a lockfile generated on one OS doesn't reliably
-    # pull in another platform's optional binary on first install — CI
-    # (Linux) failed with "Cannot find module '.../lightningcss.linux-x64-
-    # gnu.node'" even though the lockfile correctly lists that variant. A
-    # second install against the already-populated node_modules resolves
-    # it; this only touches the ephemeral CI runner, never the committed
-    # lockfile.
+    # package-lock.json was generated locally on Windows. lightningcss/
+    # rolldown ship per-platform native binaries as optionalDependencies,
+    # and npm only writes a lockfile `packages` entry for the platform
+    # variants it actually resolved on the generating machine — Windows
+    # here, so the Linux entry (e.g. lightningcss-linux-x64-gnu) is simply
+    # absent from the committed lockfile, not just "not installed". No
+    # amount of retrying `npm install` against that lockfile can fetch an
+    # entry that was never written. Deleting the lockfile before install
+    # (CI-runner-only — never pushed back) makes CI resolve fresh against
+    # package.json's version ranges on its own platform instead.
     - name: Install workspace dependencies
       run: |
-        npm install
-        rm -rf node_modules
+        rm -f package-lock.json
         npm install
 
     - name: Build
@@ -130,19 +130,19 @@ jobs:
         cache: 'npm'
         cache-dependency-path: './package-lock.json'
 
-    # Two-pass install: lightningcss/rolldown/etc. ship per-platform native
-    # binaries as optionalDependencies, and npm has a long-standing bug
-    # (npm/cli#4828) where a lockfile generated on one OS doesn't reliably
-    # pull in another platform's optional binary on first install — CI
-    # (Linux) failed with "Cannot find module '.../lightningcss.linux-x64-
-    # gnu.node'" even though the lockfile correctly lists that variant. A
-    # second install against the already-populated node_modules resolves
-    # it; this only touches the ephemeral CI runner, never the committed
-    # lockfile.
+    # package-lock.json was generated locally on Windows. lightningcss/
+    # rolldown ship per-platform native binaries as optionalDependencies,
+    # and npm only writes a lockfile `packages` entry for the platform
+    # variants it actually resolved on the generating machine — Windows
+    # here, so the Linux entry (e.g. lightningcss-linux-x64-gnu) is simply
+    # absent from the committed lockfile, not just "not installed". No
+    # amount of retrying `npm install` against that lockfile can fetch an
+    # entry that was never written. Deleting the lockfile before install
+    # (CI-runner-only — never pushed back) makes CI resolve fresh against
+    # package.json's version ranges on its own platform instead.
     - name: Install workspace dependencies
       run: |
-        npm install
-        rm -rf node_modules
+        rm -f package-lock.json
         npm install
 
     - name: Build
