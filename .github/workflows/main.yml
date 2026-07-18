@@ -68,8 +68,20 @@ jobs:
         cache: 'npm'
         cache-dependency-path: './package-lock.json'
 
+    # Two-pass install: lightningcss/rolldown/etc. ship per-platform native
+    # binaries as optionalDependencies, and npm has a long-standing bug
+    # (npm/cli#4828) where a lockfile generated on one OS doesn't reliably
+    # pull in another platform's optional binary on first install — CI
+    # (Linux) failed with "Cannot find module '.../lightningcss.linux-x64-
+    # gnu.node'" even though the lockfile correctly lists that variant. A
+    # second install against the already-populated node_modules resolves
+    # it; this only touches the ephemeral CI runner, never the committed
+    # lockfile.
     - name: Install workspace dependencies
-      run: npm install
+      run: |
+        npm install
+        rm -rf node_modules
+        npm install
 
     - name: Build
       working-directory: ./apps/web_portal
@@ -87,8 +99,20 @@ jobs:
         cache: 'npm'
         cache-dependency-path: './package-lock.json'
 
+    # Two-pass install: lightningcss/rolldown/etc. ship per-platform native
+    # binaries as optionalDependencies, and npm has a long-standing bug
+    # (npm/cli#4828) where a lockfile generated on one OS doesn't reliably
+    # pull in another platform's optional binary on first install — CI
+    # (Linux) failed with "Cannot find module '.../lightningcss.linux-x64-
+    # gnu.node'" even though the lockfile correctly lists that variant. A
+    # second install against the already-populated node_modules resolves
+    # it; this only touches the ephemeral CI runner, never the committed
+    # lockfile.
     - name: Install workspace dependencies
-      run: npm install
+      run: |
+        npm install
+        rm -rf node_modules
+        npm install
 
     - name: Build
       working-directory: ./apps/react_dashboard
@@ -106,8 +130,20 @@ jobs:
         cache: 'npm'
         cache-dependency-path: './package-lock.json'
 
+    # Two-pass install: lightningcss/rolldown/etc. ship per-platform native
+    # binaries as optionalDependencies, and npm has a long-standing bug
+    # (npm/cli#4828) where a lockfile generated on one OS doesn't reliably
+    # pull in another platform's optional binary on first install — CI
+    # (Linux) failed with "Cannot find module '.../lightningcss.linux-x64-
+    # gnu.node'" even though the lockfile correctly lists that variant. A
+    # second install against the already-populated node_modules resolves
+    # it; this only touches the ephemeral CI runner, never the committed
+    # lockfile.
     - name: Install workspace dependencies
-      run: npm install
+      run: |
+        npm install
+        rm -rf node_modules
+        npm install
 
     - name: Build
       working-directory: ./apps/lab_portal
