@@ -49,6 +49,38 @@ const en: Record<string, string> = {
   government_official_prompt: 'Government & health-authority official?',
   portal_access: 'Portal access',
   language: 'Language',
+  // Header nav — renders on every page, so this is the highest-leverage
+  // place to extend coverage beyond the login screen (see the note at the
+  // top of this file: extending t() elsewhere is a mechanical, page-by-
+  // page continuation, not a re-architecture).
+  nav_book_consultation: 'Book Consultation',
+  nav_family_profiles: 'Family Profiles',
+  nav_my_prescriptions: 'My Prescriptions',
+  nav_find_medicine: 'Find Medicine',
+  nav_health_passport: 'Health Passport',
+  nav_doctor_dashboard: 'Doctor Dashboard',
+  nav_my_profile: 'My Profile',
+  nav_emergency_desk: 'Emergency Desk',
+  nav_health_intelligence: 'Health Intelligence',
+  nav_hospital_profile: 'Hospital Profile',
+  nav_my_devices: 'My Devices',
+  sign_out: 'Sign Out',
+  role_patient: 'Patient',
+  role_doctor: 'Doctor',
+  role_hospital: 'Hospital',
+  role_pharmacist: 'Pharmacist',
+  role_lab: 'Lab',
+  role_admin: 'Government',
+  // Homepage hero + AI Symptom Checker — the first content-bearing view a
+  // signed-in patient lands on, right after the login screen.
+  home_tagline: 'The ultimate hybrid healthcare ecosystem.',
+  home_live: 'Live',
+  home_offline: 'Offline',
+  symptom_checker_title: 'AI Symptom Checker',
+  symptom_checker_placeholder: 'Describe your symptoms (e.g. fever, headache, cough)...',
+  add_symptom_photo: 'Add a photo of the symptom (optional)',
+  analyze_with_ai: 'Analyze with AI',
+  ai_thinking: 'AI is thinking…',
 };
 
 const ta: Record<string, string> = {
@@ -74,6 +106,32 @@ const ta: Record<string, string> = {
   government_official_prompt: 'அரசு அல்லது சுகாதார அதிகாரியா?',
   portal_access: 'போர்ட்டல் அணுகல்',
   language: 'மொழி',
+  nav_book_consultation: 'ஆலோசனை பதிவு',
+  nav_family_profiles: 'குடும்ப சுயவிவரங்கள்',
+  nav_my_prescriptions: 'எனது மருந்துச் சீட்டுகள்',
+  nav_find_medicine: 'மருந்து தேடு',
+  nav_health_passport: 'சுகாதார பாஸ்போர்ட்',
+  nav_doctor_dashboard: 'மருத்துவர் டாஷ்போர்டு',
+  nav_my_profile: 'எனது சுயவிவரம்',
+  nav_emergency_desk: 'அவசர உதவி மையம்',
+  nav_health_intelligence: 'சுகாதார நுண்ணறிவு',
+  nav_hospital_profile: 'மருத்துவமனை சுயவிவரம்',
+  nav_my_devices: 'எனது சாதனங்கள்',
+  sign_out: 'வெளியேறு',
+  role_patient: 'நோயாளி',
+  role_doctor: 'மருத்துவர்',
+  role_hospital: 'மருத்துவமனை',
+  role_pharmacist: 'மருந்தாளர்',
+  role_lab: 'ஆய்வகம்',
+  role_admin: 'அரசு',
+  home_tagline: 'இறுதி கலப்பின சுகாதார சூழல் அமைப்பு.',
+  home_live: 'நேரடி',
+  home_offline: 'இணைப்பு இல்லை',
+  symptom_checker_title: 'AI அறிகுறி சரிபார்ப்பு',
+  symptom_checker_placeholder: 'உங்கள் அறிகுறிகளை விவரிக்கவும் (எ.கா. காய்ச்சல், தலைவலி, இருமல்)...',
+  add_symptom_photo: 'அறிகுறியின் புகைப்படத்தைச் சேர்க்கவும் (விருப்பத்திற்குரியது)',
+  analyze_with_ai: 'AI மூலம் பகுப்பாய்வு செய்யவும்',
+  ai_thinking: 'AI யோசித்துக் கொண்டிருக்கிறது…',
 };
 
 const TABLES: Record<LocaleCode, Record<string, string>> = { en, ta };

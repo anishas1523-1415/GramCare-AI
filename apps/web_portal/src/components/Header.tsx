@@ -70,63 +70,64 @@ function ProfileSwitcher() {
   );
 }
 
-const ROLE_LABEL: Record<string, string> = {
-  PATIENT: 'Patient',
-  DOCTOR: 'Doctor',
-  HOSPITAL: 'Hospital',
-  PHARMACIST: 'Pharmacist',
-  LAB: 'Lab',
-  ADMIN: 'Government',
-};
-
 export default function Header() {
   const { user, loading, logout } = useAuth();
+  const { t } = useLocale();
   const [menuOpen, setMenuOpen] = useState(false);
+
+  const ROLE_LABEL: Record<string, string> = {
+    PATIENT: t('role_patient'),
+    DOCTOR: t('role_doctor'),
+    HOSPITAL: t('role_hospital'),
+    PHARMACIST: t('role_pharmacist'),
+    LAB: t('role_lab'),
+    ADMIN: t('role_admin'),
+  };
 
   const navLinks = user ? (
     <>
       {user.role === 'PATIENT' && (
         <>
-          <Link href="/book" className="hover:text-teal-500 transition-colors" onClick={() => setMenuOpen(false)}>Book Consultation</Link>
-          <Link href="/family" className="hover:text-teal-500 transition-colors" onClick={() => setMenuOpen(false)}>Family Profiles</Link>
-          <Link href="/prescriptions" className="hover:text-teal-500 transition-colors" onClick={() => setMenuOpen(false)}>My Prescriptions</Link>
-          <Link href="/pharmacy" className="hover:text-teal-500 transition-colors" onClick={() => setMenuOpen(false)}>Find Medicine</Link>
-          <Link href="/passport" className="hover:text-red-500 transition-colors" onClick={() => setMenuOpen(false)}>Health Passport</Link>
+          <Link href="/book" className="hover:text-teal-500 transition-colors" onClick={() => setMenuOpen(false)}>{t('nav_book_consultation')}</Link>
+          <Link href="/family" className="hover:text-teal-500 transition-colors" onClick={() => setMenuOpen(false)}>{t('nav_family_profiles')}</Link>
+          <Link href="/prescriptions" className="hover:text-teal-500 transition-colors" onClick={() => setMenuOpen(false)}>{t('nav_my_prescriptions')}</Link>
+          <Link href="/pharmacy" className="hover:text-teal-500 transition-colors" onClick={() => setMenuOpen(false)}>{t('nav_find_medicine')}</Link>
+          <Link href="/passport" className="hover:text-red-500 transition-colors" onClick={() => setMenuOpen(false)}>{t('nav_health_passport')}</Link>
           <ProfileSwitcher />
         </>
       )}
       {user.role === 'DOCTOR' && (
         <>
-          <Link href="/doctor/dashboard" className="hover:text-teal-500 transition-colors" onClick={() => setMenuOpen(false)}>Doctor Dashboard</Link>
-          <Link href="/doctor/profile" className="hover:text-indigo-500 transition-colors" onClick={() => setMenuOpen(false)}>My Profile</Link>
-          <Link href="/hospital" className="hover:text-red-500 transition-colors" onClick={() => setMenuOpen(false)}>Emergency Desk</Link>
+          <Link href="/doctor/dashboard" className="hover:text-teal-500 transition-colors" onClick={() => setMenuOpen(false)}>{t('nav_doctor_dashboard')}</Link>
+          <Link href="/doctor/profile" className="hover:text-indigo-500 transition-colors" onClick={() => setMenuOpen(false)}>{t('nav_my_profile')}</Link>
+          <Link href="/hospital" className="hover:text-red-500 transition-colors" onClick={() => setMenuOpen(false)}>{t('nav_emergency_desk')}</Link>
         </>
       )}
       {(user.role === 'HOSPITAL' || user.role === 'ADMIN') && (
         <>
-          <Link href="/hospital" className="hover:text-red-500 transition-colors font-bold" onClick={() => setMenuOpen(false)}>Emergency Desk</Link>
-          <Link href="/authority" className="hover:text-purple-500 transition-colors" onClick={() => setMenuOpen(false)}>Health Intelligence</Link>
+          <Link href="/hospital" className="hover:text-red-500 transition-colors font-bold" onClick={() => setMenuOpen(false)}>{t('nav_emergency_desk')}</Link>
+          <Link href="/authority" className="hover:text-purple-500 transition-colors" onClick={() => setMenuOpen(false)}>{t('nav_health_intelligence')}</Link>
         </>
       )}
       {user.role === 'HOSPITAL' && (
-        <Link href="/hospital/profile" className="hover:text-red-500 transition-colors" onClick={() => setMenuOpen(false)}>Hospital Profile</Link>
+        <Link href="/hospital/profile" className="hover:text-red-500 transition-colors" onClick={() => setMenuOpen(false)}>{t('nav_hospital_profile')}</Link>
       )}
       <span className="text-gray-500 md:order-last">
         {user.full_name || user.username} ({ROLE_LABEL[user.role] || user.role})
       </span>
       <Link href="/account/sessions" className="hover:text-teal-500 transition-colors" title="Manage signed-in devices" onClick={() => setMenuOpen(false)}>
-        My Devices
+        {t('nav_my_devices')}
       </Link>
       <button
         onClick={() => { setMenuOpen(false); logout(); }}
         className="neu-button px-4 py-2 font-bold rounded-lg w-full md:w-auto"
       >
-        Sign Out
+        {t('sign_out')}
       </button>
     </>
   ) : (
     <Link href="/login" className="neu-button px-4 py-2 bg-indigo-500 text-white font-bold rounded-lg w-full md:w-auto text-center" onClick={() => setMenuOpen(false)}>
-      Sign In
+      {t('sign_in')}
     </Link>
   );
 

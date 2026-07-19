@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { io } from "socket.io-client";
 import api from "../lib/api";
 import { useProfile } from "../contexts/ProfileContext";
+import { useLocale } from "../contexts/LocaleContext";
 
 interface TriageResult {
   severity: 'CRITICAL' | 'HIGH' | 'MODERATE' | 'LOW';
@@ -39,6 +40,7 @@ const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "https://gramcare-signaling.onr
 
 export default function Home() {
   const { activeProfile } = useProfile();
+  const { t } = useLocale();
   const router = useRouter();
   const [symptoms, setSymptoms] = useState("");
   const [triageResult, setTriageResult] = useState<TriageResult | null>(null);
@@ -183,11 +185,11 @@ export default function Home() {
           GramCare <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-500 to-teal-400">AI</span>
         </h1>
         <p className="text-xl text-gray-500 dark:text-gray-400 max-w-2xl mx-auto flex items-center justify-center gap-2">
-          The ultimate hybrid healthcare ecosystem.
+          {t('home_tagline')}
           {socketConnected ? (
-            <span className="flex items-center text-sm font-bold text-green-500 bg-green-500/10 px-3 py-1 rounded-full"><Radio size={16} className="mr-2 animate-pulse" /> Live</span>
+            <span className="flex items-center text-sm font-bold text-green-500 bg-green-500/10 px-3 py-1 rounded-full"><Radio size={16} className="mr-2 animate-pulse" /> {t('home_live')}</span>
           ) : (
-            <span className="flex items-center text-sm font-bold text-red-500 bg-red-500/10 px-3 py-1 rounded-full"><Radio size={16} className="mr-2" /> Offline</span>
+            <span className="flex items-center text-sm font-bold text-red-500 bg-red-500/10 px-3 py-1 rounded-full"><Radio size={16} className="mr-2" /> {t('home_offline')}</span>
           )}
         </p>
       </motion.div>
@@ -204,12 +206,12 @@ export default function Home() {
             <div className="w-16 h-16 mx-auto rounded-xl bg-white/20 backdrop-blur-md border border-white/30 flex items-center justify-center mb-6 text-teal-400">
               <Activity size={32} />
             </div>
-            <h2 className="text-2xl font-bold mb-4">AI Symptom Checker</h2>
-            
+            <h2 className="text-2xl font-bold mb-4">{t('symptom_checker_title')}</h2>
+
             <textarea
               className="w-full p-4 rounded-xl bg-white/50 dark:bg-black/20 border border-white/30 focus:outline-none focus:ring-2 focus:ring-teal-400 mb-4 resize-none"
               rows={3}
-              placeholder="Describe your symptoms (e.g. fever, headache, cough)..."
+              placeholder={t('symptom_checker_placeholder')}
               value={symptoms}
               onChange={(e) => setSymptoms(e.target.value)}
             />
@@ -238,7 +240,7 @@ export default function Home() {
                 onClick={() => fileInputRef.current?.click()}
                 className="w-full mb-4 py-2.5 rounded-xl border border-teal-400/50 text-teal-600 dark:text-teal-400 text-sm font-semibold flex items-center justify-center gap-2 hover:bg-teal-400/10 transition-colors"
               >
-                <Camera size={16} /> Add a photo of the symptom (optional)
+                <Camera size={16} /> {t('add_symptom_photo')}
               </button>
             )}
 
@@ -256,10 +258,10 @@ export default function Home() {
                   >
                     <Brain size={18} />
                   </motion.span>
-                  <span>AI is thinking…</span>
+                  <span>{t('ai_thinking')}</span>
                 </>
               ) : (
-                "Analyze with AI"
+                t('analyze_with_ai')
               )}
             </button>
 
