@@ -144,6 +144,14 @@ export interface PaymentRecord {
   created_at: string;
 }
 
+export interface EmergencyContact {
+  id: number;
+  user_id: number;
+  name: string;
+  phone: string;
+  relation?: string | null;
+}
+
 export interface LabTestInfo {
   name: string;
   category: string;

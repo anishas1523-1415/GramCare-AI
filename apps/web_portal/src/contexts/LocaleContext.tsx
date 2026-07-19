@@ -55,6 +55,7 @@ const en: Record<string, string> = {
   // place to extend coverage beyond the login screen (see the note at the
   // top of this file: extending t() elsewhere is a mechanical, page-by-
   // page continuation, not a re-architecture).
+  nav_sos: 'Emergency SOS',
   nav_book_consultation: 'Book Consultation',
   nav_family_profiles: 'Family Profiles',
   nav_my_prescriptions: 'My Prescriptions',
@@ -149,6 +150,7 @@ const ta: Record<string, string> = {
   government_official_prompt: 'அரசு அல்லது சுகாதார அதிகாரியா?',
   portal_access: 'போர்ட்டல் அணுகல்',
   language: 'மொழி',
+  nav_sos: 'அவசர SOS',
   nav_book_consultation: 'ஆலோசனை பதிவு',
   nav_family_profiles: 'குடும்ப சுயவிவரங்கள்',
   nav_my_prescriptions: 'எனது மருந்துச் சீட்டுகள்',

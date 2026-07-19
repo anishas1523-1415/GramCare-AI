@@ -88,6 +88,7 @@ export default function Header() {
     <>
       {user.role === 'PATIENT' && (
         <>
+          <Link href="/sos" className="text-red-500 font-bold hover:text-red-400 transition-colors" onClick={() => setMenuOpen(false)}>{t('nav_sos')}</Link>
           <Link href="/symptom-checker" className="hover:text-teal-500 transition-colors" onClick={() => setMenuOpen(false)}>{t('nav_symptom_checker')}</Link>
           <Link href="/book" className="hover:text-teal-500 transition-colors" onClick={() => setMenuOpen(false)}>{t('nav_book_consultation')}</Link>
           <Link href="/family" className="hover:text-teal-500 transition-colors" onClick={() => setMenuOpen(false)}>{t('nav_family_profiles')}</Link>
