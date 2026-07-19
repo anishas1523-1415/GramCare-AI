@@ -27,6 +27,7 @@ from modules.ai_assist.router import router as ai_assist_router
 from modules.analytics.router import router as analytics_router
 from modules.lab.router import router as lab_router
 from modules.hospital.router import router as hospital_router
+from modules.passport.router import router as passport_router
 
 
 def _seed_government_whitelist():
@@ -148,6 +149,7 @@ app.include_router(ai_assist_router, prefix="/api/v1/assist", tags=["AI Doctor A
 app.include_router(analytics_router, prefix="/api/v1/analytics", tags=["Community Health Intelligence"])
 app.include_router(lab_router, prefix="/api/v1/lab", tags=["Laboratory"])
 app.include_router(hospital_router, prefix="/api/v1/hospital", tags=["Hospital"])
+app.include_router(passport_router, prefix="/api/v1/passport", tags=["Health Passport"])
 
 
 

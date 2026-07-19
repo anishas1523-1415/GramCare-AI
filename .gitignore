@@ -40,3 +40,4 @@ test-results/
 # build, was previously getting committed by accident.
 *.salive
 package-lock.json.old
+apk-builds/

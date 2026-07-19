@@ -563,3 +563,43 @@ class LabBookingResponse(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+# ==========================================
+# Digital Health Passport
+# ==========================================
+class PassportUpdate(BaseModel):
+    """A patient's own edit of their emergency-response profile."""
+    blood_group: Optional[str] = Field(None, max_length=10)
+    allergies: Optional[str] = Field(None, max_length=1000)
+    chronic_conditions: Optional[str] = Field(None, max_length=1000)
+
+class PassportSelfResponse(BaseModel):
+    """What the owning patient sees on their own /passport page —
+    includes the token so the client can build the shareable QR/URL."""
+    full_name: str
+    blood_group: Optional[str] = None
+    allergies: Optional[str] = None
+    chronic_conditions: Optional[str] = None
+    passport_token: Optional[str] = None
+
+class PassportMedicine(BaseModel):
+    name: str
+    dosage: Optional[str] = None
+    frequency: Optional[str] = None
+
+class PassportEmergencyContact(BaseModel):
+    name: str
+    phone: str
+    relation: Optional[str] = None
+
+class PassportPublicResponse(BaseModel):
+    """What GET /passport/{token} returns — no auth, meant to be read by
+    whoever scans the QR code (EMT, hospital desk). Deliberately minimal:
+    no email, username, address, or anything beyond what's useful in an
+    emergency."""
+    full_name: str
+    blood_group: Optional[str] = None
+    allergies: Optional[str] = None
+    chronic_conditions: Optional[str] = None
+    emergency_contacts: List[PassportEmergencyContact] = []
+    recent_medicines: List[PassportMedicine] = []

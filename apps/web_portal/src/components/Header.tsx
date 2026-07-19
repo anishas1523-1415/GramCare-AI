@@ -91,6 +91,7 @@ export default function Header() {
           <Link href="/family" className="hover:text-teal-500 transition-colors" onClick={() => setMenuOpen(false)}>Family Profiles</Link>
           <Link href="/prescriptions" className="hover:text-teal-500 transition-colors" onClick={() => setMenuOpen(false)}>My Prescriptions</Link>
           <Link href="/pharmacy" className="hover:text-teal-500 transition-colors" onClick={() => setMenuOpen(false)}>Find Medicine</Link>
+          <Link href="/passport" className="hover:text-red-500 transition-colors" onClick={() => setMenuOpen(false)}>Health Passport</Link>
           <ProfileSwitcher />
         </>
       )}

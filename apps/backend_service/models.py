@@ -34,6 +34,16 @@ class User(Base):
     is_verified = Column(Boolean, default=False)
     phone = Column(String, nullable=True)
     phone_verified = Column(Boolean, default=False)
+    # Digital Health Passport: a minimal emergency-response profile (blood
+    # group, allergies, chronic conditions) readable via QR code without
+    # logging in — an EMT or hospital desk scanning it has no GramCare
+    # account. passport_token is a high-entropy capability token (not the
+    # user's id) so the public endpoint can't be enumerated; unset until
+    # the patient first fills in their passport.
+    blood_group = Column(String, nullable=True)
+    allergies = Column(Text, nullable=True)
+    chronic_conditions = Column(Text, nullable=True)
+    passport_token = Column(String, unique=True, index=True, nullable=True)
     created_at = Column(DateTime, default=_utcnow)
 
     # Relationships
