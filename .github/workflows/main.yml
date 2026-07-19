@@ -66,22 +66,18 @@ jobs:
       with:
         node-version: '20'
         cache: 'npm'
-        cache-dependency-path: './package-lock.json'
+        cache-dependency-path: './package.json'
 
-    # package-lock.json was generated locally on Windows. lightningcss/
-    # rolldown ship per-platform native binaries as optionalDependencies,
-    # and npm only writes a lockfile `packages` entry for the platform
-    # variants it actually resolved on the generating machine — Windows
-    # here, so the Linux entry (e.g. lightningcss-linux-x64-gnu) is simply
-    # absent from the committed lockfile, not just "not installed". No
-    # amount of retrying `npm install` against that lockfile can fetch an
-    # entry that was never written. Deleting the lockfile before install
-    # (CI-runner-only — never pushed back) makes CI resolve fresh against
-    # package.json's version ranges on its own platform instead.
+    # package-lock.json isn't committed (see .gitignore) — a lockfile only
+    # records the optional native-binary variants (lightningcss, rolldown)
+    # resolved on whichever machine generated it, so a Windows-built one is
+    # missing the Linux entries these packages need. This broke every
+    # Vercel deploy and GitHub Actions run after the npm-workspaces
+    # migration. No lockfile means npm always resolves fresh against
+    # package.json's version ranges on whichever platform is actually
+    # building, so it gets the right binary every time.
     - name: Install workspace dependencies
-      run: |
-        rm -f package-lock.json
-        npm install
+      run: npm install
 
     - name: Build
       working-directory: ./apps/web_portal
@@ -97,22 +93,12 @@ jobs:
       with:
         node-version: '20'
         cache: 'npm'
-        cache-dependency-path: './package-lock.json'
+        cache-dependency-path: './package.json'
 
-    # package-lock.json was generated locally on Windows. lightningcss/
-    # rolldown ship per-platform native binaries as optionalDependencies,
-    # and npm only writes a lockfile `packages` entry for the platform
-    # variants it actually resolved on the generating machine — Windows
-    # here, so the Linux entry (e.g. lightningcss-linux-x64-gnu) is simply
-    # absent from the committed lockfile, not just "not installed". No
-    # amount of retrying `npm install` against that lockfile can fetch an
-    # entry that was never written. Deleting the lockfile before install
-    # (CI-runner-only — never pushed back) makes CI resolve fresh against
-    # package.json's version ranges on its own platform instead.
+    # package-lock.json isn't committed (see .gitignore) — see build-web-portal
+    # above for why.
     - name: Install workspace dependencies
-      run: |
-        rm -f package-lock.json
-        npm install
+      run: npm install
 
     - name: Build
       working-directory: ./apps/react_dashboard
@@ -128,22 +114,12 @@ jobs:
       with:
         node-version: '20'
         cache: 'npm'
-        cache-dependency-path: './package-lock.json'
+        cache-dependency-path: './package.json'
 
-    # package-lock.json was generated locally on Windows. lightningcss/
-    # rolldown ship per-platform native binaries as optionalDependencies,
-    # and npm only writes a lockfile `packages` entry for the platform
-    # variants it actually resolved on the generating machine — Windows
-    # here, so the Linux entry (e.g. lightningcss-linux-x64-gnu) is simply
-    # absent from the committed lockfile, not just "not installed". No
-    # amount of retrying `npm install` against that lockfile can fetch an
-    # entry that was never written. Deleting the lockfile before install
-    # (CI-runner-only — never pushed back) makes CI resolve fresh against
-    # package.json's version ranges on its own platform instead.
+    # package-lock.json isn't committed (see .gitignore) — see build-web-portal
+    # above for why.
     - name: Install workspace dependencies
-      run: |
-        rm -f package-lock.json
-        npm install
+      run: npm install
 
     - name: Build
       working-directory: ./apps/lab_portal

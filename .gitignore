@@ -41,3 +41,14 @@ test-results/
 *.salive
 package-lock.json.old
 apk-builds/
+# The root npm-workspaces lockfile (web_portal/react_dashboard/lab_portal +
+# packages/api-client) is generated on Windows here, and npm only records
+# the platform-specific optional native binaries (lightningcss, rolldown)
+# it resolves on the generating machine — a Windows-built lockfile is
+# missing the Linux entries these packages need, which broke both GitHub
+# Actions CI and every Vercel deploy since the npm-workspaces migration
+# (11 straight failed production deploys). Not committing it forces a
+# fresh `npm install` on whichever platform actually builds, resolving
+# the correct binary every time instead of trusting a stale, wrong-platform
+# lockfile.
+package-lock.json
