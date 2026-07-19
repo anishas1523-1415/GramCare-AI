@@ -16,7 +16,7 @@
 //   can no longer auto-login the way PATIENT still does; it lands back on
 //   the sign-in tab with a "check your email" message instead.
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import { LogIn, UserPlus, Phone, ShieldCheck } from 'lucide-react';
@@ -48,6 +48,18 @@ export default function LoginPage() {
   const [verifyingOtp, setVerifyingOtp] = useState(false);
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
+  // The backend runs on Render's free tier, which spins the service down
+  // after idle periods — the first request after that can take 30-60s to
+  // wake it, which otherwise looks identical to a hung request. Surface a
+  // reassuring note once the wait has gone past what a normal request
+  // should ever take, instead of leaving the button on "Please wait..."
+  // with no explanation.
+  const [slowRequest, setSlowRequest] = useState(false);
+  const slowTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => { if (slowTimerRef.current) clearTimeout(slowTimerRef.current); };
+  }, []);
   const [submitting, setSubmitting] = useState(false);
   const [showResend, setShowResend] = useState(false);
   const [resendEmail, setResendEmail] = useState('');
@@ -119,6 +131,8 @@ export default function LoginPage() {
     setError('');
     setInfo('');
     setSubmitting(true);
+    setSlowRequest(false);
+    slowTimerRef.current = setTimeout(() => setSlowRequest(true), 6000);
 
     try {
       if (mode === 'register') {
@@ -155,16 +169,30 @@ export default function LoginPage() {
         : '/'
       );
     } catch (err) {
-      const message = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
-      setError(
-        typeof message === 'string'
-          ? message
-          : mode === 'login'
+      const axiosErr = err as { response?: { data?: { detail?: string } }; request?: unknown };
+      const message = axiosErr?.response?.data?.detail;
+      if (typeof message === 'string') {
+        // The server responded — this is a real validation/auth error
+        // (wrong password, duplicate email, unverified account, etc).
+        setError(message);
+      } else if (axiosErr?.request) {
+        // A request went out but no response ever came back (timeout,
+        // dropped connection, CORS block). Previously this fell through to
+        // "Invalid username or password" / "Registration failed" — which
+        // actively misled users into thinking their credentials were wrong
+        // when the real cause was the network or a cold-starting backend.
+        setError(t('network_error'));
+      } else {
+        setError(
+          mode === 'login'
             ? 'Invalid username or password.'
             : 'Registration failed. Please check your details and try again.'
-      );
+        );
+      }
       setShowResend(typeof message === 'string' && message.toLowerCase().includes('verify your email'));
     } finally {
+      if (slowTimerRef.current) clearTimeout(slowTimerRef.current);
+      setSlowRequest(false);
       setSubmitting(false);
     }
   };
@@ -401,6 +429,9 @@ export default function LoginPage() {
           >
             {submitting ? t('please_wait') : mode === 'login' ? t('sign_in') : t('create_account')}
           </button>
+          {submitting && slowRequest && (
+            <p className="text-center text-xs text-gray-400 mt-3">{t('waking_server_note')}</p>
+          )}
         </form>
 
         <p className="text-center text-xs text-gray-400 mt-6">
