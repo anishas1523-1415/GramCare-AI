@@ -158,11 +158,20 @@ class _LoginScreenState extends State<LoginScreen> {
                       ],
                     ),
                     child: Center(
-                      child: _isLoading 
+                      child: _isLoading
                         ? const CircularProgressIndicator(color: Colors.white)
                         : const Text('Login', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
                     ),
                   ),
+                ),
+
+                const SizedBox(height: 20),
+                // First-time patients register right here in the app —
+                // previously the only account-creation path was the web
+                // portal, which APK-first rural users may never have seen.
+                TextButton(
+                  onPressed: _isLoading ? null : () => context.go('/register'),
+                  child: const Text('New to GramCare? Create an account'),
                 ),
               ],
             ),

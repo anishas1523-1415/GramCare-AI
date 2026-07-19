@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/emergency_contacts_screen.dart';
 import 'screens/login_screen.dart';
+import 'screens/register_screen.dart';
 import 'screens/profile_selection_screen.dart';
 import 'screens/pharmacy_search_screen.dart';
 import 'screens/scan_prescription_screen.dart';
@@ -42,13 +43,15 @@ final GoRouter appRouter = GoRouter(
     // Token now lives in the platform keystore, not shared_preferences.
     final token = await SecureStore().getToken();
 
-    final isLoggingIn = state.matchedLocation == '/login';
+    // Both auth surfaces are reachable without a token; everything else
+    // redirects to login.
+    final isAuthRoute = state.matchedLocation == '/login' || state.matchedLocation == '/register';
 
-    if (token == null && !isLoggingIn) {
+    if (token == null && !isAuthRoute) {
       return '/login';
     }
 
-    if (token != null && isLoggingIn) {
+    if (token != null && isAuthRoute) {
       return '/';
     }
 
@@ -58,6 +61,10 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: '/login',
       pageBuilder: (context, state) => _appPage(const LoginScreen(), state),
+    ),
+    GoRoute(
+      path: '/register',
+      pageBuilder: (context, state) => _appPage(const RegisterScreen(), state),
     ),
     GoRoute(
       path: '/',
