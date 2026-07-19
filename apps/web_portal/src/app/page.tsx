@@ -120,38 +120,34 @@ function FeatureCarousel() {
   );
 }
 
-/** Small icon+label pills that drift gently around the hero — desktop only
- * to avoid crowding a phone-width viewport. Purely decorative branding, no
- * live data behind them. */
-function FloatingBadges({ live }: { live: boolean }) {
+/** Trust-signal pills below the tagline. Laid out inline (flex-wrap,
+ * centered) rather than absolutely positioned — that previous approach
+ * scattered them by percentage inside the hero's bounding box, which on
+ * a wide desktop viewport meant the box was short and the pills landed
+ * crowded on top of the title/CTAs instead of floating clear of them.
+ * In-flow layout can never overlap the content around it, at any width. */
+function TrustStrip({ live }: { live: boolean }) {
   const { t } = useLocale();
-  const badges = [
-    { key: "home_badge_secure", cls: "top-4 left-[6%]", duration: 6 },
-    { key: "home_badge_offline", cls: "top-24 right-[4%]", duration: 7 },
-    { key: "home_badge_bilingual", cls: "bottom-10 left-[10%]", duration: 5.5 },
-    { key: "home_badge_triage", cls: "bottom-28 right-[8%]", duration: 6.5 },
-  ];
+  const badges = ["home_badge_secure", "home_badge_offline", "home_badge_bilingual", "home_badge_triage"];
   return (
-    <div className="hidden lg:block absolute inset-0 -z-10 pointer-events-none">
-      {badges.map((b, i) => (
+    <div className="flex flex-wrap items-center justify-center gap-2.5 mt-6">
+      {badges.map((key, i) => (
         <motion.div
-          key={b.key}
-          animate={{ y: [0, -14, 0] }}
-          transition={{ duration: b.duration, repeat: Infinity, ease: "easeInOut", delay: i * 0.4 }}
-          className={`absolute ${b.cls} px-3 py-1.5 rounded-full glass-panel text-xs font-bold text-gray-600 dark:text-gray-300 whitespace-nowrap`}
+          key={key}
+          animate={{ y: [0, -6, 0] }}
+          transition={{ duration: 5 + i * 0.5, repeat: Infinity, ease: "easeInOut", delay: i * 0.3 }}
+          className="px-3 py-1.5 rounded-full glass-panel text-xs font-bold text-gray-600 dark:text-gray-300 whitespace-nowrap"
         >
-          {t(b.key)}
+          {t(key)}
         </motion.div>
       ))}
-      {live && (
-        <motion.div
-          animate={{ y: [0, -10, 0] }}
-          transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
-          className="absolute top-[45%] right-[2%] px-3 py-1.5 rounded-full glass-panel text-xs font-bold text-green-500 whitespace-nowrap flex items-center gap-1.5"
-        >
-          <Radio size={12} className="animate-pulse" /> {t('home_live')}
-        </motion.div>
-      )}
+      <motion.div
+        animate={{ y: [0, -6, 0] }}
+        transition={{ duration: 5.5, repeat: Infinity, ease: "easeInOut", delay: 0.6 }}
+        className={`px-3 py-1.5 rounded-full glass-panel text-xs font-bold whitespace-nowrap flex items-center gap-1.5 ${live ? "text-green-500" : "text-red-500"}`}
+      >
+        <Radio size={12} className={live ? "animate-pulse" : ""} /> {live ? t('home_live') : t('home_offline')}
+      </motion.div>
     </div>
   );
 }
@@ -185,8 +181,6 @@ export default function Home() {
       </div>
 
       <div className="relative w-full max-w-4xl">
-        <FloatingBadges live={socketConnected} />
-
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -199,6 +193,8 @@ export default function Home() {
           <p className="text-xl text-gray-500 dark:text-gray-400 max-w-2xl mx-auto">
             {t('home_tagline')}
           </p>
+
+          <TrustStrip live={socketConnected} />
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mt-8">
             <Link
