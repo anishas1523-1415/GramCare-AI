@@ -14,6 +14,34 @@ import Link from 'next/link';
 import { Menu, X } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useProfile } from '../contexts/ProfileContext';
+import { useLocale } from '../contexts/LocaleContext';
+
+/** English/Tamil toggle — visible whether or not the user is signed in,
+ * since the login/register screen (the first thing an unauthenticated
+ * visitor sees) is exactly where this matters most. */
+function LanguageSwitcher() {
+  const { code, setCode, t } = useLocale();
+  return (
+    <div className="flex rounded-lg overflow-hidden border border-white/20 text-xs font-bold shrink-0" aria-label={t('language')}>
+      <button
+        type="button"
+        onClick={() => setCode('en')}
+        className={`px-2.5 py-1.5 transition-colors ${code === 'en' ? 'bg-indigo-500 text-white' : 'bg-white/40 dark:bg-black/20'}`}
+        aria-pressed={code === 'en'}
+      >
+        EN
+      </button>
+      <button
+        type="button"
+        onClick={() => setCode('ta')}
+        className={`px-2.5 py-1.5 transition-colors ${code === 'ta' ? 'bg-indigo-500 text-white' : 'bg-white/40 dark:bg-black/20'}`}
+        aria-pressed={code === 'ta'}
+      >
+        தமிழ்
+      </button>
+    </div>
+  );
+}
 
 /** "Acting for" switcher — the planning doc's family-member selection,
  * available everywhere so triage/booking/records are scoped correctly. */
@@ -113,19 +141,23 @@ export default function Header() {
             crowded multi-line mess on a phone-width screen. */}
         <nav className="hidden md:flex items-center gap-4 text-sm font-semibold">
           {loading ? null : navLinks}
+          <LanguageSwitcher />
         </nav>
 
-        {!loading && (
-          <button
-            type="button"
-            className="md:hidden neu-button p-2 rounded-lg"
-            onClick={() => setMenuOpen((v) => !v)}
-            aria-expanded={menuOpen}
-            aria-label={menuOpen ? 'Close menu' : 'Open menu'}
-          >
-            {menuOpen ? <X size={22} /> : <Menu size={22} />}
-          </button>
-        )}
+        <div className="md:hidden flex items-center gap-3">
+          <LanguageSwitcher />
+          {!loading && (
+            <button
+              type="button"
+              className="neu-button p-2 rounded-lg"
+              onClick={() => setMenuOpen((v) => !v)}
+              aria-expanded={menuOpen}
+              aria-label={menuOpen ? 'Close menu' : 'Open menu'}
+            >
+              {menuOpen ? <X size={22} /> : <Menu size={22} />}
+            </button>
+          )}
+        </div>
       </div>
 
       {!loading && menuOpen && (

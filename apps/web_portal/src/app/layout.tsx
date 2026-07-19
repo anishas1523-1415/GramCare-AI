@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "../contexts/AuthContext";
 import { ProfileProvider } from "../contexts/ProfileContext";
+import { LocaleProvider } from "../contexts/LocaleContext";
 import Header from "../components/Header";
 import MotionConfigProvider from "../components/MotionConfigProvider";
 
@@ -34,12 +35,14 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col">
         <MotionConfigProvider>
-          <AuthProvider>
-            <ProfileProvider>
-              <Header />
-              {children}
-            </ProfileProvider>
-          </AuthProvider>
+          <LocaleProvider>
+            <AuthProvider>
+              <ProfileProvider>
+                <Header />
+                {children}
+              </ProfileProvider>
+            </AuthProvider>
+          </LocaleProvider>
         </MotionConfigProvider>
       </body>
     </html>

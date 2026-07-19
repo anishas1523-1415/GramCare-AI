@@ -22,6 +22,7 @@ import { useRouter } from 'next/navigation';
 import { LogIn, UserPlus, Phone, ShieldCheck } from 'lucide-react';
 import api from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
+import { useLocale } from '../../contexts/LocaleContext';
 
 type Mode = 'login' | 'register';
 type Role = 'PATIENT' | 'DOCTOR' | 'HOSPITAL';
@@ -31,6 +32,7 @@ const PHONE_VERIFIED_ROLES: Role[] = ['DOCTOR', 'HOSPITAL'];
 export default function LoginPage() {
   const router = useRouter();
   const { login } = useAuth();
+  const { t } = useLocale();
 
   const [mode, setMode] = useState<Mode>('login');
   const [username, setUsername] = useState('');
@@ -193,9 +195,9 @@ export default function LoginPage() {
         animate={{ opacity: 1, y: 0 }}
         className="glass-panel w-full max-w-md p-8"
       >
-        <h1 className="text-3xl font-bold text-center mb-2 text-[var(--foreground)]">GramCare AI</h1>
+        <h1 className="text-3xl font-bold text-center mb-2 text-[var(--foreground)]">{t('app_title')}</h1>
         <p className="text-center text-gray-500 mb-8">
-          {mode === 'login' ? 'Sign in to continue your care journey.' : 'Create your account.'}
+          {mode === 'login' ? t('sign_in_tagline') : t('create_account_tagline')}
         </p>
 
         <div className="flex mb-8 rounded-xl bg-white/40 dark:bg-black/40 p-1 border border-white/20">
@@ -204,20 +206,20 @@ export default function LoginPage() {
             onClick={() => { setMode('login'); setError(''); setInfo(''); }}
             className={`flex-1 py-2 rounded-lg font-semibold flex items-center justify-center gap-2 transition-colors ${mode === 'login' ? 'bg-indigo-500 text-white' : 'text-gray-500'}`}
           >
-            <LogIn size={16} /> Sign In
+            <LogIn size={16} /> {t('sign_in')}
           </button>
           <button
             type="button"
             onClick={() => { setMode('register'); setError(''); setInfo(''); }}
             className={`flex-1 py-2 rounded-lg font-semibold flex items-center justify-center gap-2 transition-colors ${mode === 'register' ? 'bg-teal-500 text-white' : 'text-gray-500'}`}
           >
-            <UserPlus size={16} /> Register
+            <UserPlus size={16} /> {t('register')}
           </button>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label htmlFor="login-username" className="block text-sm font-semibold mb-2">Username</label>
+            <label htmlFor="login-username" className="block text-sm font-semibold mb-2">{t('username')}</label>
             <input
               id="login-username"
               required
@@ -233,7 +235,7 @@ export default function LoginPage() {
           {mode === 'register' && (
             <>
               <div>
-                <label htmlFor="login-fullname" className="block text-sm font-semibold mb-2">Full Name</label>
+                <label htmlFor="login-fullname" className="block text-sm font-semibold mb-2">{t('full_name')}</label>
                 <input
                   id="login-fullname"
                   required
@@ -245,7 +247,7 @@ export default function LoginPage() {
                 />
               </div>
               <div>
-                <label htmlFor="login-email" className="block text-sm font-semibold mb-2">Email</label>
+                <label htmlFor="login-email" className="block text-sm font-semibold mb-2">{t('email')}</label>
                 <input
                   id="login-email"
                   required
@@ -257,25 +259,25 @@ export default function LoginPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-semibold mb-2">I am a...</label>
+                <label className="block text-sm font-semibold mb-2">{t('i_am_a')}</label>
                 <select
                   value={role}
                   onChange={(e) => { setRole(e.target.value as Role); resetPhoneState(); }}
                   className="w-full p-3 rounded-xl bg-white/50 dark:bg-black/20 border border-white/20 focus:ring-2 focus:ring-indigo-400 focus:outline-none"
                 >
-                  <option value="PATIENT">Patient</option>
-                  <option value="DOCTOR">Doctor</option>
-                  <option value="HOSPITAL">Hospital</option>
+                  <option value="PATIENT">{t('patient')}</option>
+                  <option value="DOCTOR">{t('doctor')}</option>
+                  <option value="HOSPITAL">{t('hospital')}</option>
                 </select>
                 <p className="text-xs text-gray-500 mt-1">
-                  Pharmacists and Labs have separate portals.
+                  {t('pharmacists_labs_note')}
                 </p>
               </div>
 
               {role === 'PATIENT' && (
                 <div>
                   <label htmlFor="login-patient-phone" className="block text-sm font-semibold mb-2 flex items-center gap-1.5">
-                    <Phone size={14} /> Phone Number (Optional)
+                    <Phone size={14} /> {t('phone_number_optional')}
                   </label>
                   <input
                     id="login-patient-phone"
@@ -286,7 +288,7 @@ export default function LoginPage() {
                     className="w-full p-3 rounded-xl bg-white/50 dark:bg-black/20 border border-white/20 focus:ring-2 focus:ring-indigo-400 focus:outline-none"
                   />
                   <p className="text-xs text-gray-500 mt-1">
-                    So we can text you a reminder before appointments. You can skip this and add it later.
+                    {t('phone_reminder_note')}
                   </p>
                 </div>
               )}
@@ -350,7 +352,7 @@ export default function LoginPage() {
           )}
 
           <div>
-            <label htmlFor="login-password" className="block text-sm font-semibold mb-2">Password</label>
+            <label htmlFor="login-password" className="block text-sm font-semibold mb-2">{t('password')}</label>
             <input
               id="login-password"
               required
@@ -362,7 +364,7 @@ export default function LoginPage() {
               className="w-full p-3 rounded-xl bg-white/50 dark:bg-black/20 border border-white/20 focus:ring-2 focus:ring-indigo-400 focus:outline-none"
             />
             {mode === 'register' && (
-              <p className="text-xs text-gray-500 mt-1">Minimum 8 characters.</p>
+              <p className="text-xs text-gray-500 mt-1">{t('min_8_chars')}</p>
             )}
           </div>
 
@@ -397,13 +399,13 @@ export default function LoginPage() {
             disabled={submitting || (needsPhoneVerification && !phoneVerified)}
             className="neu-button w-full py-3 bg-indigo-500 text-white font-bold rounded-xl disabled:opacity-50"
           >
-            {submitting ? 'Please wait...' : mode === 'login' ? 'Sign In' : 'Create Account'}
+            {submitting ? t('please_wait') : mode === 'login' ? t('sign_in') : t('create_account')}
           </button>
         </form>
 
         <p className="text-center text-xs text-gray-400 mt-6">
-          Government &amp; health-authority official?{' '}
-          <a href="/government/register" className="text-purple-500 font-semibold hover:underline">Portal access</a>
+          {t('government_official_prompt')}{' '}
+          <a href="/government/register" className="text-purple-500 font-semibold hover:underline">{t('portal_access')}</a>
         </p>
       </motion.div>
     </div>
