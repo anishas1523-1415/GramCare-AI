@@ -144,6 +144,53 @@ export interface PaymentRecord {
   created_at: string;
 }
 
+export interface LabTestInfo {
+  name: string;
+  category: string;
+  prep_instructions: string;
+  typical_turnaround_hours: number;
+  sample_type: string;
+}
+
+export interface LabCenterResponse {
+  id: number;
+  owner_user_id: number;
+  name: string;
+  address?: string | null;
+  lat?: number | null;
+  lng?: number | null;
+  phone?: string | null;
+  offers_home_collection: boolean;
+  is_active: boolean;
+}
+
+export interface LabResultValue {
+  parameter: string;
+  value: string;
+  unit?: string | null;
+  reference_range?: string | null;
+  flag?: string | null;
+}
+
+export interface LabBookingResponse {
+  id: number;
+  patient_id: number;
+  family_profile_id?: number | null;
+  lab_center_id: number;
+  test_name: string;
+  home_collection: boolean;
+  scheduled_at?: string | null;
+  status: 'BOOKED' | 'SAMPLE_COLLECTED' | 'PROCESSING' | 'REPORT_READY' | 'COMPLETED' | 'CANCELLED';
+  notes?: string | null;
+  report_payload?: {
+    values?: LabResultValue[];
+    summary?: string | null;
+    file_url?: string | null;
+  } | null;
+  report_ready_at?: string | null;
+  created_at: string;
+}
+
 export interface NearbyPharmacyResult {
   pharmacy_id: number;
   pharmacy_name: string;
