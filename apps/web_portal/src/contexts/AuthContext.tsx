@@ -22,7 +22,7 @@ interface User {
 interface AuthContextType {
   user: User | null;
   loading: boolean;
-  login: (token: string, userData: User) => void;
+  login: (token: string, refreshToken: string, userData: User) => void;
   logout: () => void;
 }
 
@@ -46,8 +46,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           const response = await api.get('/auth/me');
           setUser(response.data);
         } catch (error) {
+          // The api client's own interceptor already tries a token refresh
+          // before a 401 ever reaches here — if we're still failing, both
+          // tokens are genuinely gone (expired refresh token, revoked
+          // session), so this really is a logout, not a transient blip.
           console.error("Auth check failed:", error);
           localStorage.removeItem('access_token');
+          localStorage.removeItem('refresh_token');
           setUser(null);
         }
       }
@@ -56,13 +61,15 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     initAuth();
   }, []);
 
-  const login = (token: string, userData: User) => {
+  const login = (token: string, refreshToken: string, userData: User) => {
     localStorage.setItem('access_token', token);
+    localStorage.setItem('refresh_token', refreshToken);
     setUser(userData);
   };
 
   const logout = () => {
     localStorage.removeItem('access_token');
+    localStorage.removeItem('refresh_token');
     setUser(null);
     router.push('/'); // Redirect to landing/login
   };

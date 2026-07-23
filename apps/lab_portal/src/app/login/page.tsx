@@ -39,7 +39,7 @@ export default function LoginPage() {
       throw new Error('ROLE_MISMATCH');
     }
 
-    login(data.access_token, meRes.data);
+    login(data.access_token, data.refresh_token, meRes.data);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {

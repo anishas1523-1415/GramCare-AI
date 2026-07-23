@@ -15,7 +15,7 @@ interface User {
 interface AuthContextType {
   user: User | null;
   loading: boolean;
-  login: (token: string, userData: User) => void;
+  login: (token: string, refreshToken: string, userData: User) => void;
   logout: () => void;
 }
 
@@ -41,6 +41,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         } catch (error) {
           console.error('Auth check failed:', error);
           localStorage.removeItem('lab_access_token');
+          localStorage.removeItem('lab_refresh_token');
           setUser(null);
         }
       }
@@ -49,13 +50,15 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     initAuth();
   }, []);
 
-  const login = (token: string, userData: User) => {
+  const login = (token: string, refreshToken: string, userData: User) => {
     localStorage.setItem('lab_access_token', token);
+    localStorage.setItem('lab_refresh_token', refreshToken);
     setUser(userData);
   };
 
   const logout = () => {
     localStorage.removeItem('lab_access_token');
+    localStorage.removeItem('lab_refresh_token');
     setUser(null);
     router.push('/login');
   };

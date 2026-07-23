@@ -122,7 +122,7 @@ export default function LoginPage() {
       headers: { Authorization: `Bearer ${data.access_token}` },
     });
 
-    login(data.access_token, meRes.data);
+    login(data.access_token, data.refresh_token, meRes.data);
     return meRes.data.role as string;
   };
 

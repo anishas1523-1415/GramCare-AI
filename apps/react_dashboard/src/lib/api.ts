@@ -5,6 +5,7 @@ import { createApiClient } from '@gramcare/api-client';
 const api = createApiClient({
   baseURL: import.meta.env.VITE_API_URL || 'https://gramcare-fastapi.onrender.com/api/v1',
   tokenStorageKey: 'pharmacy_access_token',
+  refreshTokenStorageKey: 'pharmacy_refresh_token',
   extraKeysOnUnauthorized: ['pharmacy_user_role'],
 });
 

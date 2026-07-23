@@ -564,6 +564,7 @@ function App() {
 
   const handleLogout = () => {
     localStorage.removeItem('pharmacy_access_token');
+    localStorage.removeItem('pharmacy_refresh_token');
     localStorage.removeItem('pharmacy_user_role');
     setAuthenticated(false);
   };

@@ -38,7 +38,7 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       });
 
-      const { access_token, role } = res.data;
+      const { access_token, refresh_token, role } = res.data;
 
       if (role !== 'PHARMACIST' && role !== 'ADMIN') {
         setError('This account is not a pharmacist account.');
@@ -47,6 +47,7 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
       }
 
       localStorage.setItem('pharmacy_access_token', access_token);
+      localStorage.setItem('pharmacy_refresh_token', refresh_token);
       localStorage.setItem('pharmacy_user_role', role);
       onLoginSuccess();
     } catch (err) {
