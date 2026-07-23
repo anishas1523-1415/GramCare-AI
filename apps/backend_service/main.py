@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
 from core.security_middleware import SecurityHeadersMiddleware
+from core.timezone_json import UtcJSONResponse
 
 load_dotenv()
 
@@ -121,6 +122,7 @@ app = FastAPI(
     description="Central Nervous System for the Patient, Doctor, and Pharmacy Suites.",
     version="1.0.0",
     lifespan=lifespan,
+    default_response_class=UtcJSONResponse,
 )
 
 # Configure CORS

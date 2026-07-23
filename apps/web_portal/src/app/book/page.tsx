@@ -326,7 +326,8 @@ function BookingFlow() {
                 {doctor.full_name} · {new Date(slot.start_time).toLocaleString()}
               </p>
               <p className="text-sm text-gray-400 mt-4">
-                You&apos;ll join the video consultation from your dashboard when it&apos;s time.
+                You can join the video consultation from{" "}
+                <a href="/appointments" className="text-indigo-500 font-semibold hover:underline">My Appointments</a> when it&apos;s time.
               </p>
             </div>
           )}

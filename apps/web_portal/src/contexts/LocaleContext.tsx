@@ -57,6 +57,7 @@ const en: Record<string, string> = {
   // page continuation, not a re-architecture).
   nav_sos: 'Emergency SOS',
   nav_book_consultation: 'Book Consultation',
+  nav_my_appointments: 'My Appointments',
   nav_family_profiles: 'Family Profiles',
   nav_my_prescriptions: 'My Prescriptions',
   nav_find_medicine: 'Find Medicine',
@@ -152,6 +153,7 @@ const ta: Record<string, string> = {
   language: 'மொழி',
   nav_sos: 'அவசர SOS',
   nav_book_consultation: 'ஆலோசனை பதிவு',
+  nav_my_appointments: 'எனது அப்பாயின்ட்மென்ட்கள்',
   nav_family_profiles: 'குடும்ப சுயவிவரங்கள்',
   nav_my_prescriptions: 'எனது மருந்துச் சீட்டுகள்',
   nav_find_medicine: 'மருந்து தேடு',
