@@ -311,7 +311,13 @@ def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db
 @router.post("/refresh", response_model=schemas.Token)
 def refresh_token(request: Request, payload: schemas.RefreshTokenRequest, db: Session = Depends(get_db)):
     from datetime import datetime, timezone
-    now = datetime.now(timezone.utc)
+    # UserSession.expires_at is a naive DateTime column (no timezone=True),
+    # so SQLAlchemy reads it back naive. Comparing that directly against an
+    # aware `now` below raised "can't compare offset-naive and
+    # offset-aware datetimes" — an unhandled 500 on every single refresh
+    # attempt, since nothing ever called this endpoint before the frontend
+    # started actually using the refresh token it had been discarding.
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
 
     session = db.query(models.UserSession).filter(
         models.UserSession.refresh_token == payload.refresh_token,
