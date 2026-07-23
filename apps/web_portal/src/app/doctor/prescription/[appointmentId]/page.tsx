@@ -1,17 +1,28 @@
 "use client";
 
 import React, { use, useState } from 'react';
-import { motion } from 'framer-motion';
-import { FileText, Plus, Trash2, Printer, CheckCircle2, TriangleAlert } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { FileText, Plus, Trash2, Printer, CheckCircle2, TriangleAlert, ShieldAlert, Brain, ChevronDown } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import api from '../../../../lib/api';
+import type { InteractionWarning, CdsAlert } from '../../../../types';
 
-interface InteractionWarning {
-  drug_a: string;
-  drug_b: string;
-  severity: string;
-  description: string;
-}
+// Shared severity -> color mapping, matching the CRITICAL/HIGH/MODERATE/LOW
+// convention used by the symptom-checker's triage badges (see
+// app/symptom-checker/page.tsx), collapsed onto the CDS module's 3-level
+// INFO/WARNING/CRITICAL scale.
+const CDS_SEVERITY_CLASSES: Record<string, string> = {
+  CRITICAL: 'bg-red-500 text-white',
+  WARNING: 'bg-orange-500 text-white',
+  INFO: 'bg-yellow-500 text-black',
+};
+
+const CDS_CATEGORY_LABEL: Record<string, string> = {
+  INTERACTION: 'Drug Interaction',
+  ALLERGY: 'Allergy Conflict',
+  DUPLICATE_THERAPY: 'Duplicate Therapy',
+  DOSAGE_CHANGE: 'Dosage Change',
+};
 
 // Next.js 15+ (this project is on Next 16.2.9) passes `params` as a Promise
 // on page components, not a plain object. The previous synchronous
@@ -36,18 +47,59 @@ export default function PrescriptionWriter({ params }: { params: Promise<{ appoi
     { name: '', dosage: '', frequency: '1-0-1', duration: '5 days' }
   ]);
 
+  // Clinical Decision Support — a doctor can run this any time while
+  // editing (advisory, not blocking submission): combines the existing
+  // drug-interaction check with three more heuristics (allergy conflict,
+  // duplicate therapy, dosage-sanity) against this patient's records. Every
+  // alert carries its own `explanation` (Explainable AI), shown behind a
+  // "Why?" toggle rather than always-expanded so the list stays scannable.
+  const [cdsAlerts, setCdsAlerts] = useState<CdsAlert[]>([]);
+  const [cdsChecked, setCdsChecked] = useState(false);
+  const [checkingCds, setCheckingCds] = useState(false);
+  const [cdsError, setCdsError] = useState('');
+  const [expandedAlert, setExpandedAlert] = useState<number | null>(null);
+
   const addMedicine = () => {
     setMedicines([...medicines, { name: '', dosage: '', frequency: '1-0-1', duration: '5 days' }]);
+    setCdsChecked(false);
   };
 
   const removeMedicine = (index: number) => {
     setMedicines(medicines.filter((_, i) => i !== index));
+    setCdsChecked(false);
   };
 
   const updateMedicine = (index: number, field: string, value: string) => {
     const updated = [...medicines];
     updated[index] = { ...updated[index], [field]: value };
     setMedicines(updated);
+    if (field === 'name' || field === 'dosage') setCdsChecked(false);
+  };
+
+  const runCdsCheck = async () => {
+    if (!patientId) {
+      setCdsError('Missing patient information for this appointment.');
+      return;
+    }
+    const named = medicines.filter((m) => m.name.trim());
+    if (named.length === 0) return;
+
+    setCheckingCds(true);
+    setCdsError('');
+    setExpandedAlert(null);
+    try {
+      const res = await api.post<{ alerts: CdsAlert[] }>('/cds/check', {
+        patient_id: patientId,
+        medicines: named.map((m) => ({ name: m.name, dosage: m.dosage })),
+      });
+      setCdsAlerts(res.data.alerts);
+      setCdsChecked(true);
+    } catch (err) {
+      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      setCdsError(typeof detail === 'string' ? detail : 'Could not run the safety check.');
+    } finally {
+      setCheckingCds(false);
+    }
   };
 
   const [submitError, setSubmitError] = useState('');
@@ -164,7 +216,7 @@ export default function PrescriptionWriter({ params }: { params: Promise<{ appoi
                   value={notes}
                   onChange={e => setNotes(e.target.value)}
                   placeholder="Additional observations..."
-                  className="w-full p-3 rounded-xl bg-white/50 dark:bg-black/20 border border-white/20 focus:ring-2 focus:ring-indigo-500 outline-none resize-none" 
+                  className="w-full p-3 rounded-xl bg-white/50 dark:bg-black/20 border border-white/20 focus:ring-2 focus:ring-indigo-500 outline-none resize-none"
                   rows={2}
                 />
               </div>
@@ -174,8 +226,8 @@ export default function PrescriptionWriter({ params }: { params: Promise<{ appoi
           <div className="glass-panel p-6">
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-xl font-bold">Medicines</h2>
-              <button 
-                type="button" 
+              <button
+                type="button"
                 onClick={addMedicine}
                 className="px-4 py-2 bg-indigo-500/10 text-indigo-500 font-bold rounded-lg flex items-center gap-2 hover:bg-indigo-500 hover:text-white transition-colors"
               >
@@ -185,8 +237,8 @@ export default function PrescriptionWriter({ params }: { params: Promise<{ appoi
 
             <div className="space-y-4">
               {medicines.map((med, index) => (
-                <motion.div 
-                  key={index} 
+                <motion.div
+                  key={index}
                   initial={{ opacity: 0, x: -20 }}
                   animate={{ opacity: 1, x: 0 }}
                   className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end bg-white/40 dark:bg-black/40 p-4 rounded-xl border border-white/20 relative"
@@ -221,7 +273,7 @@ export default function PrescriptionWriter({ params }: { params: Promise<{ appoi
                       id={`med-frequency-${index}`}
                       value={med.frequency}
                       onChange={e => updateMedicine(index, 'frequency', e.target.value)}
-                      className="w-full p-2 rounded-lg bg-[var(--background)] border border-transparent focus:ring-2 focus:ring-teal-500 outline-none" 
+                      className="w-full p-2 rounded-lg bg-[var(--background)] border border-transparent focus:ring-2 focus:ring-teal-500 outline-none"
                     >
                       <option>1-0-1 (Morning & Night)</option>
                       <option>1-1-1 (Three times a day)</option>
@@ -239,12 +291,12 @@ export default function PrescriptionWriter({ params }: { params: Promise<{ appoi
                       value={med.duration}
                       onChange={e => updateMedicine(index, 'duration', e.target.value)}
                       placeholder="5 days"
-                      className="w-full p-2 rounded-lg bg-[var(--background)] border border-transparent focus:ring-2 focus:ring-teal-500 outline-none" 
+                      className="w-full p-2 rounded-lg bg-[var(--background)] border border-transparent focus:ring-2 focus:ring-teal-500 outline-none"
                     />
                   </div>
                   <div className="md:col-span-1 flex justify-end">
-                    <button 
-                      type="button" 
+                    <button
+                      type="button"
                       onClick={() => removeMedicine(index)}
                       disabled={medicines.length === 1}
                       className="p-2 bg-red-500/10 text-red-500 rounded-lg hover:bg-red-500 hover:text-white transition-colors disabled:opacity-30"
@@ -254,6 +306,67 @@ export default function PrescriptionWriter({ params }: { params: Promise<{ appoi
                   </div>
                 </motion.div>
               ))}
+            </div>
+
+            {/* Clinical Decision Support — advisory safety check, run
+                on-demand rather than automatically on every keystroke. */}
+            <div className="mt-6 pt-6 border-t border-white/10">
+              <button
+                type="button"
+                onClick={runCdsCheck}
+                disabled={checkingCds || !patientId}
+                className="w-full py-3 rounded-xl border-2 border-indigo-500/40 text-indigo-500 font-bold flex items-center justify-center gap-2 hover:bg-indigo-500/10 transition-colors disabled:opacity-50"
+              >
+                <ShieldAlert size={18} />
+                {checkingCds ? 'Checking allergies, interactions & history…' : 'Check Safety & Interactions'}
+              </button>
+              {cdsError && <p role="alert" className="text-red-500 text-sm font-semibold mt-3">{cdsError}</p>}
+
+              {cdsChecked && (
+                <div className="mt-4 space-y-2">
+                  {cdsAlerts.length === 0 ? (
+                    <p className="text-sm text-emerald-500 font-semibold flex items-center gap-2">
+                      <CheckCircle2 size={16} /> No allergy conflicts, duplicate therapies, or interactions found.
+                    </p>
+                  ) : (
+                    cdsAlerts.map((alert, i) => (
+                      <div key={i} className="rounded-xl bg-white/40 dark:bg-black/40 border border-white/20 overflow-hidden">
+                        <div className="p-3 flex items-start gap-3">
+                          <span className={`shrink-0 px-2 py-1 rounded text-xs font-bold ${CDS_SEVERITY_CLASSES[alert.severity]}`}>
+                            {alert.severity}
+                          </span>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">{CDS_CATEGORY_LABEL[alert.category] || alert.category}</p>
+                            <p className="text-sm font-semibold">{alert.message}</p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setExpandedAlert(expandedAlert === i ? null : i)}
+                          className="w-full flex items-center justify-between px-3 py-2 text-xs font-bold text-indigo-500 border-t border-white/10"
+                        >
+                          <span className="flex items-center gap-1.5"><Brain size={13} /> Why is this flagged?</span>
+                          <motion.span animate={{ rotate: expandedAlert === i ? 180 : 0 }}>
+                            <ChevronDown size={14} />
+                          </motion.span>
+                        </button>
+                        <AnimatePresence initial={false}>
+                          {expandedAlert === i && (
+                            <motion.div
+                              initial={{ height: 0, opacity: 0 }}
+                              animate={{ height: 'auto', opacity: 1 }}
+                              exit={{ height: 0, opacity: 0 }}
+                              className="overflow-hidden"
+                            >
+                              <p className="px-3 pb-3 text-sm text-gray-600 dark:text-gray-300">{alert.explanation}</p>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
             </div>
           </div>
 

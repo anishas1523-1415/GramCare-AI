@@ -18,6 +18,8 @@ export interface InteractionWarning {
   drug_b: string;
   severity: 'HIGH' | 'MODERATE';
   description: string;
+  /** Explainable AI: the plain-language "why" behind the alert. */
+  explanation: string;
 }
 
 export interface BatchRecall {

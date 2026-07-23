@@ -267,6 +267,21 @@ class MedicineItem(BaseModel):
     frequency: str
     duration: str
 
+# Medicine Interaction Alerts / Clinical Decision Support (CDS): the shape
+# core.drug_interactions.check_interactions() returns per warning. Previously
+# this rode along untyped as Dict[str, Any]; now given a real schema so the
+# `explanation` field (Explainable AI: the plain-language "why" behind the
+# alert, added alongside the pre-existing `description`) is documented and
+# validated rather than silently passed through. All fields it always
+# returned (drug_a/drug_b/severity/description) are unchanged — only the new
+# `explanation` field was added, so no existing caller breaks.
+class InteractionWarningSchema(BaseModel):
+    drug_a: str
+    drug_b: str
+    severity: str  # HIGH / MODERATE
+    description: str
+    explanation: str
+
 class PrescriptionCreate(BaseModel):
     appointment_id: Optional[int] = None
     patient_id: int
@@ -292,7 +307,7 @@ class PrescriptionResponse(BaseModel):
     # Interaction Alerts" — checked against the patient's other active
     # medicines at the moment of issuing). Not a stored column; other
     # read paths (pharmacy queue, wallet) simply omit it.
-    interaction_warnings: Optional[List[Dict[str, Any]]] = None
+    interaction_warnings: Optional[List[InteractionWarningSchema]] = None
 
     model_config = {"from_attributes": True}
 
@@ -603,3 +618,35 @@ class PassportPublicResponse(BaseModel):
     chronic_conditions: Optional[str] = None
     emergency_contacts: List[PassportEmergencyContact] = []
     recent_medicines: List[PassportMedicine] = []
+
+# ==========================================
+# Preventive AI Schemas
+# ==========================================
+class PreventiveReminder(BaseModel):
+    """One rule-based screening/vaccination reminder — see
+    core/preventive_rules.py. Not an ML prediction: `reason` is a static
+    explanation template, `due` is a deterministic date/keyword check."""
+    key: str
+    title: str
+    category: str  # "screening" | "vaccination"
+    reason: str
+    due: bool
+    last_done_date: Optional[str] = None
+    suggested_action: str  # "lab_test" -> /lab-tests | "consultation" -> /book
+
+# ==========================================
+# AI Care Navigator
+# ==========================================
+class NavigatorItem(BaseModel):
+    """One prioritized "what to do next" item surfaced to a patient, with
+    explainability (`reason`) and a suggested action the frontend can render
+    as a button/link (`cta_label` + `cta_route`). `category` identifies which
+    signal produced the item (sos/lab/appointment/prescription/preventive/
+    all_clear) so clients can key icons/analytics off it without parsing
+    `reason` text."""
+    category: str
+    priority: str = Field(..., pattern="^(CRITICAL|HIGH|MEDIUM|LOW)$")
+    title: str
+    reason: str
+    cta_label: Optional[str] = None
+    cta_route: Optional[str] = None

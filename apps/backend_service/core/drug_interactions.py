@@ -20,6 +20,13 @@ class InteractionWarning(TypedDict):
     drug_b: str
     severity: str  # HIGH / MODERATE
     description: str
+    # Explainable AI requirement (Clinical Decision Support): a plain-
+    # language "why" for the alert, separate from `description` (which is
+    # the clinical fact) — `explanation` states which two medicines
+    # triggered the rule and how. Added without touching drug_a/drug_b/
+    # severity/description so existing callers that only read those four
+    # keys keep working untouched.
+    explanation: str
 
 
 # Keys are lowercase generic/common names. A medicine name "matches" a key if
@@ -68,5 +75,10 @@ def check_interactions(medicine_names: List[str]) -> List[InteractionWarning]:
                     "drug_b": orig_b,
                     "severity": severity,
                     "description": description,
+                    "explanation": (
+                        f"{orig_a} and {orig_b} were flagged because they matched a documented "
+                        f"high-risk interaction pair ('{key_a}' + '{key_b}') in our curated "
+                        f"interaction table. {description}"
+                    ),
                 })
     return warnings

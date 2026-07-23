@@ -66,6 +66,30 @@ export interface MedicineItem {
   duration: string;
 }
 
+/** Mirrors schemas.InteractionWarningSchema — one row of
+ * interaction_warnings (POST /ehr/issue_prescription, PUT
+ * /pharmacy/fulfill/{id}, POST /pharmacy/interactions/check). `explanation`
+ * is the Explainable AI "why" field, added alongside the original
+ * drug_a/drug_b/severity/description fields. */
+export interface InteractionWarning {
+  drug_a: string;
+  drug_b: string;
+  severity: 'HIGH' | 'MODERATE';
+  description: string;
+  explanation: string;
+}
+
+/** Mirrors modules/cds/router.py's CdsAlertResponse — one row of
+ * POST /cds/check's `alerts` array. Combines the drug-interaction check
+ * with the three new Clinical Decision Support heuristics (allergy
+ * cross-check, duplicate-therapy, dosage-sanity) into one explained list. */
+export interface CdsAlert {
+  category: 'INTERACTION' | 'ALLERGY' | 'DUPLICATE_THERAPY' | 'DOSAGE_CHANGE';
+  severity: 'INFO' | 'WARNING' | 'CRITICAL';
+  message: string;
+  explanation: string;
+}
+
 export interface Prescription {
   id: number;
   appointment_id?: number | null;
@@ -78,6 +102,9 @@ export interface Prescription {
   notes?: string | null;
   is_fulfilled: boolean;
   created_at: string;
+  /** Populated only by POST /ehr/issue_prescription's response — other read
+   * paths omit it. */
+  interaction_warnings?: InteractionWarning[] | null;
 }
 
 export interface EHRRecord {
@@ -197,6 +224,31 @@ export interface LabBookingResponse {
   } | null;
   report_ready_at?: string | null;
   created_at: string;
+}
+
+/** Mirrors schemas.PreventiveReminder — one rule-based screening/
+ * vaccination reminder from GET /preventive/reminders. Rule-based (a
+ * deterministic ruleset), NOT a machine-learning prediction. */
+export interface PreventiveReminder {
+  key: string;
+  title: string;
+  category: 'screening' | 'vaccination';
+  reason: string;
+  due: boolean;
+  last_done_date?: string | null;
+  suggested_action: 'lab_test' | 'consultation';
+}
+
+/** Mirrors schemas.NavigatorItem — one ranked "what to do next" entry from
+ * GET /navigator/next-steps, carrying its own explainability (`reason`) and
+ * a suggested action the client can render as a button/link. */
+export interface NavigatorItem {
+  category: string;
+  priority: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
+  title: string;
+  reason: string;
+  cta_label?: string | null;
+  cta_route?: string | null;
 }
 
 export interface NearbyPharmacyResult {

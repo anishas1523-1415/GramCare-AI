@@ -307,9 +307,15 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
             <button onClick={() => setLastInteractionWarnings([])} style={{ background: 'none', border: 'none', color: '#991b1b', cursor: 'pointer', fontWeight: 'bold' }}>Dismiss</button>
           </div>
           {lastInteractionWarnings.map((w, idx) => (
-            <p key={idx} style={{ margin: '0.25rem 0', fontSize: '0.9rem' }}>
-              <strong>{w.drug_a} + {w.drug_b}</strong> ({w.severity}): {w.description}
-            </p>
+            <div key={idx} style={{ margin: '0.5rem 0' }}>
+              <p style={{ margin: 0, fontSize: '0.9rem' }}>
+                <strong>{w.drug_a} + {w.drug_b}</strong> ({w.severity}): {w.description}
+              </p>
+              {/* Explainable AI: the plain-language "why", not just the bare label. */}
+              {w.explanation && (
+                <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.8rem', opacity: 0.85 }}>{w.explanation}</p>
+              )}
+            </div>
           ))}
         </div>
       )}

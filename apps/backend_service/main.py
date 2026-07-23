@@ -29,6 +29,9 @@ from modules.analytics.router import router as analytics_router
 from modules.lab.router import router as lab_router
 from modules.hospital.router import router as hospital_router
 from modules.passport.router import router as passport_router
+from modules.preventive.router import router as preventive_router
+from modules.navigator.router import router as navigator_router
+from modules.cds.router import router as cds_router
 
 
 def _seed_government_whitelist():
@@ -152,6 +155,9 @@ app.include_router(analytics_router, prefix="/api/v1/analytics", tags=["Communit
 app.include_router(lab_router, prefix="/api/v1/lab", tags=["Laboratory"])
 app.include_router(hospital_router, prefix="/api/v1/hospital", tags=["Hospital"])
 app.include_router(passport_router, prefix="/api/v1/passport", tags=["Health Passport"])
+app.include_router(preventive_router, prefix="/api/v1/preventive", tags=["Preventive AI"])
+app.include_router(navigator_router, prefix="/api/v1/navigator", tags=["AI Care Navigator"])
+app.include_router(cds_router, prefix="/api/v1/cds", tags=["Clinical Decision Support"])
 
 
 

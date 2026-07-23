@@ -89,6 +89,7 @@ export default function Header() {
       {user.role === 'PATIENT' && (
         <>
           <Link href="/sos" className="text-red-500 font-bold hover:text-red-400 transition-colors" onClick={() => setMenuOpen(false)}>{t('nav_sos')}</Link>
+          <Link href="/my-care" className="hover:text-teal-500 transition-colors" onClick={() => setMenuOpen(false)}>{t('nav_my_care')}</Link>
           <Link href="/symptom-checker" className="hover:text-teal-500 transition-colors" onClick={() => setMenuOpen(false)}>{t('nav_symptom_checker')}</Link>
           <Link href="/book" className="hover:text-teal-500 transition-colors" onClick={() => setMenuOpen(false)}>{t('nav_book_consultation')}</Link>
           <Link href="/appointments" className="hover:text-teal-500 transition-colors" onClick={() => setMenuOpen(false)}>{t('nav_my_appointments')}</Link>
@@ -96,6 +97,7 @@ export default function Header() {
           <Link href="/prescriptions" className="hover:text-teal-500 transition-colors" onClick={() => setMenuOpen(false)}>{t('nav_my_prescriptions')}</Link>
           <Link href="/pharmacy" className="hover:text-teal-500 transition-colors" onClick={() => setMenuOpen(false)}>{t('nav_find_medicine')}</Link>
           <Link href="/lab-tests" className="hover:text-teal-500 transition-colors" onClick={() => setMenuOpen(false)}>{t('nav_lab_tests')}</Link>
+          <Link href="/preventive-care" className="hover:text-teal-500 transition-colors" onClick={() => setMenuOpen(false)}>{t('nav_preventive_care')}</Link>
           <Link href="/passport" className="hover:text-red-500 transition-colors" onClick={() => setMenuOpen(false)}>{t('nav_health_passport')}</Link>
           <ProfileSwitcher />
         </>
