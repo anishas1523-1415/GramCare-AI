@@ -9,7 +9,7 @@ export interface User {
   username: string;
   email?: string;
   full_name?: string;
-  role: 'PATIENT' | 'DOCTOR' | 'PHARMACIST' | 'HOSPITAL' | 'ADMIN';
+  role: 'PATIENT' | 'DOCTOR' | 'PHARMACIST' | 'HOSPITAL' | 'ADMIN' | 'CHW';
 }
 
 export interface FamilyProfile {
@@ -281,4 +281,25 @@ export interface Referral {
   status: 'PENDING' | 'ACCEPTED' | 'DECLINED' | 'COMPLETED';
   created_at: string;
   resolved_at?: string | null;
+}
+
+/** Mirrors schemas.CHWPatientSummary — one row of GET /chw/my-patients. */
+export interface CHWPatientSummary {
+  id: number;
+  username: string;
+  full_name: string;
+  phone?: string | null;
+  created_at: string;
+}
+
+/** Mirrors schemas.CHWPatientRegisterResponse — returned once, immediately
+ * after POST /chw/register-patient. temporary_password is shown in
+ * plaintext only this one time. */
+export interface CHWPatientRegisterResponse {
+  id: number;
+  username: string;
+  temporary_password: string;
+  full_name: string;
+  role: string;
+  message: string;
 }

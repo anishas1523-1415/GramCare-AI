@@ -14,7 +14,11 @@ class UserCreate(BaseModel):
     # could self-register as ADMIN via this endpoint (real vulnerability,
     # closed here). The only path to an ADMIN account is now
     # POST /auth/register/government, gated by AuthorizedGovernmentEmail.
-    role: str = Field(..., pattern="^(PATIENT|DOCTOR|PHARMACIST|HOSPITAL|LAB)$")
+    # CHW is included here (unlike ADMIN) so the endpoint can create one via
+    # direct API access — the web portal's registration role-picker simply
+    # never offers it as an option, the same "separate portal / admin-created
+    # account" convention already used for PHARMACIST/LAB.
+    role: str = Field(..., pattern="^(PATIENT|DOCTOR|PHARMACIST|HOSPITAL|LAB|CHW)$")
     # Required for DOCTOR/HOSPITAL (checked in the router, since Pydantic
     # can't cleanly express "required only when role=X"), optional for the
     # rest. Must match a phone that completed POST /auth/phone/verify-otp
@@ -682,3 +686,53 @@ class ReferralResponse(BaseModel):
     resolved_at: Optional[datetime] = None
 
     model_config = {"from_attributes": True}
+
+# ==========================================
+# Community Health Worker (CHW) Schemas
+# ==========================================
+class CHWPatientRegister(BaseModel):
+    """A CHW registering a walk-in villager who may have no phone, email,
+    or literacy to self-register. Age/gender/address are collected for
+    context (and written to the audit trail) but — unlike FamilyProfile —
+    are not stored as queryable columns on the new User account; nothing in
+    the rest of the platform reads a patient's age off their account, it is
+    always supplied fresh per-request (see TriageRequest.age), the same
+    contract this preserves for CHW-assisted patients."""
+    full_name: str = Field(..., min_length=1, max_length=100)
+    age: int = Field(..., ge=0, le=150)
+    gender: str = Field(..., min_length=1, max_length=20)
+    phone: Optional[str] = Field(None, min_length=8, max_length=15)
+    address_note: Optional[str] = Field(None, max_length=500)
+
+class CHWPatientRegisterResponse(BaseModel):
+    """Returned once, immediately after registration — this is the CHW's
+    only chance to see the temporary password in plaintext (it is hashed
+    before storage, same as any other account)."""
+    id: int
+    username: str
+    temporary_password: str
+    full_name: str
+    role: str = "PATIENT"
+    message: str = (
+        "Write down these credentials for the patient, or continue managing "
+        "their care yourself from 'My Registered Patients' below."
+    )
+
+class CHWPatientSummary(BaseModel):
+    """One row of GET /chw/my-patients."""
+    id: int
+    username: str
+    full_name: str
+    phone: Optional[str] = None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+class CHWTriageRequest(BaseModel):
+    """Body for POST /chw/patients/{patient_id}/triage — patient_id itself
+    comes from the path (and is ownership-checked against the caller), so
+    unlike the public TriageRequest this carries no patient_id field."""
+    symptoms_text: str = Field(..., min_length=3, max_length=2000)
+    age: int = Field(..., ge=0, le=150)
+    family_profile_id: Optional[int] = None
+    image_base64: Optional[str] = None

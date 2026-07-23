@@ -142,55 +142,49 @@ def _persist_triage_log(
         logger.error("Failed to persist triage log: %s", str(e))
 
 
-@router.post(
-    "/analyze",
-    response_model=TriageResponse,
-    # Public (guest symptom checker) but rate-limited: this endpoint spends
-    # real Gemini quota per call and previously had no abuse protection.
-    dependencies=[Depends(rate_limit("triage", 20, 300))],
-)
-async def analyze_symptoms(
-    request: TriageRequest,
-    db: Session = Depends(get_db),
-    current_user: Optional[models.User] = Depends(get_current_user_optional),
-):
-    """
-    AI Triage Engine, routed entirely through AIManager (Gemini -> OpenAI ->
-    Groq -> Anthropic -> Mock, in configured priority order — see
-    ai/config.py). This function no longer knows which provider ends up
-    serving the request.
+async def run_triage_analysis(
+    db: Session,
+    user: Optional[models.User],
+    symptoms_text: str,
+    age: int,
+    family_profile_id: Optional[int] = None,
+    image_base64: Optional[str] = None,
+) -> TriageResponse:
+    """Core AI triage logic, shared by the public POST /triage/analyze
+    endpoint below and the CHW proxy endpoint
+    (modules/chw/router.py's POST /chw/patients/{patient_id}/triage) that
+    runs triage on behalf of a CHW-registered patient.
 
-    - Accepts symptoms in any language (English, Tamil, Hindi, etc.)
-    - Returns severity score, predicted condition, home remedies, and doctor recommendation
-    - Includes explainable AI reasoning and confidence score
-    - Enforces strict medical disclaimer
-    - Persists every analysis to TriageLog (attributed when authenticated)
+    `user` is whoever the analysis should be ATTRIBUTED to (i.e. whose
+    TriageLog row this becomes) — for the CHW proxy that is the patient
+    themself, never the CHW who triggered the call, so a walk-in patient's
+    triage history reads exactly like one they ran themselves.
     """
-    image_base64 = None
+    image_b64 = None
     image_url = None
-    if request.image_base64:
+    if image_base64:
         try:
             import base64
-            image_base64 = request.image_base64
-            base64.b64decode(image_base64)
+            image_b64 = image_base64
+            base64.b64decode(image_b64)
         except Exception:
             raise HTTPException(status_code=400, detail="Invalid Base64 image provided.")
 
         # Persist the original symptom photo (previously analyzed once and
         # discarded) so it's retrievable later — e.g. a doctor confirming
         # what the AI actually saw. Best-effort: never blocks the analysis.
-        uploaded = cloudinary_client.upload_base64(image_base64, folder="gramcare/symptom_photos")
+        uploaded = cloudinary_client.upload_base64(image_b64, folder="gramcare/symptom_photos")
         if uploaded:
             image_url = uploaded["url"]
 
     prompt = TRIAGE_PROMPT_TEMPLATE.format(
-        age=request.age,
-        symptoms=request.symptoms_text,
+        age=age,
+        symptoms=symptoms_text,
         image_note=(
             "A photo of the visible symptom (e.g. rash, wound, swelling) is "
             "attached — factor what you see in it into severity_score, "
             "predicted_condition, and explanation."
-            if image_base64 else ""
+            if image_b64 else ""
         ),
     )
 
@@ -199,7 +193,7 @@ async def analyze_symptoms(
     # Passing image_base64 only when actually provided keeps plain
     # text/voice triage routable to every configured provider, including
     # non-vision ones (Groq) — see AIManager._candidates_for.
-    outcome = await ai_manager.run(AITask.TRIAGE, prompt=prompt, image_base64=image_base64)
+    outcome = await ai_manager.run(AITask.TRIAGE, prompt=prompt, image_base64=image_b64)
     data = dict(outcome.data)
 
     try:
@@ -237,8 +231,53 @@ async def analyze_symptoms(
         )
 
     result.image_url = image_url
-    _persist_triage_log(db, request, current_user, result.model_dump(), image_url=image_url)
+    _persist_triage_log(
+        db,
+        TriageRequest(
+            symptoms_text=symptoms_text,
+            patient_id=str(user.id) if user else "GUEST",
+            age=age,
+            family_profile_id=family_profile_id,
+        ),
+        user,
+        result.model_dump(),
+        image_url=image_url,
+    )
     return result
+
+
+@router.post(
+    "/analyze",
+    response_model=TriageResponse,
+    # Public (guest symptom checker) but rate-limited: this endpoint spends
+    # real Gemini quota per call and previously had no abuse protection.
+    dependencies=[Depends(rate_limit("triage", 20, 300))],
+)
+async def analyze_symptoms(
+    request: TriageRequest,
+    db: Session = Depends(get_db),
+    current_user: Optional[models.User] = Depends(get_current_user_optional),
+):
+    """
+    AI Triage Engine, routed entirely through AIManager (Gemini -> OpenAI ->
+    Groq -> Anthropic -> Mock, in configured priority order — see
+    ai/config.py). This function no longer knows which provider ends up
+    serving the request.
+
+    - Accepts symptoms in any language (English, Tamil, Hindi, etc.)
+    - Returns severity score, predicted condition, home remedies, and doctor recommendation
+    - Includes explainable AI reasoning and confidence score
+    - Enforces strict medical disclaimer
+    - Persists every analysis to TriageLog (attributed when authenticated)
+    """
+    return await run_triage_analysis(
+        db,
+        current_user,
+        request.symptoms_text,
+        request.age,
+        family_profile_id=request.family_profile_id,
+        image_base64=request.image_base64,
+    )
 
 
 # ============================================================

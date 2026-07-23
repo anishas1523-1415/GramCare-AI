@@ -72,6 +72,7 @@ const en: Record<string, string> = {
   nav_emergency_desk: 'Emergency Desk',
   nav_health_intelligence: 'Health Intelligence',
   nav_hospital_profile: 'Hospital Profile',
+  nav_chw_dashboard: 'CHW Dashboard',
   nav_my_devices: 'My Devices',
   sign_out: 'Sign Out',
   role_patient: 'Patient',
@@ -80,6 +81,7 @@ const en: Record<string, string> = {
   role_pharmacist: 'Pharmacist',
   role_lab: 'Lab',
   role_admin: 'Government',
+  role_chw: 'Community Health Worker',
   // Homepage hero + AI Symptom Checker — the first content-bearing view a
   // signed-in patient lands on, right after the login screen.
   home_tagline: 'The ultimate hybrid healthcare ecosystem.',
@@ -171,6 +173,7 @@ const ta: Record<string, string> = {
   nav_emergency_desk: 'அவசர உதவி மையம்',
   nav_health_intelligence: 'சுகாதார நுண்ணறிவு',
   nav_hospital_profile: 'மருத்துவமனை சுயவிவரம்',
+  nav_chw_dashboard: 'CHW டாஷ்போர்டு',
   nav_my_devices: 'எனது சாதனங்கள்',
   sign_out: 'வெளியேறு',
   role_patient: 'நோயாளி',
@@ -179,6 +182,7 @@ const ta: Record<string, string> = {
   role_pharmacist: 'மருந்தாளர்',
   role_lab: 'ஆய்வகம்',
   role_admin: 'அரசு',
+  role_chw: 'சமூக சுகாதார பணியாளர்',
   home_tagline: 'இறுதி கலப்பின சுகாதார சூழல் அமைப்பு.',
   home_live: 'நேரடி',
   home_offline: 'இணைப்பு இல்லை',

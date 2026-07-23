@@ -82,6 +82,7 @@ export default function Header() {
     PHARMACIST: t('role_pharmacist'),
     LAB: t('role_lab'),
     ADMIN: t('role_admin'),
+    CHW: t('role_chw'),
   };
 
   const navLinks = user ? (
@@ -120,6 +121,9 @@ export default function Header() {
       )}
       {user.role === 'HOSPITAL' && (
         <Link href="/hospital/profile" className="hover:text-red-500 transition-colors" onClick={() => setMenuOpen(false)}>{t('nav_hospital_profile')}</Link>
+      )}
+      {user.role === 'CHW' && (
+        <Link href="/chw/dashboard" className="hover:text-teal-500 transition-colors" onClick={() => setMenuOpen(false)}>{t('nav_chw_dashboard')}</Link>
       )}
       <span className="text-gray-500 md:order-last">
         {user.full_name || user.username} ({ROLE_LABEL[user.role] || user.role})

@@ -20,7 +20,7 @@ class User(Base):
     email = Column(String, unique=True, index=True)
     hashed_password = Column(String)
     full_name = Column(String)
-    role = Column(String)  # 'PATIENT', 'DOCTOR', 'PHARMACIST', 'HOSPITAL', 'ADMIN', 'LAB'
+    role = Column(String)  # 'PATIENT', 'DOCTOR', 'PHARMACIST', 'HOSPITAL', 'ADMIN', 'LAB', 'CHW'
     is_active = Column(Boolean, default=True)
     # Every non-PATIENT role (DOCTOR/HOSPITAL/PHARMACIST/LAB/ADMIN) must
     # verify their email before /auth/login succeeds — closes "register
@@ -44,6 +44,15 @@ class User(Base):
     allergies = Column(Text, nullable=True)
     chronic_conditions = Column(Text, nullable=True)
     passport_token = Column(String, unique=True, index=True, nullable=True)
+    # Community Health Worker (CHW) tooling: set to the CHW's own user id
+    # when this PATIENT account was created by a CHW on behalf of a
+    # walk-in villager (modules/chw/router.py's POST /chw/register-patient)
+    # instead of via self-registration. NULL for every self-registered
+    # account. This is both the audit trail ("who registered this patient")
+    # and the ownership check a CHW's proxy actions (triage/booking on the
+    # patient's behalf) are gated on — a CHW may only act for patients where
+    # registered_by_chw_id == their own id.
+    registered_by_chw_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     created_at = Column(DateTime, default=_utcnow)
 
     # Relationships

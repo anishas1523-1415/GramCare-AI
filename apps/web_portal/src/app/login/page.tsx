@@ -166,6 +166,7 @@ export default function LoginPage() {
         loggedInRole === 'HOSPITAL' ? '/hospital'
         : loggedInRole === 'DOCTOR' ? '/doctor/dashboard'
         : loggedInRole === 'ADMIN' ? '/authority'
+        : loggedInRole === 'CHW' ? '/chw/dashboard'
         : '/'
       );
     } catch (err) {

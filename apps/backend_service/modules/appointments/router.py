@@ -97,14 +97,26 @@ async def send_due_appointment_reminders(db: Session) -> int:
     return sent
 
 
-@router.post("/book", response_model=schemas.AppointmentResponse, dependencies=[Depends(rate_limit("appointment_book", 5, 300))])
-async def book_appointment(
+async def _book_appointment_core(
     appointment: schemas.AppointmentCreate,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(require_role("PATIENT")),
-):
-    """Book a consultation as a patient."""
+    db: Session,
+    patient: models.User,
+) -> models.Appointment:
+    """Core booking logic, shared by POST /appointments/book below and the
+    CHW proxy endpoint (modules/chw/router.py's
+    POST /chw/patients/{patient_id}/book) that books on behalf of a
+    CHW-registered patient.
 
+    `patient` is whoever the appointment is booked FOR (and billed to) —
+    for the CHW proxy that is the patient themself, never the CHW driving
+    the call, so ownership/payment checks below are identical to a patient
+    booking for themselves. This is the exact same rule enforced here as
+    always: a paid doctor requires a payment_order_id whose Payment.patient_id
+    already matches `patient.id` (i.e. the patient — or someone signed in as
+    the patient — must have completed /payments/create-order + /payments/verify
+    themselves first; a CHW cannot pay "as themselves" and consume it on the
+    patient's behalf).
+    """
     doctor = (
         db.query(models.User)
         .filter(models.User.id == appointment.doctor_id, models.User.role == "DOCTOR")
@@ -113,7 +125,7 @@ async def book_appointment(
     if not doctor:
         raise HTTPException(status_code=404, detail="Doctor not found.")
 
-    resolve_owned_profile(appointment.family_profile_id, current_user, db)
+    resolve_owned_profile(appointment.family_profile_id, patient, db)
 
     # ---- Slot resolution ------------------------------------------------
     slot = None
@@ -178,7 +190,7 @@ async def book_appointment(
             .with_for_update()
             .first()
         )
-        if not payment or payment.patient_id != current_user.id:
+        if not payment or payment.patient_id != patient.id:
             raise HTTPException(status_code=403, detail="Payment order not found for your account.")
         if payment.status == "CONSUMED":
             raise HTTPException(status_code=409, detail="This payment was already used for a booking.")
@@ -191,7 +203,7 @@ async def book_appointment(
             )
 
     db_appointment = models.Appointment(
-        patient_id=current_user.id,
+        patient_id=patient.id,
         family_profile_id=appointment.family_profile_id,
         doctor_id=appointment.doctor_id,
         scheduled_at=scheduled_at,
@@ -236,21 +248,31 @@ async def book_appointment(
     db.commit()
     db.refresh(db_appointment)
     logger.info("Appointment %d booked by patient %d (payment=%s, slot=%s).",
-                db_appointment.id, current_user.id,
+                db_appointment.id, patient.id,
                 payment.order_id if payment else "free", slot.id if slot else "legacy")
-                
+
     try:
         from core.notifications import NotificationService
         time_str = scheduled_at.strftime("%I:%M %p on %b %d")
         NotificationService(db).notify_appointment_reminder(
-            user_id=current_user.id,
+            user_id=patient.id,
             doctor_name=doctor.full_name or "Doctor",
             time_str=time_str
         )
     except Exception as e:
         logger.error(f"Failed to send appointment notification: {e}")
-        
+
     return db_appointment
+
+
+@router.post("/book", response_model=schemas.AppointmentResponse, dependencies=[Depends(rate_limit("appointment_book", 5, 300))])
+async def book_appointment(
+    appointment: schemas.AppointmentCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_role("PATIENT")),
+):
+    """Book a consultation as a patient."""
+    return await _book_appointment_core(appointment, db, current_user)
 
 
 @router.get("/my", response_model=List[schemas.AppointmentResponse])
