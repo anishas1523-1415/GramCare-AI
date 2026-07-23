@@ -650,3 +650,35 @@ class NavigatorItem(BaseModel):
     reason: str
     cta_label: Optional[str] = None
     cta_route: Optional[str] = None
+
+# ==========================================
+# Referral Network
+# ==========================================
+class ReferralCreate(BaseModel):
+    """A doctor's referral of a patient, either to a specific colleague
+    (referred_to_doctor_id set) or open to any doctor of `specialty`
+    (referred_to_doctor_id omitted). Exactly one of patient_id /
+    family_profile_id identifies who the referral is about — when
+    family_profile_id is given, the patient is derived from the profile's
+    owning account rather than trusted from the client."""
+    patient_id: Optional[int] = None
+    family_profile_id: Optional[int] = None
+    referred_to_doctor_id: Optional[int] = None
+    specialty: str = Field(..., min_length=2, max_length=120)
+    reason: str = Field(..., min_length=2, max_length=500)
+    notes: Optional[str] = Field(None, max_length=1000)
+
+class ReferralResponse(BaseModel):
+    id: int
+    patient_id: int
+    family_profile_id: Optional[int] = None
+    referring_doctor_id: int
+    referred_to_doctor_id: Optional[int] = None
+    specialty: str
+    reason: str
+    notes: Optional[str] = None
+    status: str
+    created_at: datetime
+    resolved_at: Optional[datetime] = None
+
+    model_config = {"from_attributes": True}

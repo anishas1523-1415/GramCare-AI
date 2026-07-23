@@ -265,3 +265,20 @@ export interface NearbyPharmacyResult {
   lng?: number | null;
   is_jan_aushadhi: boolean;
 }
+
+/** Mirrors schemas.ReferralResponse (modules/referrals/router.py). A doctor's
+ * referral of a patient to a specific colleague (referred_to_doctor_id set)
+ * or open to any doctor of `specialty` (referred_to_doctor_id null). */
+export interface Referral {
+  id: number;
+  patient_id: number;
+  family_profile_id?: number | null;
+  referring_doctor_id: number;
+  referred_to_doctor_id?: number | null;
+  specialty: string;
+  reason: string;
+  notes?: string | null;
+  status: 'PENDING' | 'ACCEPTED' | 'DECLINED' | 'COMPLETED';
+  created_at: string;
+  resolved_at?: string | null;
+}

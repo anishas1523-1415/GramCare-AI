@@ -2,12 +2,12 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { Users, Calendar, ShieldAlert, Video, FileText, CheckCircle, Clock, Plus, Trash2, Brain, BarChart3, AlertTriangle } from 'lucide-react';
+import { Users, Calendar, ShieldAlert, Video, FileText, CheckCircle, Clock, Plus, Trash2, Brain, BarChart3, AlertTriangle, Share2 } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import api from '../../../lib/api';
 import { io } from 'socket.io-client';
-import type { Slot, Appointment, EmergencySOS } from '../../../types';
+import type { Slot, Appointment, EmergencySOS, Referral } from '../../../types';
 import { APIProvider, Map, Marker } from '@vis.gl/react-google-maps';
 import { SkeletonList } from '../../../components/Skeleton';
 
@@ -193,6 +193,146 @@ function SlotManager({ doctorId }: { doctorId: number }) {
           ))
         )}
       </div>
+    </div>
+  );
+}
+
+const REFERRAL_STATUS_STYLE: Record<Referral['status'], string> = {
+  PENDING: 'bg-amber-500/15 text-amber-500 border-amber-500/30',
+  ACCEPTED: 'bg-teal-500/15 text-teal-500 border-teal-500/30',
+  DECLINED: 'bg-red-500/15 text-red-500 border-red-500/30',
+  COMPLETED: 'bg-emerald-500/15 text-emerald-500 border-emerald-500/30',
+};
+
+/** Referral Network panel (planning-doc feature: a doctor can hand a
+ * patient off to a colleague, or open the referral to any doctor of a
+ * target specialty). Shows both directions — referrals waiting on this
+ * doctor to act, and ones this doctor has sent out. */
+function ReferralsPanel({ doctorId }: { doctorId: number }) {
+  const [tab, setTab] = useState<'incoming' | 'sent'>('incoming');
+  const [incoming, setIncoming] = useState<Referral[]>([]);
+  const [sent, setSent] = useState<Referral[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [busyId, setBusyId] = useState<number | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const [incRes, sentRes] = await Promise.all([
+        api.get<Referral[]>('/referrals/incoming'),
+        api.get<Referral[]>('/referrals/sent'),
+      ]);
+      setIncoming(incRes.data);
+      setSent(sentRes.data);
+    } catch {
+      setError('Could not load referrals.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const act = async (id: number, action: 'accept' | 'decline' | 'complete') => {
+    setBusyId(id);
+    setError('');
+    try {
+      await api.put(`/referrals/${id}/${action}`);
+      await load();
+    } catch (err) {
+      const message = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      setError(typeof message === 'string' ? message : 'Could not update this referral.');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const list = tab === 'incoming' ? incoming : sent;
+
+  return (
+    <div className="neu-panel p-6">
+      <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+        <Share2 className="text-indigo-500" /> Referrals
+      </h2>
+
+      <div className="flex gap-2 mb-4">
+        <button
+          type="button"
+          onClick={() => setTab('incoming')}
+          className={`flex-1 py-2 rounded-lg text-sm font-bold transition-colors ${tab === 'incoming' ? 'bg-indigo-500 text-white' : 'bg-white/40 dark:bg-black/20'}`}
+        >
+          Incoming{incoming.length > 0 ? ` (${incoming.length})` : ''}
+        </button>
+        <button
+          type="button"
+          onClick={() => setTab('sent')}
+          className={`flex-1 py-2 rounded-lg text-sm font-bold transition-colors ${tab === 'sent' ? 'bg-indigo-500 text-white' : 'bg-white/40 dark:bg-black/20'}`}
+        >
+          Sent
+        </button>
+      </div>
+
+      {error && <p role="alert" className="text-red-500 text-sm font-semibold mb-3">{error}</p>}
+
+      {loading ? (
+        <p className="text-sm text-gray-500 text-center py-6">Loading…</p>
+      ) : list.length === 0 ? (
+        <p className="text-sm text-gray-500 text-center py-6">
+          {tab === 'incoming' ? 'No referrals waiting on you.' : "Referrals you've sent will appear here."}
+        </p>
+      ) : (
+        <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
+          {list.map((r) => (
+            <div key={r.id} className="p-3 rounded-xl bg-white/40 dark:bg-black/30 border border-white/20 text-sm">
+              <div className="flex items-start justify-between gap-2 mb-1">
+                <span className="font-bold">{r.specialty}</span>
+                <span className={`shrink-0 px-2 py-0.5 rounded-full text-xs font-bold border ${REFERRAL_STATUS_STYLE[r.status]}`}>
+                  {r.status}
+                </span>
+              </div>
+              <p className="text-xs text-gray-500 mb-1">Patient #{r.patient_id}</p>
+              <p className="text-xs text-gray-600 dark:text-gray-300 mb-2">{r.reason}</p>
+              {!r.referred_to_doctor_id && r.status === 'PENDING' && (
+                <p className="text-xs text-indigo-500 font-semibold mb-2">Open referral — accepting claims it</p>
+              )}
+              {tab === 'incoming' && r.status === 'PENDING' && (
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    disabled={busyId === r.id}
+                    onClick={() => act(r.id, 'accept')}
+                    className="flex-1 py-1.5 bg-teal-500 text-white rounded-lg text-xs font-bold disabled:opacity-50"
+                  >
+                    Accept
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busyId === r.id}
+                    onClick={() => act(r.id, 'decline')}
+                    className="flex-1 py-1.5 bg-red-500 text-white rounded-lg text-xs font-bold disabled:opacity-50"
+                  >
+                    Decline
+                  </button>
+                </div>
+              )}
+              {tab === 'incoming' && r.status === 'ACCEPTED' && r.referred_to_doctor_id === doctorId && (
+                <button
+                  type="button"
+                  disabled={busyId === r.id}
+                  onClick={() => act(r.id, 'complete')}
+                  className="w-full py-1.5 bg-emerald-500 text-white rounded-lg text-xs font-bold disabled:opacity-50"
+                >
+                  Mark Complete
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -521,6 +661,7 @@ export default function DoctorDashboard() {
         {/* Sidebar */}
         <div className="space-y-8">
           {user?.id != null && <SlotManager doctorId={user.id} />}
+          {user?.id != null && <ReferralsPanel doctorId={user.id} />}
 
           <div className="neu-panel p-6">
             <h2 className="text-xl font-bold mb-4 flex items-center gap-2"><Users className="text-indigo-500" /> Patient Directory</h2>

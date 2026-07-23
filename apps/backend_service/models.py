@@ -648,3 +648,29 @@ class AuthorizedGovernmentEmail(Base):
     note = Column(String, nullable=True)
     created_at = Column(DateTime, default=_utcnow)
 
+
+class Referral(Base):
+    """Referral Network: a doctor, while treating a patient, hands off care
+    either to a specific colleague (referred_to_doctor_id set) or opens the
+    referral to any doctor of a target specialty (referred_to_doctor_id
+    NULL — "open" referral, claimed by whichever matching-specialty doctor
+    accepts it first).
+
+    Status lifecycle: PENDING -> ACCEPTED -> COMPLETED, or PENDING ->
+    DECLINED. Mirrors LabBooking/EmergencySOS's status-string + resolved_at
+    conventions used elsewhere in this file.
+    """
+    __tablename__ = "referrals"
+
+    id = Column(Integer, primary_key=True, index=True)
+    patient_id = Column(Integer, ForeignKey("users.id"), index=True)
+    family_profile_id = Column(Integer, ForeignKey("family_profiles.id"), nullable=True)
+    referring_doctor_id = Column(Integer, ForeignKey("users.id"), index=True)
+    referred_to_doctor_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    specialty = Column(String, index=True)
+    reason = Column(String)
+    notes = Column(Text, nullable=True)
+    status = Column(String, default="PENDING", index=True)  # PENDING/ACCEPTED/DECLINED/COMPLETED
+    created_at = Column(DateTime, default=_utcnow)
+    resolved_at = Column(DateTime, nullable=True)
+

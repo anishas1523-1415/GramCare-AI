@@ -98,6 +98,7 @@ export default function Header() {
           <Link href="/pharmacy" className="hover:text-teal-500 transition-colors" onClick={() => setMenuOpen(false)}>{t('nav_find_medicine')}</Link>
           <Link href="/lab-tests" className="hover:text-teal-500 transition-colors" onClick={() => setMenuOpen(false)}>{t('nav_lab_tests')}</Link>
           <Link href="/preventive-care" className="hover:text-teal-500 transition-colors" onClick={() => setMenuOpen(false)}>{t('nav_preventive_care')}</Link>
+          <Link href="/referrals" className="hover:text-teal-500 transition-colors" onClick={() => setMenuOpen(false)}>{t('nav_referrals')}</Link>
           <Link href="/passport" className="hover:text-red-500 transition-colors" onClick={() => setMenuOpen(false)}>{t('nav_health_passport')}</Link>
           <ProfileSwitcher />
         </>
