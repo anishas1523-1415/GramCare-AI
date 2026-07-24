@@ -7,7 +7,7 @@
 // dashboard's own socket feed.
 
 import { motion, AnimatePresence } from "framer-motion";
-import { Activity, Brain, ChevronDown, Stethoscope, Camera, X, ArrowLeft } from "lucide-react";
+import { Activity, Brain, ChevronDown, Stethoscope, Camera, X, ArrowLeft, WifiOff } from "lucide-react";
 import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -15,6 +15,7 @@ import { io } from "socket.io-client";
 import api from "../../lib/api";
 import { useProfile } from "../../contexts/ProfileContext";
 import { useLocale } from "../../contexts/LocaleContext";
+import { offlineTriageEstimate } from "../../lib/offlineTriage";
 
 interface TriageResult {
   severity: 'CRITICAL' | 'HIGH' | 'MODERATE' | 'LOW';
@@ -42,6 +43,9 @@ export default function SymptomCheckerPage() {
   const [error, setError] = useState("");
   const [showExplanation, setShowExplanation] = useState(false);
   const [symptomImage, setSymptomImage] = useState<{ preview: string; base64: string } | null>(null);
+  // True when `triageResult` came from the offline keyword-matching
+  // fallback (no network reached /triage/analyze) rather than the real AI.
+  const [isOfflineEstimate, setIsOfflineEstimate] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -62,6 +66,7 @@ export default function SymptomCheckerPage() {
     setError("");
     setTriageResult(null);
     setShowExplanation(false);
+    setIsOfflineEstimate(false);
 
     try {
       const res = await api.post("/triage/analyze", {
@@ -106,7 +111,31 @@ export default function SymptomCheckerPage() {
       setTimeout(() => socket.disconnect(), 1000);
 
     } catch (err) {
-      setError(err instanceof Error ? err.message : "An error occurred");
+      // Mirror the exact network-vs-server-error distinction used in
+      // ../login/page.tsx's handleSubmit catch block: a `.response` means
+      // the server actually answered (a real error to show as-is); a
+      // `.request` with no `.response` means the request went out but
+      // nothing ever came back — no connectivity, a dropped connection, or
+      // a cold-starting backend. Only that second case falls back to the
+      // offline estimate; a real server-side error should stay a real error.
+      const axiosErr = err as { response?: unknown; request?: unknown };
+      if (!axiosErr?.response && axiosErr?.request) {
+        const offline = offlineTriageEstimate(symptoms);
+        if (offline) {
+          setTriageResult({
+            severity: offline.severity,
+            department: offline.department,
+            recommendation: offline.recommendation,
+          });
+          setIsOfflineEstimate(true);
+        } else {
+          setError(
+            "You appear to be offline, and this couldn't produce even an offline estimate for these symptoms. If you're at all concerned, please seek care or call your local emergency number."
+          );
+        }
+      } else {
+        setError(err instanceof Error ? err.message : "An error occurred");
+      }
     } finally {
       setLoading(false);
     }
@@ -215,11 +244,24 @@ export default function SymptomCheckerPage() {
 
           {error && <p className="text-red-500 mt-4 text-sm font-semibold">{error}</p>}
 
+          {isOfflineEstimate && triageResult && (
+            <div className="mt-6 p-3.5 rounded-xl bg-amber-500/15 border-2 border-amber-500/70 text-left flex items-start gap-2.5">
+              <WifiOff size={20} className="text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
+              <p className="text-sm font-bold text-amber-700 dark:text-amber-400">
+                Offline estimate — not a full AI analysis. This is only a basic keyword-based
+                safety check because we couldn&apos;t reach the server. Connect to the internet
+                when possible, and seek care immediately if this feels serious.
+              </p>
+            </div>
+          )}
+
           {triageResult && (
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="mt-6 p-4 rounded-xl bg-white/40 dark:bg-black/40 border border-white/20 text-left"
+              className={`p-4 rounded-xl bg-white/40 dark:bg-black/40 border text-left ${
+                isOfflineEstimate ? "mt-3 border-amber-500/40" : "mt-6 border-white/20"
+              }`}
             >
               <div className="flex justify-between items-center mb-2">
                 <span className="font-bold">Severity:</span>

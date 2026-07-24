@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:go_router/go_router.dart';
@@ -10,6 +11,7 @@ import 'package:speech_to_text/speech_to_text.dart' as stt;
 
 import '../services/api_service.dart';
 import '../services/app_strings.dart';
+import '../services/offline_triage_service.dart';
 import '../services/profile_service.dart';
 import '../services/sos_service.dart';
 import '../services/sync_service.dart';
@@ -37,6 +39,9 @@ class _TriageScreenState extends State<TriageScreen> {
   bool _listening = false;
   Map<String, dynamic>? _result;
   String _error = '';
+  // True when `_result` came from the offline keyword-matching fallback
+  // (no network reached /triage/analyze) rather than the real AI.
+  bool _isOfflineEstimate = false;
   // Optional photo of a visible symptom (planning doc: "இமேஜும் ஆட்
   // பண்ணலாம்") — distinct from the prescription scanner's OCR photo.
   XFile? _symptomImage;
@@ -156,6 +161,7 @@ class _TriageScreenState extends State<TriageScreen> {
       _listening = false;
       _error = '';
       _result = null;
+      _isOfflineEstimate = false;
     });
 
     final active = context.read<ProfileService>().active;
@@ -200,6 +206,66 @@ class _TriageScreenState extends State<TriageScreen> {
 
       // Planning doc: Critical Risk -> Emergency SOS activated.
       await _maybePromptSos(severityScore);
+    } on DioException catch (e) {
+      // Mirror the exact offline-detection already used by
+      // sos_service.dart's SMS-fallback logic: connectionError /
+      // connectionTimeout / receiveTimeout mean the request never reached
+      // (or never heard back from) the server — i.e. no connectivity — as
+      // opposed to a real server-side error, which should stay a real error.
+      final offline = e.type == DioExceptionType.connectionError ||
+          e.type == DioExceptionType.connectionTimeout ||
+          e.type == DioExceptionType.receiveTimeout;
+
+      if (!offline) {
+        setState(() => _error = context.read<LocaleService>().t('search_failed'));
+      } else {
+        final estimate = offlineTriageEstimate(_symptomsController.text);
+        if (estimate == null) {
+          // Never silently claim LOW severity for something the offline
+          // table doesn't recognize — say so and point to real care.
+          setState(() => _error = context.read<LocaleService>().t('offline_no_match'));
+        } else {
+          final severityScore = estimate.severity == OfflineSeverity.critical
+              ? 90
+              : estimate.severity == OfflineSeverity.high
+                  ? 60
+                  : estimate.severity == OfflineSeverity.moderate
+                      ? 35
+                      : 10;
+
+          setState(() {
+            _result = {
+              'predicted_condition': estimate.department,
+              'doctor_recommendation': estimate.recommendation,
+              'severity_score': severityScore,
+            };
+            _isOfflineEstimate = true;
+          });
+
+          // Still persist into the offline Health Wallet, clearly flagged as
+          // an offline estimate rather than a real AI read, so the record
+          // trail doesn't misrepresent what actually assessed it.
+          await SyncService().createRecord(
+            patientName: active?.fullName ?? 'Myself',
+            content:
+                '[OFFLINE ESTIMATE — not full AI] Symptoms: ${_symptomsController.text}\n'
+                'Offline triage: ${estimate.department} (${estimate.severity.label})\n'
+                'Advice: ${estimate.recommendation}',
+            recordType: 'triage_log',
+            title: '${estimate.department} (offline estimate)',
+            familyProfileId: active?.id,
+            doctorName: 'GramCare AI (offline estimate)',
+            severity: severityScore >= 75
+                ? 'CRITICAL'
+                : severityScore >= 50
+                    ? 'HIGH'
+                    : 'LOW',
+          );
+
+          // Same critical-risk -> Emergency SOS prompt as the online path.
+          await _maybePromptSos(severityScore);
+        }
+      }
     } catch (e) {
       setState(() => _error = context.read<LocaleService>().t('search_failed'));
     } finally {
@@ -366,6 +432,43 @@ class _TriageScreenState extends State<TriageScreen> {
                 Text(_error, style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
               ],
 
+              // Unmissable — this must never look like a real online result.
+              // Bias here is deliberately toward over-caution: the offline
+              // table is a small curated keyword-matching safety net, not
+              // the real AI, and this banner exists so a user never mistakes
+              // one for the other.
+              if (_isOfflineEstimate && _result != null) ...[
+                const SizedBox(height: 24),
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.shade50,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: Colors.amber.shade700, width: 2),
+                    boxShadow: [
+                      BoxShadow(color: neu.shadowDark, offset: const Offset(3, 3), blurRadius: 6),
+                    ],
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(Icons.wifi_off_rounded, color: Colors.amber.shade900, size: 22),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          s.t('offline_estimate_banner'),
+                          style: TextStyle(
+                            color: Colors.amber.shade900,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+
               if (_result != null) ...[
                 const SizedBox(height: 32),
                 Container(
@@ -373,6 +476,7 @@ class _TriageScreenState extends State<TriageScreen> {
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(16),
+                    border: _isOfflineEstimate ? Border.all(color: Colors.amber.shade400, width: 1.5) : null,
                     boxShadow: const [
                       BoxShadow(color: Color(0xFFA3B1C6), offset: Offset(4, 4), blurRadius: 8),
                     ],
