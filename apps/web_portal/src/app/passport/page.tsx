@@ -10,8 +10,9 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import QRCode from 'qrcode';
-import { Stethoscope, ShieldCheck, RefreshCw, Copy, Check } from 'lucide-react';
+import { Stethoscope, ShieldCheck, RefreshCw, Copy, Check, Download } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { useProfile } from '../../contexts/ProfileContext';
 import { useRouter } from 'next/navigation';
 import api from '../../lib/api';
 
@@ -25,12 +26,14 @@ interface PassportSelf {
 
 export default function HealthPassportPage() {
   const { user, loading: authLoading } = useAuth();
+  const { profiles, activeProfile, setActiveProfile } = useProfile();
   const router = useRouter();
 
   const [passport, setPassport] = useState<PassportSelf | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [qrDataUrl, setQrDataUrl] = useState('');
@@ -113,6 +116,29 @@ export default function HealthPassportPage() {
     await navigator.clipboard.writeText(passportUrl(passport.passport_token));
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const downloadFhirExport = async () => {
+    setExporting(true);
+    setError('');
+    try {
+      const res = await api.get('/ehr/fhir-export', {
+        params: { family_profile_id: activeProfile?.id ?? undefined },
+        responseType: 'blob',
+      });
+      const url = URL.createObjectURL(new Blob([res.data], { type: 'application/json' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'gramcare_health_records_fhir.json';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      setError('Could not export health records.');
+    } finally {
+      setExporting(false);
+    }
   };
 
   if (authLoading || loading || !passport) {
@@ -205,6 +231,43 @@ export default function HealthPassportPage() {
             </div>
           )}
         </div>
+      </div>
+
+      <div className="glass-panel p-6 mb-6">
+        <h2 className="text-lg font-bold mb-1.5 flex items-center gap-2">
+          <Download size={18} className="text-indigo-500" /> Export Health Records
+        </h2>
+        <p className="text-sm text-gray-500 mb-4">
+          Download your full Family Health Wallet — prescriptions, lab reports, vaccinations, and
+          notes — as a FHIR-shaped file a receiving hospital or clinic&apos;s EHR system can read.
+        </p>
+        {profiles.length > 0 && (
+          <div className="mb-4 max-w-xs">
+            <label htmlFor="passport-export-profile" className="text-sm font-semibold block mb-1.5">For</label>
+            <select
+              id="passport-export-profile"
+              value={activeProfile?.id ?? ''}
+              onChange={(e) => {
+                const id = e.target.value;
+                setActiveProfile(id === '' ? null : profiles.find((p) => p.id === Number(id)) || null);
+              }}
+              className="w-full p-2.5 rounded-xl bg-white/50 dark:bg-black/20 border border-white/30 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+            >
+              <option value="">Myself</option>
+              {profiles.map((p) => (
+                <option key={p.id} value={p.id}>{p.full_name} ({p.relation})</option>
+              ))}
+            </select>
+          </div>
+        )}
+        <button
+          type="button"
+          onClick={downloadFhirExport}
+          disabled={exporting}
+          className="neu-button px-5 py-3 bg-indigo-500 text-white font-bold rounded-xl disabled:opacity-50 flex items-center gap-2"
+        >
+          <Download size={16} /> {exporting ? 'Preparing…' : 'Download (FHIR JSON)'}
+        </button>
       </div>
 
       <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-xs text-gray-400 text-center">

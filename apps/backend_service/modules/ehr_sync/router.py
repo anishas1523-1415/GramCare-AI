@@ -11,10 +11,15 @@ Contract summary (all under /api/v1/ehr):
 - POST /upload               (auth)     Cloudinary image upload; returns a URL to embed
                                         in a record's `payload` (e.g. the original
                                         prescription/lab photo alongside its OCR text)
+- GET  /fhir-export         (PATIENT/family owner) FHIR-R4-*shaped* export of the
+                                        Family Health Wallet — see core/fhir_export.py's
+                                        module docstring for exactly what that does and
+                                        does not mean (not a FHIR server, no SMART auth).
 """
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -27,6 +32,7 @@ from modules.auth.router import get_current_user, require_role, require_approved
 from modules.family.router import resolve_owned_profile
 from core.drug_interactions import check_interactions
 from core.cloudinary_service import cloudinary_client
+from core.fhir_export import build_fhir_bundle
 from modules.ai_assist.router import _parse_duration_days
 
 router = APIRouter()
@@ -132,6 +138,13 @@ async def get_patient_records(
     request: Request,
     family_profile_id: Optional[int] = Query(None),
     record_type: Optional[str] = Query(None),
+    # Incremental/low-bandwidth sync: a mobile client that already has every
+    # record created before its last successful sync can pass that
+    # timestamp back here instead of re-downloading the entire wallet every
+    # time (low-bandwidth optimization for rural connectivity).
+    since: Optional[datetime] = Query(
+        None, description="Only return records created after this UTC timestamp (incremental sync)."
+    ),
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=200),
     db: Session = Depends(get_db),
@@ -148,7 +161,9 @@ async def get_patient_records(
         q = q.filter(models.EHRRecord.family_profile_id == family_profile_id)
     if record_type:
         q = q.filter(models.EHRRecord.record_type == record_type)
-        
+    if since is not None:
+        q = q.filter(models.EHRRecord.created_at > since)
+
     db.add(models.AuditLog(
         user_id=current_user.id,
         action="READ",
@@ -397,3 +412,47 @@ async def vitals_history(
     if family_profile_id is not None:
         q = q.filter(models.IoTVitals.family_profile_id == family_profile_id)
     return q.order_by(models.IoTVitals.timestamp.desc()).limit(200).all()
+
+
+@router.get("/fhir-export")
+async def export_fhir_bundle(
+    family_profile_id: Optional[int] = Query(
+        None, description="Export this family member's records instead of the caller's own."
+    ),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_role("PATIENT")),
+):
+    """FHIR-R4-*shaped* export of the caller's (or their family member's)
+    Family Health Wallet, for handoff to a receiving hospital/EHR system.
+
+    Scope, plainly: this returns correctly-structured FHIR R4 resources
+    (Patient / AllergyIntolerance / MedicationStatement / DiagnosticReport /
+    Immunization / Observation) wrapped in a `Bundle` — it is NOT a FHIR
+    server, does not do SMART-on-FHIR auth, and does not push/sync to any
+    external system. See core/fhir_export.py's module docstring for the
+    full honest scope statement. Access control here is GramCare's own JWT
+    auth (require_role("PATIENT"), same as every other patient-only route),
+    plus the same ownership check every other family-scoped endpoint in
+    this router uses (resolve_owned_profile).
+    """
+    subject: models.User | models.FamilyProfile = current_user
+    if family_profile_id is not None:
+        # Raises 403/404 if this family_profile_id isn't the caller's own —
+        # identical guard used by /prescriptions/my, /vitals, /sync above.
+        subject = resolve_owned_profile(family_profile_id, current_user, db)
+
+    q = db.query(models.EHRRecord).filter(models.EHRRecord.patient_id == current_user.id)
+    if family_profile_id is not None:
+        q = q.filter(models.EHRRecord.family_profile_id == family_profile_id)
+    else:
+        q = q.filter(models.EHRRecord.family_profile_id.is_(None))
+    records = q.order_by(models.EHRRecord.record_date.asc()).all()
+
+    bundle = build_fhir_bundle(subject, records)
+
+    return JSONResponse(
+        content=bundle,
+        headers={
+            "Content-Disposition": 'attachment; filename="gramcare_health_records_fhir.json"',
+        },
+    )

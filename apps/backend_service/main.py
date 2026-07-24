@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from dotenv import load_dotenv
 
 from core.security_middleware import SecurityHeadersMiddleware
@@ -141,6 +142,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.add_middleware(SecurityHeadersMiddleware)
+# Low-bandwidth optimization: compress every response body over 500 bytes
+# (gzip, applied only when the client sends Accept-Encoding: gzip) so rural
+# mobile clients on slow/metered connections pay for far fewer bytes per
+# sync — EHR record lists and the FHIR export bundle are the biggest wins
+# here since both are JSON, which compresses very well.
+app.add_middleware(GZipMiddleware, minimum_size=500)
 
 # Include Routers
 app.include_router(auth_router, prefix="/api/v1/auth", tags=["Authentication"])
