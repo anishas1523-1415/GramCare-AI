@@ -7,7 +7,7 @@ services:
     # platform whose premise is emergency response. Upgrade to a paid plan
     # before any pilot with real patients.
     plan: free
-    rootDir: apps/backend_service
+    rootDir: backend/python_service
     buildCommand: pip install -r requirements.txt
     startCommand: alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port $PORT
     envVars:
@@ -33,7 +33,7 @@ services:
     name: gramcare-signaling
     env: node
     plan: free
-    rootDir: backend/node_api
+    rootDir: backend/node_service
     buildCommand: npm install
     startCommand: node server.js
     envVars:
