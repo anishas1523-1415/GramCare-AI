@@ -50,6 +50,22 @@ class GovernmentRegisterCreate(BaseModel):
     password: str = Field(..., min_length=8)
     full_name: str
 
+class GovernmentWhitelistEntryCreate(BaseModel):
+    """ADMIN-only: pre-authorize an email for /auth/register/government.
+    Previously the ONLY way to add an entry was the GOVERNMENT_WHITELIST_EMAILS
+    env var read once at process startup — this is the admin-UI equivalent,
+    for adding entries without a Render redeploy."""
+    email: EmailStr
+    note: Optional[str] = Field(None, max_length=200)
+
+class GovernmentWhitelistEntryResponse(BaseModel):
+    id: int
+    email: str
+    note: Optional[str] = None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
 class UserResponse(BaseModel):
     id: int
     username: str

@@ -7,7 +7,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { BarChart3, AlertTriangle, Activity, Building2, Pill, Siren, CheckCircle2, Stethoscope, FileText, ThumbsUp, ThumbsDown } from 'lucide-react';
+import { BarChart3, AlertTriangle, Activity, Building2, Pill, Siren, CheckCircle2, Stethoscope, FileText, ThumbsUp, ThumbsDown, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
 import ThemedLoader from '../../../components/ThemedLoader';
 import api from '../../../lib/api';
@@ -235,6 +235,135 @@ function BatchRecallIssuer() {
   );
 }
 
+interface WhitelistEntry {
+  id: number;
+  email: string;
+  note?: string | null;
+  created_at: string;
+}
+
+/** Government Portal whitelist — the ONLY way to obtain an ADMIN account
+ * (POST /auth/register/government) requires the caller's email to already
+ * be in this table. Previously the sole way to add an entry was the
+ * GOVERNMENT_WHITELIST_EMAILS env var, read once at backend startup —
+ * meaning adding a single new government official required a Render
+ * redeploy. This manages the table directly. ADMIN-only, same gating as
+ * DoctorVerificationPanel/BatchRecallIssuer above. */
+function GovernmentWhitelistPanel() {
+  const [entries, setEntries] = useState<WhitelistEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [email, setEmail] = useState('');
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const res = await api.get<WhitelistEntry[]>('/auth/government-whitelist');
+      setEntries(res.data);
+    } catch {
+      setError('Could not load the government whitelist.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setError('');
+    try {
+      await api.post('/auth/government-whitelist', { email, note: note || undefined });
+      setEmail('');
+      setNote('');
+      await load();
+    } catch (err) {
+      const message = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      setError(typeof message === 'string' ? message : 'Could not add this email.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const remove = async (id: number) => {
+    if (!window.confirm('Remove this email from the whitelist? They will no longer be able to register a Government Portal account with it.')) return;
+    setBusy(true);
+    setError('');
+    try {
+      await api.delete(`/auth/government-whitelist/${id}`);
+      setEntries((prev) => prev.filter((e) => e.id !== id));
+    } catch {
+      setError('Could not remove this entry.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="glass-panel p-6 mb-10">
+      <h2 className="text-xl font-bold flex items-center gap-2 mb-1 text-purple-500">
+        <ShieldCheck size={22} /> Government Portal Whitelist
+      </h2>
+      <p className="text-sm text-gray-500 mb-4">
+        Only emails listed here can register a Government Portal (Admin) account at /government/register.
+      </p>
+
+      <form onSubmit={submit} className="grid grid-cols-1 md:grid-cols-[2fr_2fr_auto] gap-3 mb-4">
+        <input
+          required
+          type="email"
+          placeholder="official@gov.example.in"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          className="p-3 rounded-xl bg-white/50 dark:bg-black/20 border border-white/20 focus:ring-2 focus:ring-purple-400 focus:outline-none"
+        />
+        <input
+          placeholder="Note (optional — who/why)"
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          className="p-3 rounded-xl bg-white/50 dark:bg-black/20 border border-white/20 focus:ring-2 focus:ring-purple-400 focus:outline-none"
+        />
+        <button
+          type="submit"
+          disabled={busy}
+          className="neu-button px-5 py-3 bg-purple-500 text-white font-bold rounded-xl disabled:opacity-50 whitespace-nowrap"
+        >
+          {busy ? 'Adding…' : 'Add Email'}
+        </button>
+      </form>
+
+      {error && <p role="alert" className="text-red-500 text-sm font-semibold mb-3">{error}</p>}
+
+      {loading ? (
+        <p className="text-sm text-gray-500">Loading…</p>
+      ) : entries.length === 0 ? (
+        <p className="text-sm text-gray-500">No whitelisted emails yet.</p>
+      ) : (
+        <div className="space-y-2">
+          {entries.map((entry) => (
+            <div key={entry.id} className="flex items-center justify-between gap-3 p-3 rounded-xl bg-white/40 dark:bg-black/30 border border-white/10">
+              <div>
+                <p className="font-semibold text-sm">{entry.email}</p>
+                {entry.note && <p className="text-xs text-gray-500">{entry.note}</p>}
+              </div>
+              <button
+                disabled={busy}
+                onClick={() => remove(entry.id)}
+                className="text-xs font-bold text-red-500 hover:underline disabled:opacity-50 shrink-0"
+              >
+                Remove
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 interface Cluster {
   condition: string;
   case_count: number;
@@ -311,6 +440,7 @@ export default function HealthIntelligence() {
           not clinician ones — this same component is shared with the
           Doctor analytics route, so both are gated to ADMIN accounts only. */}
       {user?.role === 'ADMIN' && <DoctorVerificationPanel />}
+      {user?.role === 'ADMIN' && <GovernmentWhitelistPanel />}
       {user?.role === 'ADMIN' && <BatchRecallIssuer />}
 
       {loading ? (

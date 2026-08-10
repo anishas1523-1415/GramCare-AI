@@ -265,6 +265,88 @@ async def register_government_user(
     return {"message": "Government account registered successfully", "username": new_user.username}
 
 
+# ==========================================
+# Government whitelist management (ADMIN-only admin-UI equivalent of the
+# GOVERNMENT_WHITELIST_EMAILS env var / _seed_government_whitelist in
+# main.py — that mechanism only ever ADDS entries once, at process startup;
+# these let an existing ADMIN manage the table directly, without a redeploy.
+# ==========================================
+
+@router.get("/government-whitelist", response_model=list[schemas.GovernmentWhitelistEntryResponse])
+def list_government_whitelist(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    if current_user.role != "ADMIN":
+        raise HTTPException(status_code=403, detail="Admin accounts only.")
+    return (
+        db.query(models.AuthorizedGovernmentEmail)
+        .order_by(models.AuthorizedGovernmentEmail.created_at.desc())
+        .all()
+    )
+
+
+@router.post("/government-whitelist", response_model=schemas.GovernmentWhitelistEntryResponse, status_code=201)
+def add_government_whitelist_entry(
+    body: schemas.GovernmentWhitelistEntryCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    if current_user.role != "ADMIN":
+        raise HTTPException(status_code=403, detail="Admin accounts only.")
+    email = body.email.lower()
+    existing = (
+        db.query(models.AuthorizedGovernmentEmail)
+        .filter(func.lower(models.AuthorizedGovernmentEmail.email) == email)
+        .first()
+    )
+    if existing:
+        raise HTTPException(status_code=400, detail="This email is already whitelisted.")
+
+    entry = models.AuthorizedGovernmentEmail(email=email, note=body.note)
+    db.add(entry)
+    db.commit()
+    db.refresh(entry)
+
+    db.add(models.AuditLog(
+        user_id=current_user.id,
+        action="CREATE",
+        resource="AuthorizedGovernmentEmail",
+        resource_id=str(entry.id),
+        details={"email": entry.email},
+        ip_address=request.client.host if request.client else None,
+    ))
+    db.commit()
+    return entry
+
+
+@router.delete("/government-whitelist/{entry_id}")
+def remove_government_whitelist_entry(
+    entry_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    if current_user.role != "ADMIN":
+        raise HTTPException(status_code=403, detail="Admin accounts only.")
+    entry = db.query(models.AuthorizedGovernmentEmail).filter(models.AuthorizedGovernmentEmail.id == entry_id).first()
+    if not entry:
+        raise HTTPException(status_code=404, detail="Whitelist entry not found.")
+
+    db.add(models.AuditLog(
+        user_id=current_user.id,
+        action="DELETE",
+        resource="AuthorizedGovernmentEmail",
+        resource_id=str(entry.id),
+        details={"email": entry.email},
+        ip_address=request.client.host if request.client else None,
+    ))
+    db.delete(entry)
+    db.commit()
+    return {"message": "Whitelist entry removed."}
+
+
 @router.post("/login", dependencies=[Depends(rate_limit("login", 15, 300))])
 def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     user = db.query(models.User).filter(models.User.username == form_data.username).first()
