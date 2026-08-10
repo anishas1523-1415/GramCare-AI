@@ -4,7 +4,7 @@ services:
   # 1. Unified Web Portal (Next.js for Patient Suite & Doctor Portal)
   web_portal:
     build:
-      context: ./apps/web_portal
+      context: ./frontend/patient_web_portal
       dockerfile: Dockerfile
       # NEXT_PUBLIC_* values are inlined at BUILD time. They were previously
       # passed as runtime environment (no effect on client bundles) and were
@@ -29,7 +29,7 @@ services:
   # 2. Pharmacy Portal (Vite/React Dashboard)
   pharmacy_portal:
     build:
-      context: ./apps/react_dashboard
+      context: ./frontend/admin_dashboard
       dockerfile: Dockerfile
       # VITE_* values are inlined at BUILD time (see Dockerfile note).
       args:
@@ -47,7 +47,7 @@ services:
   # 3. Node.js Realtime Signaling Engine (Socket.io + WebRTC)
   node_signaling:
     build:
-      context: ./backend/node_api
+      context: ./backend/node_service
       dockerfile: Dockerfile
     container_name: gramcare_node_signaling
     ports:
@@ -74,13 +74,13 @@ services:
   # 4. FastAPI Backend
   fastapi_backend:
     build:
-      context: ./apps/backend_service
+      context: ./backend/python_service
       dockerfile: Dockerfile
     container_name: gramcare_fastapi
     ports:
       - "8000:8000"
     env_file:
-      - ./apps/backend_service/.env
+      - ./backend/python_service/.env
     environment:
       # Local dev uses the bundled postgres_db service. In production set this
       # to your Neon connection string instead (see render.yaml / .env.example).

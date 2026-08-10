@@ -2,9 +2,9 @@
   "name": "gramcare-ai",
   "private": true,
   "workspaces": [
-    "apps/web_portal",
-    "apps/react_dashboard",
-    "apps/lab_portal",
-    "packages/*"
+    "frontend/patient_web_portal",
+    "frontend/admin_dashboard",
+    "frontend/lab_portal",
+    "shared/*"
   ]
 }
