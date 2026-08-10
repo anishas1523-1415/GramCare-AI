@@ -441,7 +441,11 @@ async def forgot_password(
     db.add(token_entry)
     db.commit()
     
-    frontend_url = os.getenv("FRONTEND_URL", "http://localhost:5173")
+    # Default matches the patient web portal (where /reset-password actually
+    # lives), not the pharmacy dashboard's dev port — a real production
+    # email with no FRONTEND_URL override was previously linking to
+    # localhost:5173, which no recipient's browser could ever reach.
+    frontend_url = os.getenv("FRONTEND_URL", "https://gram-care-ai.vercel.app")
     reset_link = f"{frontend_url}/reset-password?token={reset_token}"
     html_content = f"<p>Hello {user.full_name},</p><p>You requested a password reset. Click the link below to reset your password:</p><p><a href='{reset_link}'>Reset Password</a></p><p>If you did not request this, please ignore this email. This link expires in 1 hour.</p>"
     
