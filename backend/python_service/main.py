@@ -35,6 +35,7 @@ from modules.navigator.router import router as navigator_router
 from modules.cds.router import router as cds_router
 from modules.referrals.router import router as referrals_router
 from modules.chw.router import router as chw_router
+from ai.router import router as ai_health_router
 
 
 def _seed_government_whitelist():
@@ -180,6 +181,7 @@ app.include_router(navigator_router, prefix="/api/v1/navigator", tags=["AI Care 
 app.include_router(cds_router, prefix="/api/v1/cds", tags=["Clinical Decision Support"])
 app.include_router(referrals_router, prefix="/api/v1/referrals", tags=["Referrals"])
 app.include_router(chw_router, prefix="/api/v1/chw", tags=["Community Health Worker"])
+app.include_router(ai_health_router, prefix="/api/v1/ai", tags=["AI Operations"])
 
 
 
