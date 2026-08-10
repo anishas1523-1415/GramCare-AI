@@ -132,11 +132,22 @@ app = FastAPI(
 )
 
 # Configure CORS
-origins = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://localhost:3000,http://localhost:3001,http://localhost:80,https://gram-care-mru8ufysx-anishas1523-1415s-projects.vercel.app,https://gram-care-ai.vercel.app").split(",")
+origins = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://localhost:3000,http://localhost:3001,http://localhost:80,https://gram-care-ai.vercel.app").split(",")
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
+    # Every `git push` mints a brand-new, unique Vercel preview URL
+    # (gram-care-<hash>-anishas1523-1415s-projects.vercel.app) — hardcoding
+    # each one into CORS_ORIGINS is a losing game and was confirmed live:
+    # a preview deployment's login screen hung forever on "Please wait..."
+    # because every API call was silently CORS-blocked (the browser console
+    # showed the real error; the UI just looked like a slow cold start).
+    # Only this account's own Vercel team can ever deploy under this
+    # subdomain pattern, so trusting the whole pattern is safe and means
+    # every future preview AND production deployment just works with no
+    # config change needed on either side.
+    allow_origin_regex=r"^https://[a-z0-9-]+-anishas1523-1415s-projects\.vercel\.app$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

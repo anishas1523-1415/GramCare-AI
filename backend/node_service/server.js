@@ -57,10 +57,19 @@ const ALLOWED_ORIGINS = (
   .map((o) => o.trim())
   .filter(Boolean);
 
+// Every `git push` mints a brand-new, unique Vercel preview URL
+// (gram-care-<hash>-anishas1523-1415s-projects.vercel.app) — hardcoding
+// each one into ALLOWED_ORIGINS is a losing game (confirmed live: a preview
+// deployment's doctor-feed socket connection was silently CORS-blocked).
+// Only this account's own Vercel team can ever deploy under this subdomain
+// pattern, so trusting the whole pattern is safe and means every future
+// preview AND production deployment just works with no config change.
+const VERCEL_ORIGIN_PATTERN = /^https:\/\/[a-z0-9-]+-anishas1523-1415s-projects\.vercel\.app$/;
+
 const corsOptions = {
   origin: (origin, callback) => {
     // Allow non-browser tools (curl, health checks) which send no Origin header.
-    if (!origin || ALLOWED_ORIGINS.includes(origin)) {
+    if (!origin || ALLOWED_ORIGINS.includes(origin) || VERCEL_ORIGIN_PATTERN.test(origin)) {
       return callback(null, true);
     }
     console.warn(`Blocked CORS request from disallowed origin: ${origin}`);
