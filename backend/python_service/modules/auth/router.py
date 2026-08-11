@@ -128,7 +128,10 @@ async def _send_verification_email(db: Session, email_service: EmailService, use
     in until they use it — see the is_verified check in login()."""
     try:
         token = _issue_verification_token(db, user)
-        frontend_url = os.getenv("FRONTEND_URL", "http://localhost:5173")
+        # Same default fix as forgot_password below — this used to point at
+        # the pharmacy dashboard's dev port (5173), not the patient portal
+        # where /verify-email actually lives.
+        frontend_url = os.getenv("FRONTEND_URL", "https://gram-care-ai.vercel.app")
         verify_link = f"{frontend_url}/verify-email?token={token}"
         html_content = (
             f"<p>Hello {user.full_name},</p>"
@@ -136,11 +139,27 @@ async def _send_verification_email(db: Session, email_service: EmailService, use
             f"<p><a href='{verify_link}'>Verify my email</a></p>"
             f"<p>This link expires in 24 hours.</p>"
         )
-        await email_service.send_email(
+        result = await email_service.send_email(
             to_email=user.email,
             subject="Verify your GramCare AI account",
             html_content=html_content,
         )
+        if isinstance(result, dict) and result.get("status") == "skipped":
+            # EmailService.send_email doesn't raise when RESEND_API_KEY is
+            # unset — it returns a normal-looking {"status": "skipped"} dict
+            # instead, so the try/except below never fires and nothing is
+            # ever logged. That silence is exactly what left non-PATIENT
+            # registrations (DOCTOR/HOSPITAL/ADMIN all require a verified
+            # email to log in) stuck forever with no error anywhere: the
+            # registration API call reports success, the account is created,
+            # and the user just... never gets an email, with no trace in the
+            # logs pointing at why. Surfacing it here at least makes the
+            # cause visible to whoever's reading Render logs.
+            logger.error(
+                "Verification email to %s was SKIPPED (RESEND_API_KEY not configured) — "
+                "this account cannot log in until it's verified some other way.",
+                user.email,
+            )
     except Exception as e:
         logger.warning("Failed to send verification email to %s: %s", user.email, e)
 
