@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
 import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
 import '../services/api_service.dart';
+import '../services/app_strings.dart';
 import '../services/firebase_notification_service.dart';
 import '../services/secure_store.dart';
 import '../theme/neumorphic_colors.dart';
@@ -64,7 +66,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     return null;
   }
 
-  Future<void> _register() async {
+  Future<void> _register(LocaleService locale) async {
     final fullName = _fullNameController.text.trim();
     final username = _usernameController.text.trim();
     final email = _emailController.text.trim();
@@ -72,15 +74,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
     final password = _passwordController.text;
 
     if (fullName.isEmpty || username.isEmpty || email.isEmpty || password.isEmpty) {
-      setState(() => _error = 'Please fill in name, username, email and password.');
+      setState(() => _error = locale.t('fill_required_fields'));
       return;
     }
     if (username.length < 3) {
-      setState(() => _error = 'Username must be at least 3 characters.');
+      setState(() => _error = locale.t('username_too_short'));
       return;
     }
     if (password.length < 8) {
-      setState(() => _error = 'Password must be at least 8 characters.');
+      setState(() => _error = locale.t('password_too_short'));
       return;
     }
 
@@ -122,11 +124,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
         // invalid email) instead of a generic failure — "Registration
         // failed" with no reason is exactly the complaint this screen
         // exists to eliminate.
-        _error = _extractErrorDetail(e) ?? 'Registration failed. Please check your details and try again.';
+        _error = _extractErrorDetail(e) ?? locale.t('registration_failed');
       });
     } catch (e) {
       setState(() {
-        _error = 'Registration failed. Please check your connection and try again.';
+        _error = locale.t('registration_failed');
       });
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -165,6 +167,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   @override
   Widget build(BuildContext context) {
     final neu = Theme.of(context).extension<NeumorphicColors>()!;
+    final locale = context.watch<LocaleService>();
     return Scaffold(
       backgroundColor: neu.background,
       body: SafeArea(
@@ -177,37 +180,37 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 const Icon(Icons.person_add_alt_1, size: 72, color: Color(0xFF4F46E5)),
                 const SizedBox(height: 16),
                 Text(
-                  'Create your account',
+                  locale.t('create_account_title'),
                   style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: neu.foreground),
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Free for patients — takes under a minute.',
+                  locale.t('create_account_subtitle'),
                   style: TextStyle(fontSize: 14, color: neu.foreground.withValues(alpha: 0.6)),
                 ),
                 const SizedBox(height: 32),
 
-                _neuField(controller: _fullNameController, hint: 'Full Name', neu: neu),
+                _neuField(controller: _fullNameController, hint: locale.t('full_name_hint'), neu: neu),
                 const SizedBox(height: 18),
-                _neuField(controller: _usernameController, hint: 'Username', neu: neu),
+                _neuField(controller: _usernameController, hint: locale.t('username_hint'), neu: neu),
                 const SizedBox(height: 18),
                 _neuField(
                   controller: _emailController,
-                  hint: 'Email',
+                  hint: locale.t('email_hint'),
                   neu: neu,
                   keyboardType: TextInputType.emailAddress,
                 ),
                 const SizedBox(height: 18),
                 _neuField(
                   controller: _phoneController,
-                  hint: 'Phone (optional — for SMS reminders)',
+                  hint: locale.t('phone_hint_optional'),
                   neu: neu,
                   keyboardType: TextInputType.phone,
                 ),
                 const SizedBox(height: 18),
                 _neuField(
                   controller: _passwordController,
-                  hint: 'Password (min 8 characters)',
+                  hint: locale.t('password_hint_min8'),
                   neu: neu,
                   obscure: true,
                 ),
@@ -224,7 +227,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 const SizedBox(height: 32),
 
                 GestureDetector(
-                  onTap: _isLoading ? null : _register,
+                  onTap: _isLoading ? null : () => _register(locale),
                   child: Container(
                     width: double.infinity,
                     padding: const EdgeInsets.symmetric(vertical: 20),
@@ -238,8 +241,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     child: Center(
                       child: _isLoading
                           ? const CircularProgressIndicator(color: Colors.white)
-                          : const Text('Create Account',
-                              style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                          : Text(locale.t('create_account'),
+                              style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
                     ),
                   ),
                 ),
@@ -247,7 +250,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 const SizedBox(height: 20),
                 TextButton(
                   onPressed: _isLoading ? null : () => context.go('/login'),
-                  child: const Text('Already have an account? Sign in'),
+                  child: Text(locale.t('already_have_account')),
                 ),
               ],
             ),

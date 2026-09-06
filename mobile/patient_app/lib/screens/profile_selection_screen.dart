@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../models/family_profile.dart';
+import '../services/app_strings.dart';
 import '../services/profile_service.dart';
 import '../theme/neumorphic_colors.dart';
 
@@ -94,6 +95,7 @@ class _ProfileSelectionScreenState extends State<ProfileSelectionScreen> {
   Widget build(BuildContext context) {
     final service = context.watch<ProfileService>();
     final neu = Theme.of(context).extension<NeumorphicColors>()!;
+    final locale = context.watch<LocaleService>();
 
     return Scaffold(
       backgroundColor: neu.background,
@@ -105,7 +107,7 @@ class _ProfileSelectionScreenState extends State<ProfileSelectionScreen> {
           onPressed: () => context.pop(),
         ),
         title: Text(
-          'Who is this for?',
+          locale.t('who_is_this_for'),
           style: TextStyle(color: neu.foreground, fontWeight: FontWeight.bold),
         ),
       ),
@@ -121,8 +123,8 @@ class _ProfileSelectionScreenState extends State<ProfileSelectionScreen> {
                   // "Myself" — the account owner
                   _bigAvatarButton(
                     context: context,
-                    label: 'Myself',
-                    sublabel: 'My own health',
+                    label: locale.t('myself'),
+                    sublabel: locale.t('my_own_health'),
                     selected: service.active == null,
                     avatar: const CircleAvatar(
                       radius: 32,
@@ -157,7 +159,7 @@ class _ProfileSelectionScreenState extends State<ProfileSelectionScreen> {
                   ),
                   // Add-member card
                   GestureDetector(
-                    onTap: () => _showAddDialog(context),
+                    onTap: () => _showAddDialog(context, locale),
                     child: Container(
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(20),
@@ -168,7 +170,7 @@ class _ProfileSelectionScreenState extends State<ProfileSelectionScreen> {
                         children: [
                           Icon(Icons.add_circle_outline, size: 48, color: neu.foregroundMuted),
                           const SizedBox(height: 8),
-                          Text('Add member', style: TextStyle(color: neu.foregroundMuted, fontWeight: FontWeight.bold)),
+                          Text(locale.t('add_member'), style: TextStyle(color: neu.foregroundMuted, fontWeight: FontWeight.bold)),
                         ],
                       ),
                     ),
@@ -179,7 +181,7 @@ class _ProfileSelectionScreenState extends State<ProfileSelectionScreen> {
     );
   }
 
-  Future<void> _showAddDialog(BuildContext context) async {
+  Future<void> _showAddDialog(BuildContext context, LocaleService locale) async {
     final nameCtl = TextEditingController();
     final relationCtl = TextEditingController();
     final ageCtl = TextEditingController();
@@ -188,21 +190,21 @@ class _ProfileSelectionScreenState extends State<ProfileSelectionScreen> {
     final saved = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Add family member'),
+        title: Text(locale.t('add_family_member_title')),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            TextField(controller: nameCtl, decoration: const InputDecoration(labelText: 'Full name')),
-            TextField(controller: relationCtl, decoration: const InputDecoration(labelText: 'Relation (e.g. Mother)')),
-            TextField(controller: ageCtl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Age')),
+            TextField(controller: nameCtl, decoration: InputDecoration(labelText: locale.t('full_name_hint'))),
+            TextField(controller: relationCtl, decoration: InputDecoration(labelText: locale.t('relation_hint'))),
+            TextField(controller: ageCtl, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: locale.t('age_hint'))),
             StatefulBuilder(
               builder: (ctx2, setSt) => DropdownButton<String>(
                 value: gender,
                 isExpanded: true,
-                items: const [
-                  DropdownMenuItem(value: 'Female', child: Text('Female')),
-                  DropdownMenuItem(value: 'Male', child: Text('Male')),
-                  DropdownMenuItem(value: 'Other', child: Text('Other')),
+                items: [
+                  DropdownMenuItem(value: 'Female', child: Text(locale.t('gender_female'))),
+                  DropdownMenuItem(value: 'Male', child: Text(locale.t('gender_male'))),
+                  DropdownMenuItem(value: 'Other', child: Text(locale.t('gender_other'))),
                 ],
                 onChanged: (v) => setSt(() => gender = v ?? 'Female'),
               ),
@@ -210,8 +212,8 @@ class _ProfileSelectionScreenState extends State<ProfileSelectionScreen> {
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('Save')),
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: Text(locale.t('cancel'))),
+          FilledButton(onPressed: () => Navigator.of(ctx).pop(true), child: Text(locale.t('save'))),
         ],
       ),
     );
@@ -229,7 +231,7 @@ class _ProfileSelectionScreenState extends State<ProfileSelectionScreen> {
       } catch (_) {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Could not save member. Are you online?')),
+            SnackBar(content: Text(locale.t('could_not_save_member'))),
           );
         }
       }

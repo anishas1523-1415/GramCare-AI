@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
 
 import '../services/api_service.dart';
+import '../services/app_strings.dart';
 import '../theme/neumorphic_colors.dart';
 
 /// Nearby medicine availability — planning doc: "பக்கத்துல இருக்கற எந்த
@@ -28,7 +30,7 @@ class _PharmacySearchScreenState extends State<PharmacySearchScreen> {
   // Pharmacy module theme: green (planning doc's per-module color identity)
   static const _themeColor = Color(0xFF10B981);
 
-  Future<void> _preorder(int pharmacyId) async {
+  Future<void> _preorder(int pharmacyId, LocaleService locale) async {
     final query = _controller.text.trim();
     try {
       await ApiService().client.post('/pharmacy/preorders', data: {
@@ -40,13 +42,13 @@ class _PharmacySearchScreenState extends State<PharmacySearchScreen> {
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not place the pre-order. Please try again.')),
+          SnackBar(content: Text(locale.t('preorder_failed'))),
         );
       }
     }
   }
 
-  Future<void> _search() async {
+  Future<void> _search(LocaleService locale) async {
     final query = _controller.text.trim();
     if (query.length < 2) return;
     setState(() {
@@ -63,7 +65,7 @@ class _PharmacySearchScreenState extends State<PharmacySearchScreen> {
         _results = List<Map<String, dynamic>>.from(res.data as List);
       });
     } catch (_) {
-      setState(() => _error = 'Search failed. Are you online?');
+      setState(() => _error = locale.t('search_failed'));
     } finally {
       setState(() => _loading = false);
     }
@@ -72,6 +74,7 @@ class _PharmacySearchScreenState extends State<PharmacySearchScreen> {
   @override
   Widget build(BuildContext context) {
     final neu = Theme.of(context).extension<NeumorphicColors>()!;
+    final locale = context.watch<LocaleService>();
     return Scaffold(
       backgroundColor: neu.background,
       appBar: AppBar(
@@ -82,7 +85,7 @@ class _PharmacySearchScreenState extends State<PharmacySearchScreen> {
           onPressed: () => context.pop(),
         ),
         title: Text(
-          'Find Medicine',
+          locale.t('find_medicine'),
           style: TextStyle(color: neu.foreground, fontWeight: FontWeight.bold),
         ),
       ),
@@ -105,19 +108,19 @@ class _PharmacySearchScreenState extends State<PharmacySearchScreen> {
                       ),
                       child: TextField(
                         controller: _controller,
-                        onSubmitted: (_) => _search(),
-                        decoration: const InputDecoration(
-                          hintText: 'Medicine name (e.g. Paracetamol)',
+                        onSubmitted: (_) => _search(locale),
+                        decoration: InputDecoration(
+                          hintText: locale.t('medicine_name_hint'),
                           border: InputBorder.none,
-                          contentPadding: EdgeInsets.all(18),
-                          prefixIcon: Icon(Icons.medication, color: _themeColor),
+                          contentPadding: const EdgeInsets.all(18),
+                          prefixIcon: const Icon(Icons.medication, color: _themeColor),
                         ),
                       ),
                     ),
                   ),
                   const SizedBox(width: 12),
                   GestureDetector(
-                    onTap: _loading ? null : _search,
+                    onTap: _loading ? null : () => _search(locale),
                     child: Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
@@ -150,13 +153,13 @@ class _PharmacySearchScreenState extends State<PharmacySearchScreen> {
               child: _results == null
                   ? Center(
                       child: Text(
-                        'Search to see which pharmacy has your medicine.',
+                        locale.t('search_medicine_prompt'),
                         style: TextStyle(color: neu.foregroundMuted),
                       ),
                     )
                   : _results!.isEmpty
                       ? Center(
-                          child: Text('No pharmacies found.',
+                          child: Text(locale.t('no_pharmacies_found'),
                               style: TextStyle(color: neu.foregroundMuted)),
                         )
                       : ListView.builder(
@@ -211,7 +214,7 @@ class _PharmacySearchScreenState extends State<PharmacySearchScreen> {
                                                   borderRadius: BorderRadius.circular(20),
                                                 ),
                                                 child: Text(
-                                                  'Jan Aushadhi',
+                                                  locale.t('jan_aushadhi'),
                                                   style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.blue.shade700),
                                                 ),
                                               ),
@@ -235,8 +238,8 @@ class _PharmacySearchScreenState extends State<PharmacySearchScreen> {
                                   const SizedBox(height: 8),
                                   Text(
                                     available
-                                        ? 'In stock${r['price'] != null ? ' · ₹${r['price']}' : ''}'
-                                        : 'Not available here',
+                                        ? '${locale.t('in_stock')}${r['price'] != null ? ' · ₹${r['price']}' : ''}'
+                                        : locale.t('not_available'),
                                     style: TextStyle(
                                       fontWeight: FontWeight.bold,
                                       color: available ? _themeColor : Colors.red,
@@ -251,7 +254,7 @@ class _PharmacySearchScreenState extends State<PharmacySearchScreen> {
                                         borderRadius: BorderRadius.circular(10),
                                       ),
                                       child: Text(
-                                        'Same-effect alternatives: ${subs.join(', ')}',
+                                        '${locale.t('alternatives')}: ${subs.join(', ')}',
                                         style: const TextStyle(fontSize: 13),
                                       ),
                                     ),
@@ -263,12 +266,12 @@ class _PharmacySearchScreenState extends State<PharmacySearchScreen> {
                                       child: OutlinedButton.icon(
                                         onPressed: _preorderedPharmacyIds.contains(pharmacyId)
                                             ? null
-                                            : () => _preorder(pharmacyId),
+                                            : () => _preorder(pharmacyId, locale),
                                         icon: const Icon(Icons.add_shopping_cart, size: 16),
                                         label: Text(
                                           _preorderedPharmacyIds.contains(pharmacyId)
-                                              ? "Pre-ordered — we'll notify you"
-                                              : 'Pre-order for when restocked',
+                                              ? locale.t('preordered_notify')
+                                              : locale.t('preorder_cta'),
                                           style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
                                         ),
                                         style: OutlinedButton.styleFrom(

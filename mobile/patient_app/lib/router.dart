@@ -1,17 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import 'screens/book_consultation_screen.dart';
 import 'screens/brand_splash_screen.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/emergency_contacts_screen.dart';
 import 'screens/forgot_password_screen.dart';
 import 'screens/login_screen.dart';
+import 'screens/my_appointments_screen.dart';
 import 'screens/register_screen.dart';
 import 'screens/profile_selection_screen.dart';
 import 'screens/pharmacy_search_screen.dart';
 import 'screens/scan_prescription_screen.dart';
 import 'screens/triage_screen.dart';
 import 'screens/health_wallet_screen.dart';
+import 'screens/video_consultation_screen.dart';
 import 'screens/vitals_screen.dart';
 import 'screens/reminders_screen.dart';
 import 'screens/sos_active_screen.dart';
@@ -125,6 +128,21 @@ final GoRouter appRouter = GoRouter(
         final lat = double.tryParse(state.uri.queryParameters['lat'] ?? '0') ?? 0;
         final lng = double.tryParse(state.uri.queryParameters['lng'] ?? '0') ?? 0;
         return _appPage(SosActiveScreen(patientLat: lat, patientLng: lng), state);
+      },
+    ),
+    GoRoute(
+      path: '/book',
+      pageBuilder: (context, state) => _appPage(const BookConsultationScreen(), state),
+    ),
+    GoRoute(
+      path: '/appointments',
+      pageBuilder: (context, state) => _appPage(const MyAppointmentsScreen(), state),
+    ),
+    GoRoute(
+      path: '/video-call/:appointmentId',
+      pageBuilder: (context, state) {
+        final appointmentId = int.parse(state.pathParameters['appointmentId']!);
+        return _appPage(VideoConsultationScreen(appointmentId: appointmentId), state);
       },
     ),
   ],

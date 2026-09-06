@@ -1,23 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:socket_io_client/socket_io_client.dart' as io;
-import 'package:go_router/go_router.dart';
 
 import '../services/app_strings.dart';
 import '../services/secure_store.dart';
-import '../theme/app_theme.dart';
 
-/// Signaling server for the WebRTC handshake — the same Node service the
-/// web portal's doctor dashboard connects to
-/// (frontend/patient_web_portal/.../doctor/dashboard/page.tsx's WS_URL).
-/// This screen previously hardcoded 'http://10.0.2.2:4000' — the special
-/// alias an ANDROID EMULATOR uses to reach its host machine's localhost —
-/// which is meaningless on a real physical device (what this app actually
-/// ships to) and doesn't point at any deployed signaling server anyway.
-/// Every real video consultation attempt would have failed to connect.
-const String _signalingUrl = 'https://gramcare-signaling.onrender.com';
-
+/// Patient side of the video consultation — mirrors doctor_app's
+/// video_consultation_screen.dart exactly (same signaling server, same
+/// per-appointment room, same WebRTC offer/answer/ICE exchange), since both
+/// sides of one call must speak the identical protocol. Previously this app
+/// had no video consultation screen at all — a patient had no way to join
+/// the call a doctor could already start from their side.
 class VideoConsultationScreen extends StatefulWidget {
   final int appointmentId;
   const VideoConsultationScreen({super.key, required this.appointmentId});
@@ -26,14 +21,18 @@ class VideoConsultationScreen extends StatefulWidget {
   State<VideoConsultationScreen> createState() => _VideoConsultationScreenState();
 }
 
+// Signaling server for the WebRTC handshake — the same Node service the web
+// portal's doctor dashboard and doctor_app's video screen connect to.
+const String _signalingUrl = 'https://gramcare-signaling.onrender.com';
+
 class _VideoConsultationScreenState extends State<VideoConsultationScreen> {
   final RTCVideoRenderer _localRenderer = RTCVideoRenderer();
   final RTCVideoRenderer _remoteRenderer = RTCVideoRenderer();
-  
+
   io.Socket? _socket;
   RTCPeerConnection? _peerConnection;
   MediaStream? _localStream;
-  
+
   bool _isMuted = false;
   bool _isVideoOff = false;
   bool _isConnected = false;
@@ -63,8 +62,7 @@ class _VideoConsultationScreenState extends State<VideoConsultationScreen> {
   Future<void> _connect() async {
     final token = await SecureStore().getToken();
     final roomId = widget.appointmentId.toString();
-    
-    // Connect to Signaling Server
+
     _socket = io.io(_signalingUrl, io.OptionBuilder()
         .setTransports(['websocket'])
         .setAuth({'token': token})
@@ -107,7 +105,7 @@ class _VideoConsultationScreenState extends State<VideoConsultationScreen> {
           data['candidate']['sdpMLineIndex']);
       await _peerConnection!.addCandidate(candidate);
     });
-    
+
     _socket?.connect();
   }
 
@@ -118,37 +116,36 @@ class _VideoConsultationScreenState extends State<VideoConsultationScreen> {
         'facingMode': 'user',
       }
     };
-    
+
     try {
       _localStream = await navigator.mediaDevices.getUserMedia(mediaConstraints);
       _localRenderer.srcObject = _localStream;
-      
+
       final configuration = {
         'iceServers': [
           {'urls': 'stun:stun.l.google.com:19302'},
         ]
       };
-      
+
       _peerConnection = await createPeerConnection(configuration);
-      
+
       _peerConnection!.onIceCandidate = (candidate) {
         _socket?.emit('ice_candidate', {
           'candidate': candidate.toMap(),
           'roomId': widget.appointmentId.toString(),
         });
       };
-      
+
       _peerConnection!.onAddStream = (stream) {
         _remoteRenderer.srcObject = stream;
         setState(() {
           _isConnected = true;
         });
       };
-      
+
       _localStream!.getTracks().forEach((track) {
         _peerConnection!.addTrack(track, _localStream!);
       });
-      
     } catch (e) {
       debugPrint('Failed to start media: $e');
     }
@@ -171,7 +168,7 @@ class _VideoConsultationScreenState extends State<VideoConsultationScreen> {
       track.enabled = !_isVideoOff;
     });
   }
-  
+
   void _endCall() {
     context.pop();
   }
@@ -190,14 +187,11 @@ class _VideoConsultationScreenState extends State<VideoConsultationScreen> {
       extendBodyBehindAppBar: true,
       body: Stack(
         children: [
-          // Remote Video
           Positioned.fill(
-            child: _isConnected 
-              ? RTCVideoView(_remoteRenderer, objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover)
-              : const Center(child: CircularProgressIndicator(color: AppTheme.primaryBlue)),
+            child: _isConnected
+                ? RTCVideoView(_remoteRenderer, objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover)
+                : const Center(child: CircularProgressIndicator(color: Color(0xFF2DD4BF))),
           ),
-          
-          // Local Video Picture-in-Picture
           Positioned(
             right: 20,
             bottom: 120,
@@ -215,8 +209,6 @@ class _VideoConsultationScreenState extends State<VideoConsultationScreen> {
               ),
             ),
           ),
-          
-          // Controls
           Positioned(
             left: 0,
             right: 0,
@@ -238,7 +230,7 @@ class _VideoConsultationScreenState extends State<VideoConsultationScreen> {
                 ),
                 FloatingActionButton(
                   heroTag: 'end',
-                  backgroundColor: AppTheme.cancelledRed,
+                  backgroundColor: Colors.red,
                   onPressed: _endCall,
                   child: const Icon(Icons.call_end, color: Colors.white),
                 ),

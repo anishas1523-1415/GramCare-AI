@@ -140,6 +140,7 @@ const Map<String, String> _en = {
   'document_upload_failed': 'Document upload failed.',
   'document_uploaded': 'License document uploaded.',
   'go_to_profile': 'Go to My Profile',
+  'video_consultation': 'Video Consultation',
   // Registration + forgot-password — previously this app had no
   // registration or password-recovery surface at all, only login.
   'forgot_password': 'Forgot password?',
@@ -283,6 +284,7 @@ const Map<String, String> _ta = {
   'document_upload_failed': 'ஆவணப் பதிவேற்றம் தோல்வியடைந்தது.',
   'document_uploaded': 'உரிம ஆவணம் பதிவேற்றப்பட்டது.',
   'go_to_profile': 'எனது சுயவிவரத்திற்குச் செல்ல',
+  'video_consultation': 'வீடியோ ஆலோசனை',
   'forgot_password': 'கடவுச்சொல் மறந்துவிட்டதா?',
   'new_doctor_register': 'புதிய டாக்டரா? கணக்கை உருவாக்க',
   'create_doctor_account': 'உங்கள் டாக்டர் கணக்கை உருவாக்கவும்',

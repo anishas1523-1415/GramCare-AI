@@ -3,7 +3,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
 import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
 import '../services/api_service.dart';
+import '../services/app_strings.dart';
 import '../services/firebase_notification_service.dart';
 import '../services/secure_store.dart';
 import '../theme/neumorphic_colors.dart';
@@ -66,7 +68,7 @@ class _LoginScreenState extends State<LoginScreen> {
       if (mounted) context.go('/');
     } catch (e) {
       setState(() {
-        _error = 'Invalid credentials. Please try again.';
+        _error = context.read<LocaleService>().t('invalid_credentials');
       });
     } finally {
       setState(() {
@@ -78,6 +80,7 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     final neu = Theme.of(context).extension<NeumorphicColors>()!;
+    final s = context.watch<LocaleService>();
     return Scaffold(
       backgroundColor: neu.background,
       body: SafeArea(
@@ -87,10 +90,17 @@ class _LoginScreenState extends State<LoginScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: () => s.setCode(s.isTamil ? 'en' : 'ta'),
+                    child: Text(s.isTamil ? 'EN' : 'தமிழ்', style: const TextStyle(fontWeight: FontWeight.bold)),
+                  ),
+                ),
                 const Icon(Icons.health_and_safety, size: 80, color: Color(0xFF4F46E5)),
                 const SizedBox(height: 24),
                 Text(
-                  'GramCare AI',
+                  s.t('app_title'),
                   style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: neu.foreground),
                 ),
                 const SizedBox(height: 48),
@@ -107,10 +117,10 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   child: TextField(
                     controller: _usernameController,
-                    decoration: const InputDecoration(
-                      hintText: 'Username (e.g., patient1)',
+                    decoration: InputDecoration(
+                      hintText: s.t('username_hint'),
                       border: InputBorder.none,
-                      contentPadding: EdgeInsets.all(20),
+                      contentPadding: const EdgeInsets.all(20),
                     ),
                   ),
                 ),
@@ -129,10 +139,10 @@ class _LoginScreenState extends State<LoginScreen> {
                   child: TextField(
                     controller: _passwordController,
                     obscureText: true,
-                    decoration: const InputDecoration(
-                      hintText: 'Password',
+                    decoration: InputDecoration(
+                      hintText: s.t('password_hint'),
                       border: InputBorder.none,
-                      contentPadding: EdgeInsets.all(20),
+                      contentPadding: const EdgeInsets.all(20),
                     ),
                   ),
                 ),
@@ -160,7 +170,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     child: Center(
                       child: _isLoading
                         ? const CircularProgressIndicator(color: Colors.white)
-                        : const Text('Login', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                        : Text(s.t('login'), style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
                     ),
                   ),
                 ),
@@ -170,7 +180,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   alignment: Alignment.centerRight,
                   child: TextButton(
                     onPressed: _isLoading ? null : () => context.go('/forgot-password'),
-                    child: const Text('Forgot password?'),
+                    child: Text(s.t('forgot_password')),
                   ),
                 ),
                 // First-time patients register right here in the app —
@@ -178,7 +188,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 // portal, which APK-first rural users may never have seen.
                 TextButton(
                   onPressed: _isLoading ? null : () => context.go('/register'),
-                  child: const Text('New to GramCare? Create an account'),
+                  child: Text(s.t('new_patient_register')),
                 ),
               ],
             ),

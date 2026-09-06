@@ -332,6 +332,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       mainAxisSpacing: 24,
                       children: [
                         GestureDetector(
+                          onTap: () => context.push('/book'),
+                          child: NeumorphicCard(
+                            icon: Icons.video_call,
+                            title: s.t('book_consultation'),
+                            iconColor: const Color(0xFF2563EB),
+                          ),
+                        ),
+                        GestureDetector(
+                          onTap: () => context.push('/appointments'),
+                          child: NeumorphicCard(
+                            icon: Icons.event_note,
+                            title: s.t('my_appointments'),
+                            iconColor: const Color(0xFF7C3AED),
+                          ),
+                        ),
+                        GestureDetector(
                           onTap: () => context.push('/wallet'),
                           child: NeumorphicCard(
                             icon: Icons.favorite,

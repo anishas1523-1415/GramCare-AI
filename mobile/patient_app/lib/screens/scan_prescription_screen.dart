@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
 import '../services/api_service.dart';
+import '../services/app_strings.dart';
 import '../services/profile_service.dart';
 import '../services/sync_service.dart';
 import '../theme/neumorphic_colors.dart';
@@ -50,7 +51,7 @@ class _ScanPrescriptionScreenState extends State<ScanPrescriptionScreen> {
       setState(() => _image = img);
       await _runOcr(img);
     } catch (e) {
-      setState(() => _error = 'Could not open camera/gallery.');
+      setState(() => _error = context.read<LocaleService>().t('camera_open_failed'));
     }
   }
 
@@ -68,8 +69,7 @@ class _ScanPrescriptionScreenState extends State<ScanPrescriptionScreen> {
         _confidence = (data['confidence'] as num?)?.toDouble() ?? 0;
       });
     } catch (e) {
-      setState(() => _error =
-          'Could not read the prescription. Check your connection and try again.');
+      setState(() => _error = context.read<LocaleService>().t('ocr_read_failed'));
     } finally {
       setState(() => _processing = false);
     }
@@ -100,9 +100,9 @@ class _ScanPrescriptionScreenState extends State<ScanPrescriptionScreen> {
     );
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Saved to Health Wallet — will sync when online'),
-          backgroundColor: Color(0xFF10B981),
+        SnackBar(
+          content: Text(context.read<LocaleService>().t('saved_to_wallet')),
+          backgroundColor: const Color(0xFF10B981),
         ),
       );
       context.pop();
@@ -113,6 +113,7 @@ class _ScanPrescriptionScreenState extends State<ScanPrescriptionScreen> {
   Widget build(BuildContext context) {
     final active = context.watch<ProfileService>().active;
     final neu = Theme.of(context).extension<NeumorphicColors>()!;
+    final locale = context.watch<LocaleService>();
 
     return Scaffold(
       backgroundColor: neu.background,
@@ -121,11 +122,11 @@ class _ScanPrescriptionScreenState extends State<ScanPrescriptionScreen> {
         elevation: 0,
         leading: IconButton(
           icon: Icon(Icons.arrow_back, color: neu.foreground),
-          tooltip: 'Back',
+          tooltip: locale.t('back'),
           onPressed: () => context.pop(),
         ),
         title: Text(
-          active == null ? 'Scan Prescription' : 'Scan for ${active.fullName}',
+          active == null ? locale.t('scan_prescription') : '${locale.t('scan_for')} ${active.fullName}',
           style: TextStyle(color: neu.foreground, fontWeight: FontWeight.bold),
         ),
       ),
@@ -140,7 +141,7 @@ class _ScanPrescriptionScreenState extends State<ScanPrescriptionScreen> {
                   Expanded(
                     child: _bigButton(
                       icon: Icons.photo_camera,
-                      label: 'Camera',
+                      label: locale.t('camera'),
                       color: const Color(0xFF8B5CF6),
                       onTap: _processing ? null : () => _capture(ImageSource.camera),
                     ),
@@ -149,7 +150,7 @@ class _ScanPrescriptionScreenState extends State<ScanPrescriptionScreen> {
                   Expanded(
                     child: _bigButton(
                       icon: Icons.photo_library,
-                      label: 'Gallery',
+                      label: locale.t('gallery'),
                       color: const Color(0xFF3B82F6),
                       onTap: _processing ? null : () => _capture(ImageSource.gallery),
                     ),
@@ -169,7 +170,7 @@ class _ScanPrescriptionScreenState extends State<ScanPrescriptionScreen> {
                 const Center(child: CircularProgressIndicator()),
                 const SizedBox(height: 12),
                 Center(
-                  child: Text('AI is reading the prescription…',
+                  child: Text(locale.t('ai_reading_prescription'),
                       style: TextStyle(color: neu.foregroundMuted)),
                 ),
               ],
@@ -197,15 +198,15 @@ class _ScanPrescriptionScreenState extends State<ScanPrescriptionScreen> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const Text('AI found these medicines:',
-                              style: TextStyle(fontWeight: FontWeight.bold)),
-                          Text('${(_confidence * 100).toStringAsFixed(0)}% sure',
+                          Text(locale.t('ai_found_medicines'),
+                              style: const TextStyle(fontWeight: FontWeight.bold)),
+                          Text('${(_confidence * 100).toStringAsFixed(0)}% ${locale.t('sure')}',
                               style: const TextStyle(fontSize: 12, color: Colors.grey)),
                         ],
                       ),
                       const SizedBox(height: 12),
                       if (_medicines.isEmpty)
-                        const Text('No medicines recognized — check the photo quality.')
+                        Text(locale.t('no_medicines_recognized'))
                       else
                         ..._medicines.map((m) => InkWell(
                               onTap: () => _showMedicineInfo(m),
@@ -224,8 +225,8 @@ class _ScanPrescriptionScreenState extends State<ScanPrescriptionScreen> {
                               ),
                             )),
                       const Divider(height: 24),
-                      const Text('Full text:',
-                          style: TextStyle(
+                      Text(locale.t('full_text'),
+                          style: const TextStyle(
                               fontWeight: FontWeight.bold, color: Colors.grey, fontSize: 12)),
                       const SizedBox(height: 4),
                       Text(_extractedText!,
@@ -237,14 +238,14 @@ class _ScanPrescriptionScreenState extends State<ScanPrescriptionScreen> {
                 // Human confirmation gate — AI output is never auto-saved.
                 _bigButton(
                   icon: Icons.check_circle,
-                  label: 'Looks right — Save to Wallet',
+                  label: locale.t('save_to_wallet'),
                   color: const Color(0xFF10B981),
                   onTap: _saveToWallet,
                 ),
                 const SizedBox(height: 12),
                 _bigButton(
                   icon: Icons.refresh,
-                  label: 'Retake photo',
+                  label: locale.t('retake_photo'),
                   color: const Color(0xFF718096),
                   onTap: () => _capture(ImageSource.camera),
                 ),
@@ -320,7 +321,7 @@ class _MedicineInfoSheetState extends State<_MedicineInfoSheet> {
           queryParameters: {'medicine': widget.medicineName});
       if (mounted) setState(() => _info = res.data as Map<String, dynamic>);
     } catch (_) {
-      if (mounted) setState(() => _error = 'Could not load medicine information. Are you online?');
+      if (mounted) setState(() => _error = context.read<LocaleService>().t('medicine_info_failed'));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -353,6 +354,7 @@ class _MedicineInfoSheetState extends State<_MedicineInfoSheet> {
   @override
   Widget build(BuildContext context) {
     final neu = Theme.of(context).extension<NeumorphicColors>()!;
+    final locale = context.watch<LocaleService>();
     return Container(
       padding: EdgeInsets.only(
         left: 24, right: 24, top: 24,
@@ -389,10 +391,10 @@ class _MedicineInfoSheetState extends State<_MedicineInfoSheet> {
           else if (_error.isNotEmpty)
             Text(_error, style: const TextStyle(color: Colors.red))
           else if (_info != null) ...[
-            _row('What it\'s for', _info!['purpose'] as String?, Icons.info, const Color(0xFF3B82F6)),
-            _row('Dosage guidance', _info!['dosage_guidance'] as String?, Icons.schedule, const Color(0xFF10B981)),
-            _row('Side effects to watch for', _info!['side_effects'] as String?, Icons.warning_amber, Colors.deepOrange),
-            _row('Precautions', _info!['precautions'] as String?, Icons.shield_outlined, Colors.indigo),
+            _row(locale.t('what_its_for'), _info!['purpose'] as String?, Icons.info, const Color(0xFF3B82F6)),
+            _row(locale.t('dosage_guidance'), _info!['dosage_guidance'] as String?, Icons.schedule, const Color(0xFF10B981)),
+            _row(locale.t('side_effects_watch'), _info!['side_effects'] as String?, Icons.warning_amber, Colors.deepOrange),
+            _row(locale.t('precautions'), _info!['precautions'] as String?, Icons.shield_outlined, Colors.indigo),
           ],
         ],
       ),

@@ -1,4 +1,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Not required=true: image_picker/prescription-scan already uses the
+         camera without a hard hardware requirement, and video consultation
+         should degrade rather than block install on a camera-less device. -->
+    <uses-feature android:name="android.hardware.camera" android:required="false"/>
+    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false"/>
     <!-- Required for API/sync/SOS network calls. Debug builds inherit this
          from the debug manifest, but RELEASE builds previously had no
          INTERNET permission at all — the app would ship unable to reach the
@@ -7,8 +12,14 @@
     <!-- Emergency SOS: real GPS coordinates ride with the alert -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
-    <!-- Voice-first symptom input (speech_to_text) -->
+    <!-- Voice-first symptom input (speech_to_text), also reused by
+         flutter_webrtc for video consultation audio. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+    <!-- Video consultation (flutter_webrtc) -->
+    <uses-permission android:name="android.permission.CAMERA"/>
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+    <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE"/>
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"/>
     <!-- Push notifications (Android 13+ requires this to be requested at
          runtime too — see FirebaseNotificationService.requestPermission —
          but the manifest entry is required regardless of API level). -->

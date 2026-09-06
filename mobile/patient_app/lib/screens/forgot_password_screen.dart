@@ -1,8 +1,10 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
 
 import '../services/api_service.dart';
+import '../services/app_strings.dart';
 import '../theme/neumorphic_colors.dart';
 
 /// Self-service password reset. The backend's POST /auth/forgot-password
@@ -33,10 +35,10 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     super.dispose();
   }
 
-  Future<void> _submit() async {
+  Future<void> _submit(LocaleService locale) async {
     final email = _emailController.text.trim();
     if (email.isEmpty || !email.contains('@')) {
-      setState(() => _error = 'Enter a valid email address.');
+      setState(() => _error = locale.t('enter_valid_email'));
       return;
     }
     setState(() {
@@ -49,7 +51,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       await ApiService().client.post('/auth/forgot-password', data: {'email': email});
       if (mounted) setState(() => _sent = true);
     } on DioException catch (_) {
-      setState(() => _error = 'Could not send the reset link. Please check your connection and try again.');
+      setState(() => _error = locale.t('reset_request_failed'));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -58,6 +60,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   @override
   Widget build(BuildContext context) {
     final neu = Theme.of(context).extension<NeumorphicColors>()!;
+    final locale = context.watch<LocaleService>();
     return Scaffold(
       backgroundColor: neu.background,
       body: SafeArea(
@@ -75,7 +78,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                 const SizedBox(height: 20),
                 if (_sent) ...[
                   Text(
-                    "If that email is registered, we've sent a reset link to it. Check your inbox.",
+                    locale.t('reset_link_sent'),
                     textAlign: TextAlign.center,
                     style: TextStyle(fontSize: 15.5, color: neu.foreground),
                   ),
@@ -90,19 +93,19 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                         borderRadius: BorderRadius.circular(16),
                         boxShadow: [BoxShadow(color: neu.shadowDark, offset: const Offset(4, 4), blurRadius: 8)],
                       ),
-                      child: const Center(
-                        child: Text('Back to Sign In', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                      child: Center(
+                        child: Text(locale.t('back_to_login'), style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
                       ),
                     ),
                   ),
                 ] else ...[
                   Text(
-                    'Reset your password',
+                    locale.t('reset_password_title'),
                     style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: neu.foreground),
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    "Enter your account email and we'll send you a reset link.",
+                    locale.t('reset_password_tagline'),
                     textAlign: TextAlign.center,
                     style: TextStyle(fontSize: 14, color: neu.foreground.withValues(alpha: 0.6)),
                   ),
@@ -119,12 +122,12 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                     child: TextField(
                       controller: _emailController,
                       keyboardType: TextInputType.emailAddress,
-                      decoration: const InputDecoration(
-                        hintText: 'Email',
+                      decoration: InputDecoration(
+                        hintText: locale.t('email_hint'),
                         border: InputBorder.none,
-                        contentPadding: EdgeInsets.all(20),
+                        contentPadding: const EdgeInsets.all(20),
                       ),
-                      onSubmitted: (_) => _isLoading ? null : _submit(),
+                      onSubmitted: (_) => _isLoading ? null : _submit(locale),
                     ),
                   ),
                   if (_error.isNotEmpty) ...[
@@ -133,7 +136,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                   ],
                   const SizedBox(height: 32),
                   GestureDetector(
-                    onTap: _isLoading ? null : _submit,
+                    onTap: _isLoading ? null : () => _submit(locale),
                     child: Container(
                       width: double.infinity,
                       padding: const EdgeInsets.symmetric(vertical: 20),
@@ -145,14 +148,14 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                       child: Center(
                         child: _isLoading
                             ? const CircularProgressIndicator(color: Colors.white)
-                            : const Text('Send Reset Link', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                            : Text(locale.t('send_reset_link'), style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
                       ),
                     ),
                   ),
                   const SizedBox(height: 16),
                   TextButton(
                     onPressed: _isLoading ? null : () => context.go('/login'),
-                    child: const Text('Back to Sign In'),
+                    child: Text(locale.t('back_to_login')),
                   ),
                 ],
               ],

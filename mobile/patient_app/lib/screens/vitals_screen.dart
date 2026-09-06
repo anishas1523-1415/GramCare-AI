@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'dart:math';
 
 import '../services/api_service.dart';
+import '../services/app_strings.dart';
 import '../services/profile_service.dart';
 import '../theme/neumorphic_colors.dart';
 
@@ -71,7 +72,7 @@ class _VitalsScreenState extends State<VitalsScreen> {
     return 0;
   }
 
-  void _simulateBLEConnection() {
+  void _simulateBLEConnection(LocaleService locale) {
     setState(() {
       _isStreaming = true;
       _heartRateController.text = (60 + Random().nextInt(40)).toString();
@@ -84,20 +85,20 @@ class _VitalsScreenState extends State<VitalsScreen> {
     // Honest labelling: real wearable integration is deliberately on hold
     // per the planning discussion ("IoT டிவைஸ் ஃபியூச்சர்ல பார்த்துக்கலாம்").
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Demo values filled (real smartwatch pairing coming later)'),
-        backgroundColor: Color(0xFF3B82F6),
+      SnackBar(
+        content: Text(locale.t('demo_values_filled')),
+        backgroundColor: const Color(0xFF3B82F6),
       ),
     );
   }
 
-  Future<void> _submitVitals() async {
+  Future<void> _submitVitals(LocaleService locale) async {
     final hr = int.tryParse(_heartRateController.text);
     final spo2 = int.tryParse(_spO2Controller.text);
     if (hr == null || hr <= 0 || hr >= 300 || spo2 == null || spo2 < 0 || spo2 > 100) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Enter a valid heart rate (1–299) and SpO2 (0–100).'),
+        SnackBar(
+          content: Text(locale.t('invalid_vitals_range')),
           backgroundColor: Colors.red,
         ),
       );
@@ -119,9 +120,9 @@ class _VitalsScreenState extends State<VitalsScreen> {
       });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Vitals recorded successfully.'),
-            backgroundColor: Color(0xFF10B981),
+          SnackBar(
+            content: Text(locale.t('vitals_saved')),
+            backgroundColor: const Color(0xFF10B981),
           ),
         );
         _heartRateController.clear();
@@ -134,8 +135,8 @@ class _VitalsScreenState extends State<VitalsScreen> {
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Could not save vitals. Are you online?'),
+          SnackBar(
+            content: Text(locale.t('vitals_save_failed')),
             backgroundColor: Colors.red,
           ),
         );
@@ -195,7 +196,7 @@ class _VitalsScreenState extends State<VitalsScreen> {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: points.isEmpty
-                  ? [Expanded(child: Center(child: Text('No data yet', style: TextStyle(color: neu.foregroundMuted, fontSize: 12))))]
+                  ? [Expanded(child: Center(child: Text(context.read<LocaleService>().t('no_data_yet'), style: TextStyle(color: neu.foregroundMuted, fontSize: 12))))]
                   : points.map((e) {
                       final raw = e[field];
                       final v = (raw is num) ? raw.toDouble() : 0.0;
@@ -231,6 +232,7 @@ class _VitalsScreenState extends State<VitalsScreen> {
     final goalFraction = (steps / _stepGoal).clamp(0.0, 1.0);
     final latest = _latest;
     final neu = Theme.of(context).extension<NeumorphicColors>()!;
+    final locale = context.watch<LocaleService>();
 
     return Scaffold(
       backgroundColor: neu.background,
@@ -239,11 +241,11 @@ class _VitalsScreenState extends State<VitalsScreen> {
         elevation: 0,
         leading: IconButton(
           icon: Icon(Icons.arrow_back, color: neu.foreground),
-          tooltip: 'Back',
+          tooltip: locale.t('back'),
           onPressed: () => context.pop(),
         ),
         title: Text(
-          'Health Vitals',
+          locale.t('health_vitals_title'),
           style: TextStyle(color: neu.foreground, fontWeight: FontWeight.bold),
         ),
       ),
@@ -263,17 +265,17 @@ class _VitalsScreenState extends State<VitalsScreen> {
                 else ...[
                   Row(
                     children: [
-                      _metricCard('Heart Rate', latest?['heart_rate'] != null ? '${latest!['heart_rate']} bpm' : '—', Icons.favorite, Colors.red),
+                      _metricCard(locale.t('heart_rate'), latest?['heart_rate'] != null ? '${latest!['heart_rate']} bpm' : '—', Icons.favorite, Colors.red),
                       const SizedBox(width: 12),
-                      _metricCard('SpO2', latest?['spo2'] != null ? '${latest!['spo2']}%' : '—', Icons.air, Colors.blue),
+                      _metricCard(locale.t('spo2'), latest?['spo2'] != null ? '${latest!['spo2']}%' : '—', Icons.air, Colors.blue),
                     ],
                   ),
                   const SizedBox(height: 12),
                   Row(
                     children: [
-                      _metricCard('Sleep (deep)', latest?['sleep_deep_hours'] != null ? '${latest!['sleep_deep_hours']}h' : '—', Icons.bedtime, Colors.indigo),
+                      _metricCard(locale.t('sleep_deep'), latest?['sleep_deep_hours'] != null ? '${latest!['sleep_deep_hours']}h' : '—', Icons.bedtime, Colors.indigo),
                       const SizedBox(width: 12),
-                      _metricCard('Sleep (light)', latest?['sleep_light_hours'] != null ? '${latest!['sleep_light_hours']}h' : '—', Icons.nights_stay, Colors.purple),
+                      _metricCard(locale.t('sleep_light'), latest?['sleep_light_hours'] != null ? '${latest!['sleep_light_hours']}h' : '—', Icons.nights_stay, Colors.purple),
                     ],
                   ),
                   const SizedBox(height: 20),
@@ -306,9 +308,9 @@ class _VitalsScreenState extends State<VitalsScreen> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text('$steps / $_stepGoal steps today',
+                                Text('$steps / $_stepGoal ${locale.t('steps_today')}',
                                     style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: neu.foreground)),
-                                Text('Daily step goal', style: TextStyle(fontSize: 12, color: neu.foregroundMuted)),
+                                Text(locale.t('daily_step_goal'), style: TextStyle(fontSize: 12, color: neu.foregroundMuted)),
                               ],
                             ),
                           ),
@@ -319,19 +321,19 @@ class _VitalsScreenState extends State<VitalsScreen> {
                   const SizedBox(height: 24),
 
                   // Trend graphs — last 7 logged readings.
-                  _trendBars('Heart Rate trend (bpm)', 'heart_rate', Colors.red, max: 150),
-                  _trendBars('SpO2 trend (%)', 'spo2', Colors.blue, max: 100),
+                  _trendBars(locale.t('heart_rate_trend'), 'heart_rate', Colors.red, max: 150),
+                  _trendBars(locale.t('spo2_trend'), 'spo2', Colors.blue, max: 100),
                 ],
 
                 const Divider(height: 32),
                 Text(
-                  'Sync your smartwatch or log manually:',
+                  locale.t('sync_or_log_manually'),
                   style: TextStyle(fontSize: 16, color: neu.foregroundMuted),
                 ),
                 const SizedBox(height: 16),
 
                 GestureDetector(
-                  onTap: _simulateBLEConnection,
+                  onTap: () => _simulateBLEConnection(locale),
                   child: Container(
                     width: double.infinity,
                     padding: const EdgeInsets.symmetric(vertical: 20),
@@ -348,7 +350,7 @@ class _VitalsScreenState extends State<VitalsScreen> {
                         const Icon(Icons.bluetooth, color: Colors.white),
                         const SizedBox(width: 8),
                         Text(
-                          _isStreaming ? 'Streaming Live...' : 'Connect Smartwatch (BLE)',
+                          _isStreaming ? locale.t('streaming_live') : locale.t('connect_smartwatch'),
                           style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
                         ),
                       ],
@@ -358,24 +360,24 @@ class _VitalsScreenState extends State<VitalsScreen> {
 
                 const SizedBox(height: 32),
 
-                _labeledField('Heart Rate (bpm)', _heartRateController, Icons.favorite, Colors.red),
+                _labeledField(locale.t('heart_rate_bpm'), _heartRateController, Icons.favorite, Colors.red),
                 const SizedBox(height: 16),
-                _labeledField('SpO2 (%)', _spO2Controller, Icons.air, Colors.blue),
+                _labeledField(locale.t('spo2_percent'), _spO2Controller, Icons.air, Colors.blue),
                 const SizedBox(height: 16),
-                _labeledField('Steps today', _stepsController, Icons.directions_walk, Colors.green),
+                _labeledField(locale.t('steps_today_label'), _stepsController, Icons.directions_walk, Colors.green),
                 const SizedBox(height: 16),
                 Row(
                   children: [
-                    Expanded(child: _labeledField('Deep sleep (hrs)', _deepSleepController, Icons.bedtime, Colors.indigo)),
+                    Expanded(child: _labeledField(locale.t('deep_sleep_hrs'), _deepSleepController, Icons.bedtime, Colors.indigo)),
                     const SizedBox(width: 12),
-                    Expanded(child: _labeledField('Light sleep (hrs)', _lightSleepController, Icons.nights_stay, Colors.purple)),
+                    Expanded(child: _labeledField(locale.t('light_sleep_hrs'), _lightSleepController, Icons.nights_stay, Colors.purple)),
                   ],
                 ),
 
                 const SizedBox(height: 32),
 
                 GestureDetector(
-                  onTap: _saving ? null : _submitVitals,
+                  onTap: _saving ? null : () => _submitVitals(locale),
                   child: Container(
                     width: double.infinity,
                     padding: const EdgeInsets.symmetric(vertical: 20),
@@ -389,7 +391,7 @@ class _VitalsScreenState extends State<VitalsScreen> {
                     child: Center(
                       child: _saving
                           ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                          : const Text('Save Vitals', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                          : Text(locale.t('save_vitals'), style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
                     ),
                   ),
                 ),

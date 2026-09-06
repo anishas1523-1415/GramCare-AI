@@ -78,6 +78,10 @@ dependencies:
   # same minor the notifications plugin depends on transitively.
   timezone: ^0.10.0
   workmanager: ^0.10.7
+  # Video consultation — same WebRTC + signaling pair the doctor app uses,
+  # talking to the same Node signaling server (gramcare-signaling).
+  flutter_webrtc: ^1.6.0
+  socket_io_client: ^3.1.6
 
 dev_dependencies:
   flutter_test:
