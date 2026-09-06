@@ -167,6 +167,9 @@ export default function LoginPage() {
         : loggedInRole === 'DOCTOR' ? '/doctor/dashboard'
         : loggedInRole === 'ADMIN' ? '/authority'
         : loggedInRole === 'CHW' ? '/chw/dashboard'
+        // Previously fell through to '/' (the patient homepage) — a
+        // pharmacist had nowhere of their own to land.
+        : loggedInRole === 'PHARMACIST' ? '/pharmacy/dashboard'
         : '/'
       );
     } catch (err) {

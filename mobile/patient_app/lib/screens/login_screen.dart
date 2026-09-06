@@ -165,7 +165,14 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ),
 
-                const SizedBox(height: 20),
+                const SizedBox(height: 12),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: _isLoading ? null : () => context.go('/forgot-password'),
+                    child: const Text('Forgot password?'),
+                  ),
+                ),
                 // First-time patients register right here in the app —
                 // previously the only account-creation path was the web
                 // portal, which APK-first rural users may never have seen.

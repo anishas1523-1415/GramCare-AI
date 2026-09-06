@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import 'screens/brand_splash_screen.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/emergency_contacts_screen.dart';
+import 'screens/forgot_password_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/register_screen.dart';
 import 'screens/profile_selection_screen.dart';
@@ -38,14 +40,21 @@ CustomTransitionPage _appPage(Widget child, GoRouterState state) {
 }
 
 final GoRouter appRouter = GoRouter(
-  initialLocation: '/',
+  initialLocation: '/splash',
   redirect: (context, state) async {
+    // The animated brand intro (BrandSplashScreen) does its own token check
+    // and self-navigates once ready — it must never be redirected away
+    // before that finishes, or the animation gets cut off.
+    if (state.matchedLocation == '/splash') return null;
+
     // Token now lives in the platform keystore, not shared_preferences.
     final token = await SecureStore().getToken();
 
-    // Both auth surfaces are reachable without a token; everything else
-    // redirects to login.
-    final isAuthRoute = state.matchedLocation == '/login' || state.matchedLocation == '/register';
+    // All three auth surfaces are reachable without a token; everything
+    // else redirects to login.
+    final isAuthRoute = state.matchedLocation == '/login' ||
+        state.matchedLocation == '/register' ||
+        state.matchedLocation == '/forgot-password';
 
     if (token == null && !isAuthRoute) {
       return '/login';
@@ -59,12 +68,20 @@ final GoRouter appRouter = GoRouter(
   },
   routes: [
     GoRoute(
+      path: '/splash',
+      pageBuilder: (context, state) => _appPage(const BrandSplashScreen(), state),
+    ),
+    GoRoute(
       path: '/login',
       pageBuilder: (context, state) => _appPage(const LoginScreen(), state),
     ),
     GoRoute(
       path: '/register',
       pageBuilder: (context, state) => _appPage(const RegisterScreen(), state),
+    ),
+    GoRoute(
+      path: '/forgot-password',
+      pageBuilder: (context, state) => _appPage(const ForgotPasswordScreen(), state),
     ),
     GoRoute(
       path: '/',

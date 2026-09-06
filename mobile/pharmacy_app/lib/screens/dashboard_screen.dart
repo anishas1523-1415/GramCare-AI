@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -57,6 +58,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _pendingOrders = queue.length;
         _expiringSoon = expiring.length;
         _lowStock = stock.where((s) => s.status != 'Optimal').length;
+        _loading = false;
+      });
+    } on DioException catch (e) {
+      // 409 means this account has never called POST /pharmacy/register —
+      // every screen in this app depends on that having happened, so this
+      // was previously a permanent dead end ("no profile", forever) for any
+      // newly-registered pharmacist. Send them to set it up instead of
+      // showing a generic error there's no way to recover from.
+      if (e.response?.statusCode == 409) {
+        if (mounted) context.go('/pharmacy-setup');
+        return;
+      }
+      setState(() {
+        _error = e.toString();
         _loading = false;
       });
     } catch (e) {

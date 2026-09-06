@@ -2,12 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import 'models/appointment.dart';
+import 'screens/brand_splash_screen.dart';
 import 'screens/critical_alerts_screen.dart';
 import 'screens/dashboard_screen.dart';
+import 'screens/forgot_password_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/patient_detail_screen.dart';
 import 'screens/prescription_writer_screen.dart';
 import 'screens/profile_screen.dart';
+import 'screens/register_screen.dart';
 import 'screens/schedule_screen.dart';
 import 'screens/video_consultation_screen.dart';
 import 'services/secure_store.dart';
@@ -34,23 +37,44 @@ CustomTransitionPage _appPage(Widget child, GoRouterState state) {
 }
 
 final GoRouter appRouter = GoRouter(
-  initialLocation: '/',
+  initialLocation: '/splash',
   redirect: (context, state) async {
-    final token = await SecureStore().getToken();
-    final isLoggingIn = state.matchedLocation == '/login';
+    // The animated brand intro (BrandSplashScreen) does its own token check
+    // and self-navigates once ready — it must never be redirected away
+    // before that finishes, or the animation gets cut off.
+    if (state.matchedLocation == '/splash') return null;
 
-    if (token == null && !isLoggingIn) {
+    final token = await SecureStore().getToken();
+    // Both auth surfaces are reachable without a token; everything else
+    // redirects to login.
+    final isAuthRoute = state.matchedLocation == '/login' ||
+        state.matchedLocation == '/register' ||
+        state.matchedLocation == '/forgot-password';
+
+    if (token == null && !isAuthRoute) {
       return '/login';
     }
-    if (token != null && isLoggingIn) {
+    if (token != null && isAuthRoute) {
       return '/';
     }
     return null;
   },
   routes: [
     GoRoute(
+      path: '/splash',
+      pageBuilder: (context, state) => _appPage(const BrandSplashScreen(), state),
+    ),
+    GoRoute(
       path: '/login',
       pageBuilder: (context, state) => _appPage(const LoginScreen(), state),
+    ),
+    GoRoute(
+      path: '/register',
+      pageBuilder: (context, state) => _appPage(const RegisterScreen(), state),
+    ),
+    GoRoute(
+      path: '/forgot-password',
+      pageBuilder: (context, state) => _appPage(const ForgotPasswordScreen(), state),
     ),
     GoRoute(
       path: '/',

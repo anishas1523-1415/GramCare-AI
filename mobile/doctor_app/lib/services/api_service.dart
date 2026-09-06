@@ -1,4 +1,3 @@
-import 'dart:io';
 
 import 'package:dio/dio.dart';
 
@@ -23,8 +22,15 @@ class ApiService {
     _dio = Dio(
       BaseOptions(
         baseUrl: baseUrl,
-        connectTimeout: const Duration(seconds: 10),
-        receiveTimeout: const Duration(seconds: 10),
+        // The backend runs on Render's free tier, which spins the service
+        // down after idle periods — the first request after that can take
+        // 30-60s to wake it (measured: a real cold start took ~62s). A 10s
+        // timeout meant every cold-start request (login included) failed
+        // with a generic connection-timeout error that looked identical to
+        // "the app is broken". The web portal's login page already accounts
+        // for this same cold-start window.
+        connectTimeout: const Duration(seconds: 65),
+        receiveTimeout: const Duration(seconds: 65),
         headers: {
           'Content-Type': 'application/json',
         },

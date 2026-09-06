@@ -8,9 +8,37 @@ import 'api_service.dart';
 class PharmacyService {
   final _dio = ApiService().client;
 
-  /// GET /pharmacy/me -> schemas.PharmacyResponse
+  /// GET /pharmacy/me -> schemas.PharmacyResponse. Throws a DioException
+  /// with statusCode 409 ("No pharmacy registered for this account yet.")
+  /// for any account that has never called registerPharmacy() below — every
+  /// screen in this app depends on this succeeding, so callers should treat
+  /// a 409 here as "needs onboarding", not a generic error.
   Future<Map<String, dynamic>> getMyPharmacy() async {
     final res = await _dio.get('/pharmacy/me');
+    return Map<String, dynamic>.from(res.data as Map);
+  }
+
+  /// POST /pharmacy/register — creates (or updates) the Pharmacy business
+  /// entity for the current account. A PHARMACIST user account alone isn't
+  /// enough to use this app: every other endpoint (/stock, /queue,
+  /// /expiring, /me itself) looks up a Pharmacy row by owner_user_id and
+  /// 409s if one doesn't exist yet. Previously nothing in this app ever
+  /// called this endpoint, so a newly-registered pharmacist had no way to
+  /// get past that 409 — every screen was a permanent dead end.
+  Future<Map<String, dynamic>> registerPharmacy({
+    required String name,
+    String? address,
+    String? phone,
+    double? lat,
+    double? lng,
+  }) async {
+    final res = await _dio.post('/pharmacy/register', data: {
+      'name': name,
+      if (address != null && address.isNotEmpty) 'address': address,
+      if (phone != null && phone.isNotEmpty) 'phone': phone,
+      if (lat != null) 'lat': lat,
+      if (lng != null) 'lng': lng,
+    });
     return Map<String, dynamic>.from(res.data as Map);
   }
 

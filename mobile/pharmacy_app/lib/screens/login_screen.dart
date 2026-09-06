@@ -136,6 +136,21 @@ class _LoginScreenState extends State<LoginScreen> {
                         : Text(locale.t('login')),
                   ),
                 ),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: _isLoading ? null : () => context.go('/forgot-password'),
+                    child: Text(locale.t('forgot_password')),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                // First-time pharmacists register right here in the app —
+                // previously the only account-creation path was the web
+                // portal, which has no pharmacist-facing section at all.
+                TextButton(
+                  onPressed: _isLoading ? null : () => context.go('/register'),
+                  child: Text(locale.t('new_pharmacy_register')),
+                ),
               ],
             ),
           ),

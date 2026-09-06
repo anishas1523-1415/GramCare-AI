@@ -170,6 +170,21 @@ class _LoginScreenState extends State<LoginScreen> {
                           )
                         : Text(locale.t('login')),
                   ),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                      onPressed: _loading ? null : () => context.go('/forgot-password'),
+                      child: Text(locale.t('forgot_password')),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  // First-time doctors register right here in the app —
+                  // previously the only account-creation path was the web
+                  // portal, which APK-first doctors may never have seen.
+                  TextButton(
+                    onPressed: _loading ? null : () => context.go('/register'),
+                    child: Text(locale.t('new_doctor_register')),
+                  ),
                 ],
               ),
             ),

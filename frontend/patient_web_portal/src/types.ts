@@ -266,6 +266,40 @@ export interface NearbyPharmacyResult {
   is_jan_aushadhi: boolean;
 }
 
+/** Mirrors schemas.PharmacyResponse (modules/pharmacy_inventory/router.py) —
+ * the pharmacy business entity itself (name/address/phone), distinct from
+ * the PHARMACIST user account that owns it. GET /pharmacy/me 409s until
+ * POST /pharmacy/register has been called once for the account. */
+export interface PharmacyProfile {
+  id: number;
+  owner_user_id: number;
+  name: string;
+  address?: string | null;
+  lat?: number | null;
+  lng?: number | null;
+  phone?: string | null;
+  is_jan_aushadhi: boolean;
+  is_active: boolean;
+}
+
+/** Mirrors schemas.PharmacyItemResponse — one row of GET /pharmacy/stock,
+ * GET /pharmacy/expiring, POST /pharmacy/items. `status` is server-computed
+ * from stock_count ("Optimal" | "Low" | "Out of Stock"); `days_left` is
+ * only populated on the /expiring endpoint. */
+export interface PharmacyStockItem {
+  id: number;
+  pharmacy_id?: number | null;
+  medicine_name: string;
+  generic_group?: string | null;
+  stock_count: number;
+  price: number;
+  requires_prescription: boolean;
+  expiry_date?: string | null;
+  batch_number?: string | null;
+  status: 'Optimal' | 'Low' | 'Out of Stock';
+  days_left?: number | null;
+}
+
 /** Mirrors schemas.ReferralResponse (modules/referrals/router.py). A doctor's
  * referral of a patient to a specific colleague (referred_to_doctor_id set)
  * or open to any doctor of `specialty` (referred_to_doctor_id null). */
