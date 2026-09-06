@@ -418,7 +418,12 @@ class _PatientDetailScreenState extends State<PatientDetailScreen> {
                   icon: const Icon(Icons.receipt_long_outlined, size: 18),
                   label: Text(locale.t('write_prescription')),
                 ),
-                if (appt.mode == 'teleconsultation' && appt.status == 'CONFIRMED')
+                // Every appointment in this system is a video consultation —
+                // there is no in-person booking type on the backend
+                // (models.Appointment has no mode/consultation_type field at
+                // all), so gating on one was always vacuously true and just
+                // failed to compile once Dart's analyzer caught it.
+                if (appt.status == 'CONFIRMED')
                   ElevatedButton.icon(
                     onPressed: () => context.push('/video-call/${appt.id}'),
                     icon: const Icon(Icons.videocam, size: 18),

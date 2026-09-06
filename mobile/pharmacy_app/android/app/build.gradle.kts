@@ -3,17 +3,16 @@ plugins {
     id("kotlin-android")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
-    // NOTE: Firebase Gradle plugins are intentionally NOT applied here yet.
-    // firebase_core/messaging/crashlytics/analytics are wired on the Dart
-    // side (see lib/services/firebase_notification_service.dart) exactly
-    // like apps/mobile_app, but this app has no android/app/google-services.json
-    // of its own — a new Firebase Android app ("com.gramcare.pharmacy_mobile_app")
-    // must be registered in the Firebase console and its google-services.json
-    // dropped into android/app/ before these two lines (and the matching
-    // plugin versions in settings.gradle.kts) can be uncommented and the app
-    // will actually build/run with push notifications.
-    // id("com.google.gms.google-services")
-    // id("com.google.firebase.crashlytics")
+    // The prerequisite this was waiting on (a real android/app/google-services.json
+    // for com.gramcare.pharmacy_mobile_app, registered under the gramcare-ai
+    // Firebase project) is already in place — confirmed on-device that
+    // leaving these unapplied made Firebase.initializeApp() throw an
+    // uncaught "Failed to load FirebaseOptions from resource" error before
+    // runApp() was ever reached, which is why the app appeared stuck on the
+    // splash screen forever. Plugin versions declared (apply false) in
+    // settings.gradle.kts.
+    id("com.google.gms.google-services")
+    id("com.google.firebase.crashlytics")
 }
 
 android {

@@ -43,6 +43,27 @@ class _RegisterScreenState extends State<RegisterScreen> {
     super.dispose();
   }
 
+  /// FastAPI's `detail` field is a plain string for most errors (e.g.
+  /// "Username already registered") but a LIST of validation-error objects
+  /// for a 422 (e.g. an invalid email: [{"msg": "value is not a valid email
+  /// address: ...", "loc": [...], ...}]). The previous version of this
+  /// screen only ever checked for a string, so a 422 — the single most
+  /// likely error a real user hits (a typo'd email) — silently fell through
+  /// to a generic "check your details" with no actual detail. Confirmed
+  /// live against the backend: POST /auth/register with a malformed email
+  /// returns exactly this list shape.
+  String? _extractErrorDetail(DioException e) {
+    final data = e.response?.data;
+    if (data is! Map) return null;
+    final detail = data['detail'];
+    if (detail is String) return detail;
+    if (detail is List && detail.isNotEmpty) {
+      final first = detail.first;
+      if (first is Map && first['msg'] is String) return first['msg'] as String;
+    }
+    return null;
+  }
+
   Future<void> _register() async {
     final fullName = _fullNameController.text.trim();
     final username = _usernameController.text.trim();
@@ -96,15 +117,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
       if (mounted) context.go('/');
     } on DioException catch (e) {
-      final detail = e.response?.data is Map ? e.response?.data['detail'] : null;
       setState(() {
         // Surface the backend's real message (duplicate username/email,
         // invalid email) instead of a generic failure — "Registration
         // failed" with no reason is exactly the complaint this screen
         // exists to eliminate.
-        _error = detail is String
-            ? detail
-            : 'Registration failed. Please check your details and try again.';
+        _error = _extractErrorDetail(e) ?? 'Registration failed. Please check your details and try again.';
       });
     } catch (e) {
       setState(() {

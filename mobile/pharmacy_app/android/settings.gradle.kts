@@ -21,6 +21,12 @@ plugins {
     id("dev.flutter.flutter-plugin-loader") version "1.0.0"
     id("com.android.application") version "8.11.1" apply false
     id("org.jetbrains.kotlin.android") version "2.2.20" apply false
+    // Firebase integration — a real android/app/google-services.json for
+    // com.gramcare.pharmacy_mobile_app already exists (registered under the
+    // gramcare-ai Firebase project), same versions as patient_app/doctor_app.
+    // Actually applied per-module in android/app/build.gradle.kts.
+    id("com.google.gms.google-services") version "4.4.2" apply false
+    id("com.google.firebase.crashlytics") version "3.0.2" apply false
 }
 
 include(":app")

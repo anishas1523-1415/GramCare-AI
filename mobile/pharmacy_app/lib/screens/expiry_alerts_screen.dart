@@ -67,7 +67,7 @@ class _ExpiryAlertsScreenState extends State<ExpiryAlertsScreen> {
                           Color alertColor = PharmacyTheme.statusOptimal;
                           if (item.daysLeft != null) {
                             if (item.daysLeft! <= 30) {
-                              alertColor = PharmacyTheme.statusOutOfStock; // Red
+                              alertColor = PharmacyTheme.statusOut; // Red
                             } else if (item.daysLeft! <= 90) {
                               alertColor = PharmacyTheme.statusLow; // Orange
                             }

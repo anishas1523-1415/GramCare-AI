@@ -45,7 +45,13 @@ class _ProfileSelectionScreenState extends State<ProfileSelectionScreen> {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.all(20),
+        // Was 20 — a square GridView.count cell (2 columns, no explicit
+        // childAspectRatio) leaves just enough room for avatar+label+
+        // sublabel unselected, but the extra check-icon row shown when
+        // `selected` (the default "Myself" state right after a fresh
+        // registration, before any family profile exists) pushed the
+        // Column ~35px past its constraint — confirmed live on-device.
+        padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: neu.background,
           borderRadius: BorderRadius.circular(20),
@@ -59,21 +65,24 @@ class _ProfileSelectionScreenState extends State<ProfileSelectionScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             avatar,
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             Text(
               label,
               textAlign: TextAlign.center,
+              maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: neu.foreground),
             ),
             const SizedBox(height: 4),
             Text(
               sublabel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: TextStyle(fontSize: 12, color: neu.foregroundMuted),
             ),
             if (selected) ...[
-              const SizedBox(height: 8),
-              const Icon(Icons.check_circle, color: Color(0xFF2DD4BF), size: 22),
+              const SizedBox(height: 4),
+              const Icon(Icons.check_circle, color: Color(0xFF2DD4BF), size: 18),
             ],
           ],
         ),
@@ -116,9 +125,9 @@ class _ProfileSelectionScreenState extends State<ProfileSelectionScreen> {
                     sublabel: 'My own health',
                     selected: service.active == null,
                     avatar: const CircleAvatar(
-                      radius: 36,
+                      radius: 32,
                       backgroundColor: Color(0xFF4F46E5),
-                      child: Icon(Icons.person, size: 40, color: Colors.white),
+                      child: Icon(Icons.person, size: 34, color: Colors.white),
                     ),
                     onTap: () async {
                       await service.setActive(null);
@@ -132,12 +141,12 @@ class _ProfileSelectionScreenState extends State<ProfileSelectionScreen> {
                       sublabel: '${p.relation} • ${p.age} yrs',
                       selected: service.active?.id == p.id,
                       avatar: CircleAvatar(
-                        radius: 36,
+                        radius: 32,
                         backgroundColor: _tagColor(p),
                         child: Text(
                           p.initials,
                           style: const TextStyle(
-                            fontSize: 26, fontWeight: FontWeight.bold, color: Colors.white),
+                            fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white),
                         ),
                       ),
                       onTap: () async {
