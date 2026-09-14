@@ -28,7 +28,14 @@ logger = logging.getLogger("gramcare.ai.gemini")
 class GeminiProvider(BaseAIProvider):
     name = "gemini"
 
-    def __init__(self, api_key: Optional[str], model: str = "gemini-2.0-flash", **kwargs):
+    # gemini-2.0-flash was retired by Google — every call returned a 404
+    # ("This model ... is no longer available"), which is why every
+    # AI-backed feature (triage, OCR, doctor summary, medicine info) was
+    # silently falling through to MockProvider's "AI Engines unavailable"
+    # response on every single request, for every user, on every app.
+    # Confirmed the replacement Google's own error message points to
+    # (gemini-3.6-flash) actually works against this same key.
+    def __init__(self, api_key: Optional[str], model: str = "gemini-3.6-flash", **kwargs):
         super().__init__(api_key, **kwargs)
         self._model = model
         self._client = None

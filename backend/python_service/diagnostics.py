@@ -29,7 +29,9 @@ else:
         client = genai.Client(api_key=gemini_key)
         # Test basic completion
         response = client.models.generate_content(
-            model="gemini-2.0-flash",
+            # gemini-2.0-flash was retired by Google (404 on every call) —
+            # see ai/providers/gemini.py for the full explanation.
+            model="gemini-3.6-flash",
             contents="Say 'OK'"
         )
         report.append(format_result("Gemini", True, True, "200", "None", "Healthy", False, True))
