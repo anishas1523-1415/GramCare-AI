@@ -15,8 +15,10 @@ import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Landmark, ShieldCheck } from 'lucide-react';
 import api from '../../../lib/api';
+import { useLocale } from '../../../contexts/LocaleContext';
 
 export default function GovernmentRegisterPage() {
+  const { t } = useLocale();
   const [username, setUsername] = useState('');
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
@@ -31,7 +33,7 @@ export default function GovernmentRegisterPage() {
     setError('');
 
     if (password !== confirmPassword) {
-      setError('Passwords do not match.');
+      setError(t('passwords_dont_match'));
       return;
     }
 
@@ -53,7 +55,7 @@ export default function GovernmentRegisterPage() {
       setError(
         typeof message === 'string'
           ? message
-          : 'Registration failed. Please check your details and try again.'
+          : t('registration_failed_web')
       );
     } finally {
       setSubmitting(false);
@@ -76,10 +78,9 @@ export default function GovernmentRegisterPage() {
           <div className="w-14 h-14 rounded-full bg-purple-500/15 flex items-center justify-center mb-3">
             <Landmark className="text-purple-500" size={26} />
           </div>
-          <h1 className="text-2xl font-bold text-[var(--foreground)]">Government Portal Access</h1>
+          <h1 className="text-2xl font-bold text-[var(--foreground)]">{t('gov_portal_access')}</h1>
           <p className="text-sm text-gray-500 mt-2 max-w-xs">
-            Restricted to pre-authorized health-authority email addresses. Registration will be
-            rejected if your email hasn&apos;t been whitelisted by an existing administrator.
+            {t('gov_portal_restricted_note')}
           </p>
         </div>
 
@@ -87,16 +88,16 @@ export default function GovernmentRegisterPage() {
           <div className="text-center space-y-4">
             <ShieldCheck className="mx-auto text-emerald-500" size={40} />
             <p className="text-gray-500">
-              Account created. We&apos;ve sent a verification link to <strong>{email}</strong> — sign in once you&apos;ve clicked it.
+              {t('gov_account_created_prefix')} <strong>{email}</strong> — {t('gov_account_created_suffix')}
             </p>
             <a href="/login" className="neu-button inline-block px-6 py-3 bg-purple-500 text-white font-bold rounded-xl">
-              Go to Sign In
+              {t('go_to_sign_in')}
             </a>
           </div>
         ) : (
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label htmlFor="gov-fullname" className="block text-sm font-semibold mb-2">Full Name</label>
+            <label htmlFor="gov-fullname" className="block text-sm font-semibold mb-2">{t('full_name_label')}</label>
             <input
               id="gov-fullname"
               required
@@ -108,7 +109,7 @@ export default function GovernmentRegisterPage() {
             />
           </div>
           <div>
-            <label htmlFor="gov-username" className="block text-sm font-semibold mb-2">Username</label>
+            <label htmlFor="gov-username" className="block text-sm font-semibold mb-2">{t('username')}</label>
             <input
               id="gov-username"
               required
@@ -121,7 +122,7 @@ export default function GovernmentRegisterPage() {
             />
           </div>
           <div>
-            <label htmlFor="gov-email" className="block text-sm font-semibold mb-2">Authorized Email</label>
+            <label htmlFor="gov-email" className="block text-sm font-semibold mb-2">{t('authorized_email')}</label>
             <input
               id="gov-email"
               required
@@ -133,7 +134,7 @@ export default function GovernmentRegisterPage() {
             />
           </div>
           <div>
-            <label htmlFor="gov-password" className="block text-sm font-semibold mb-2">Password</label>
+            <label htmlFor="gov-password" className="block text-sm font-semibold mb-2">{t('password')}</label>
             <input
               id="gov-password"
               required
@@ -144,10 +145,10 @@ export default function GovernmentRegisterPage() {
               autoComplete="new-password"
               className="w-full p-3 rounded-xl bg-white/50 dark:bg-black/20 border border-white/20 focus:ring-2 focus:ring-purple-400 focus:outline-none"
             />
-            <p className="text-xs text-gray-500 mt-1">Minimum 8 characters.</p>
+            <p className="text-xs text-gray-500 mt-1">{t('min_8_chars')}</p>
           </div>
           <div>
-            <label htmlFor="gov-confirm-password" className="block text-sm font-semibold mb-2">Confirm Password</label>
+            <label htmlFor="gov-confirm-password" className="block text-sm font-semibold mb-2">{t('confirm_password')}</label>
             <input
               id="gov-confirm-password"
               required
@@ -169,14 +170,14 @@ export default function GovernmentRegisterPage() {
             disabled={submitting}
             className="neu-button w-full py-3 bg-purple-500 text-white font-bold rounded-xl disabled:opacity-50 flex items-center justify-center gap-2"
           >
-            <ShieldCheck size={18} /> {submitting ? 'Verifying…' : 'Register Government Account'}
+            <ShieldCheck size={18} /> {submitting ? t('verifying_ellipsis') : t('register_gov_account')}
           </button>
         </form>
         )}
 
         <p className="text-center text-sm text-gray-500 mt-6">
-          Not a government official?{' '}
-          <a href="/login" className="text-indigo-500 font-semibold hover:underline">Go to the main sign-in</a>
+          {t('not_a_gov_official')}{' '}
+          <a href="/login" className="text-indigo-500 font-semibold hover:underline">{t('go_to_main_signin')}</a>
         </p>
       </motion.div>
     </div>

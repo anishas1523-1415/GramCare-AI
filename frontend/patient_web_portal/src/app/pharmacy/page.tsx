@@ -10,12 +10,14 @@ import { motion } from 'framer-motion';
 import { Pill, Search, MapPin, Phone, CheckCircle2, XCircle, Landmark, PackagePlus } from 'lucide-react';
 import api from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
+import { useLocale } from '../../contexts/LocaleContext';
 import type { NearbyPharmacyResult } from '../../types';
 import { APIProvider, Map, Marker } from '@vis.gl/react-google-maps';
 import { SkeletonList } from '../../components/Skeleton';
 
 export default function PharmacySearch() {
   const { user } = useAuth();
+  const { t } = useLocale();
   const [medicine, setMedicine] = useState('');
   const [results, setResults] = useState<NearbyPharmacyResult[] | null>(null);
   const [loading, setLoading] = useState(false);
@@ -32,7 +34,7 @@ export default function PharmacySearch() {
       });
       setPreorderedIds((prev) => new Set(prev).add(pharmacyId));
     } catch {
-      setError('Could not place the pre-order. Please try again.');
+      setError(t('preorder_failed'));
     }
   };
 
@@ -62,8 +64,8 @@ export default function PharmacySearch() {
     } catch (err) {
       const status = (err as { response?: { status?: number } })?.response?.status;
       setError(status === 401
-        ? 'Please log in to search pharmacies.'
-        : 'Search failed. Please try again.');
+        ? t('please_login_pharmacy_search')
+        : t('pharmacy_search_failed'));
     } finally {
       setLoading(false);
     }
@@ -72,7 +74,7 @@ export default function PharmacySearch() {
   if (!user) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <p className="text-xl text-gray-500">Please log in to find medicines nearby.</p>
+        <p className="text-xl text-gray-500">{t('please_login_find_medicines')}</p>
       </div>
     );
   }
@@ -86,10 +88,10 @@ export default function PharmacySearch() {
 
       <div className="max-w-3xl mx-auto">
         <h1 className="text-4xl font-extrabold flex items-center gap-3 mb-2">
-          <Pill className="text-emerald-500" size={40} /> Find Medicine
+          <Pill className="text-emerald-500" size={40} /> {t('nav_find_medicine')}
         </h1>
         <p className="text-gray-500 mb-8">
-          Check which nearby pharmacy has your medicine before travelling.
+          {t('find_medicine_subtitle')}
         </p>
 
         <div className="flex gap-3 mb-8">
@@ -98,7 +100,7 @@ export default function PharmacySearch() {
             value={medicine}
             onChange={(e) => setMedicine(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && search()}
-            placeholder="Medicine name, e.g. Paracetamol"
+            placeholder={t('medicine_name_hint')}
             aria-label="Medicine name"
             className="flex-1 p-4 rounded-xl bg-white/50 dark:bg-black/20 border border-white/30 focus:ring-2 focus:ring-emerald-400 outline-none"
           />
@@ -107,7 +109,7 @@ export default function PharmacySearch() {
             disabled={loading || medicine.trim().length < 2}
             className="neu-button px-6 bg-emerald-500 text-white font-bold rounded-xl flex items-center gap-2 disabled:opacity-40"
           >
-            <Search size={18} /> {loading ? 'Searching…' : 'Search'}
+            <Search size={18} /> {loading ? t('searching_ellipsis') : t('search_button')}
           </button>
         </div>
 
@@ -118,11 +120,11 @@ export default function PharmacySearch() {
         {!loading && results !== null && (
           <>
             <p className="text-sm text-gray-500 mb-4">
-              {usedLocation ? 'Sorted by distance from your location.' : 'Location off — showing all registered pharmacies.'}
+              {usedLocation ? t('sorted_by_distance') : t('location_off_all_pharmacies')}
             </p>
             {results.length === 0 ? (
               <div className="glass-panel p-10 text-center text-gray-500">
-                No pharmacies found. Try a different spelling.
+                {t('no_pharmacies_found')}
               </div>
             ) : (
               <div className="space-y-4">
@@ -167,7 +169,7 @@ export default function PharmacySearch() {
                           {r.pharmacy_name}
                           {r.is_jan_aushadhi && (
                             <span className="flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-full bg-blue-500/15 text-blue-600">
-                              <Landmark size={12} /> Jan Aushadhi
+                              <Landmark size={12} /> {t('jan_aushadhi')}
                             </span>
                           )}
                         </h3>
@@ -184,11 +186,11 @@ export default function PharmacySearch() {
                       <div className="text-right">
                         {r.available ? (
                           <span className="flex items-center gap-1 text-emerald-600 font-bold">
-                            <CheckCircle2 size={18} /> In stock
+                            <CheckCircle2 size={18} /> {t('in_stock')}
                           </span>
                         ) : (
                           <span className="flex items-center gap-1 text-red-500 font-bold">
-                            <XCircle size={18} /> Not available
+                            <XCircle size={18} /> {t('not_available')}
                           </span>
                         )}
                         {r.available && r.price != null && (
@@ -199,7 +201,7 @@ export default function PharmacySearch() {
 
                     {!r.available && r.substitutes.length > 0 && (
                       <div className="mt-3 p-3 rounded-xl bg-emerald-500/10 text-sm">
-                        <span className="font-bold text-emerald-700">Same-effect alternatives here: </span>
+                        <span className="font-bold text-emerald-700">{t('alternatives')}: </span>
                         {r.substitutes.join(', ')}
                       </div>
                     )}
@@ -211,7 +213,7 @@ export default function PharmacySearch() {
                         className="mt-3 w-full py-2 rounded-xl border border-indigo-400 text-indigo-500 font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:border-gray-300 disabled:text-gray-400 hover:bg-indigo-500/10 transition-colors"
                       >
                         <PackagePlus size={16} />
-                        {preorderedIds.has(r.pharmacy_id) ? 'Pre-ordered — we\'ll notify you' : 'Pre-order for when restocked'}
+                        {preorderedIds.has(r.pharmacy_id) ? t('preordered_notify') : t('preorder_cta')}
                       </button>
                     )}
                   </motion.div>
