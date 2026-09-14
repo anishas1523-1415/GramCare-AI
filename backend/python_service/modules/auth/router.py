@@ -186,28 +186,35 @@ async def register_user(
     # created — the same phone must have completed /auth/phone/verify-otp
     # within the last 15 minutes. PATIENT/PHARMACIST/LAB don't require this
     # (keeps rural patient self-service low-friction).
+    #
+    # TEMPORARILY DISABLED (2026-09): the OTP delivery path (MSG91) and the
+    # email-verification path this gate depends on downstream haven't been
+    # confirmed end-to-end working yet — enforcing this right now just
+    # locks every DOCTOR/HOSPITAL registration out with no way to unblock.
+    # Re-enable by restoring the `if user.role in (...)` block below once
+    # OTP + email delivery are both confirmed working.
     phone_verified = False
-    if user.role in ("DOCTOR", "HOSPITAL"):
-        if not user.phone:
-            raise HTTPException(status_code=400, detail="A verified phone number is required for this role.")
-        from datetime import datetime, timezone, timedelta
-        recent_cutoff = datetime.now(timezone.utc) - timedelta(minutes=15)
-        verified_otp = (
-            db.query(models.PhoneOTP)
-            .filter(
-                models.PhoneOTP.phone == user.phone,
-                models.PhoneOTP.is_used == True,  # noqa: E712
-                models.PhoneOTP.created_at >= recent_cutoff.replace(tzinfo=None),
-            )
-            .order_by(models.PhoneOTP.created_at.desc())
-            .first()
-        )
-        if not verified_otp:
-            raise HTTPException(
-                status_code=400,
-                detail="Please verify this phone number with an OTP before registering.",
-            )
-        phone_verified = True
+    # if user.role in ("DOCTOR", "HOSPITAL"):
+    #     if not user.phone:
+    #         raise HTTPException(status_code=400, detail="A verified phone number is required for this role.")
+    #     from datetime import datetime, timezone, timedelta
+    #     recent_cutoff = datetime.now(timezone.utc) - timedelta(minutes=15)
+    #     verified_otp = (
+    #         db.query(models.PhoneOTP)
+    #         .filter(
+    #             models.PhoneOTP.phone == user.phone,
+    #             models.PhoneOTP.is_used == True,  # noqa: E712
+    #             models.PhoneOTP.created_at >= recent_cutoff.replace(tzinfo=None),
+    #         )
+    #         .order_by(models.PhoneOTP.created_at.desc())
+    #         .first()
+    #     )
+    #     if not verified_otp:
+    #         raise HTTPException(
+    #             status_code=400,
+    #             detail="Please verify this phone number with an OTP before registering.",
+    #         )
+    #     phone_verified = True
 
     hashed_password = get_password_hash(user.password)
     new_user = models.User(
@@ -390,11 +397,18 @@ def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db
     # PATIENT stays ungated (low-friction rural self-service); every other
     # role can approve doctors, dispense medicine, issue lab reports, or
     # run emergency response, so email ownership must be proven first.
-    if user.role != "PATIENT" and not user.is_verified:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Please verify your email before signing in. Check your inbox for a verification link, or request a new one.",
-        )
+    #
+    # TEMPORARILY DISABLED (2026-09): the verification email this gate
+    # depends on can't actually be delivered right now (Resend's sending
+    # domain — gramcare.is-a.dev — failed DNS verification), so this was
+    # locking every non-PATIENT account out with no way to unblock, not
+    # actually proving anything. Re-enable this check once real email
+    # delivery is confirmed working end-to-end.
+    # if user.role != "PATIENT" and not user.is_verified:
+    #     raise HTTPException(
+    #         status_code=status.HTTP_403_FORBIDDEN,
+    #         detail="Please verify your email before signing in. Check your inbox for a verification link, or request a new one.",
+    #     )
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={"sub": user.username, "role": user.role}, expires_delta=access_token_expires
