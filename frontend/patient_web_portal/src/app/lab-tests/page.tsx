@@ -16,6 +16,7 @@ import {
 import { useEffect, useState } from "react";
 import { useAuth } from "../../contexts/AuthContext";
 import { useProfile } from "../../contexts/ProfileContext";
+import { useLocale } from "../../contexts/LocaleContext";
 import ThemedLoader from "../../components/ThemedLoader";
 import api from "../../lib/api";
 import type { LabTestInfo, LabCenterResponse, LabBookingResponse } from "../../types";
@@ -32,18 +33,19 @@ const STATUS_STYLE: Record<LabBookingResponse["status"], string> = {
   CANCELLED: "bg-red-500/15 text-red-500 border-red-500/30",
 };
 
-const STATUS_LABEL: Record<LabBookingResponse["status"], string> = {
-  BOOKED: "Booked",
-  SAMPLE_COLLECTED: "Sample Collected",
-  PROCESSING: "Processing",
-  REPORT_READY: "Report Ready",
-  COMPLETED: "Completed",
-  CANCELLED: "Cancelled",
+const STATUS_LABEL_KEY: Record<LabBookingResponse["status"], string> = {
+  BOOKED: "lab_status_booked",
+  SAMPLE_COLLECTED: "lab_status_sample_collected",
+  PROCESSING: "lab_status_processing",
+  REPORT_READY: "lab_status_report_ready",
+  COMPLETED: "lab_status_completed",
+  CANCELLED: "lab_status_cancelled",
 };
 
 export default function LabTestsPage() {
   const { user } = useAuth();
   const { profiles, activeProfile } = useProfile();
+  const { t } = useLocale();
 
   const [tab, setTab] = useState<Tab>("book");
 
@@ -74,7 +76,7 @@ export default function LabTestsPage() {
       const res = await api.get<LabTestInfo[]>("/lab/tests", { params: q ? { query: q } : {} });
       setTests(res.data);
     } catch {
-      setError("Could not load the test catalog.");
+      setError(t("could_not_load_test_catalog"));
     } finally {
       setLoading(false);
     }
@@ -87,7 +89,7 @@ export default function LabTestsPage() {
       const res = await api.get<LabCenterResponse[]>("/lab/centers");
       setCenters(res.data);
     } catch {
-      setError("Could not load nearby lab centers.");
+      setError(t("could_not_load_lab_centers"));
     } finally {
       setLoading(false);
     }
@@ -103,7 +105,7 @@ export default function LabTestsPage() {
       setBookings(bookingsRes.data);
       setCenterNames(Object.fromEntries(centersRes.data.map((c) => [c.id, c.name])));
     } catch {
-      setError("Could not load your bookings.");
+      setError(t("could_not_load_bookings"));
     } finally {
       setBookingsLoading(false);
     }
@@ -145,7 +147,7 @@ export default function LabTestsPage() {
       setStep("done");
     } catch (err) {
       const message = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
-      setError(typeof message === "string" ? message : "Could not book this test. Please try again.");
+      setError(typeof message === "string" ? message : t("could_not_book_test"));
     } finally {
       setBooking(false);
     }
@@ -165,14 +167,14 @@ export default function LabTestsPage() {
       await api.put(`/lab/bookings/${id}/complete`);
       loadBookings();
     } catch {
-      setError("Could not update this booking.");
+      setError(t("could_not_update_booking"));
     }
   };
 
   if (!user) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <p className="text-xl text-gray-500">Please log in to book a lab test.</p>
+        <p className="text-xl text-gray-500">{t("please_login_lab_test")}</p>
       </div>
     );
   }
@@ -187,10 +189,10 @@ export default function LabTestsPage() {
         <div className="absolute inset-0 bg-gradient-to-br from-violet-500/5 to-teal-400/5 z-0" />
         <div className="relative z-10">
           <h1 className="text-3xl font-extrabold mb-1 flex items-center gap-3">
-            <FlaskConical className="text-violet-500" /> Lab Tests
+            <FlaskConical className="text-violet-500" /> {t("nav_lab_tests")}
           </h1>
           <p className="text-gray-500 mb-6">
-            Book a diagnostic test at a nearby lab, with or without home sample collection.
+            {t("lab_tests_subtitle")}
           </p>
 
           <div className="flex gap-2 mb-8">
@@ -199,14 +201,14 @@ export default function LabTestsPage() {
               onClick={() => setTab("book")}
               className={`flex-1 py-2.5 rounded-xl font-bold text-sm transition-colors ${tab === "book" ? "bg-violet-500 text-white" : "neu-button"}`}
             >
-              Book a Test
+              {t("book_a_test_tab")}
             </button>
             <button
               type="button"
               onClick={() => setTab("mine")}
               className={`flex-1 py-2.5 rounded-xl font-bold text-sm transition-colors ${tab === "mine" ? "bg-violet-500 text-white" : "neu-button"}`}
             >
-              My Bookings
+              {t("my_bookings_tab")}
             </button>
           </div>
 
@@ -216,14 +218,14 @@ export default function LabTestsPage() {
             <>
               {step === "test" && (
                 loading ? (
-                  <ThemedLoader variant="lab" label="Loading the test catalog…" />
+                  <ThemedLoader variant="lab" label={t("loading_test_catalog")} />
                 ) : (
                   <div>
                     <div className="relative mb-4">
                       <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                       <input
                         type="text"
-                        placeholder="Search tests (e.g. blood sugar, thyroid, X-ray)…"
+                        placeholder={t("search_tests_placeholder")}
                         value={query}
                         onChange={(e) => setQuery(e.target.value)}
                         onKeyDown={(e) => { if (e.key === "Enter") loadTests(query); }}
@@ -247,7 +249,7 @@ export default function LabTestsPage() {
                         </button>
                       ))}
                       {tests.length === 0 && (
-                        <p className="text-center text-gray-400 py-8">No tests match your search.</p>
+                        <p className="text-center text-gray-400 py-8">{t("no_tests_match_search")}</p>
                       )}
                     </div>
                   </div>
@@ -261,14 +263,14 @@ export default function LabTestsPage() {
                     onClick={() => setStep("test")}
                     className="flex items-center gap-1.5 text-sm font-semibold text-gray-500 hover:text-violet-500 mb-4"
                   >
-                    <ArrowLeft size={15} /> Back to tests
+                    <ArrowLeft size={15} /> {t("back_to_tests")}
                   </button>
                   <div className="mb-4 p-3 rounded-xl bg-violet-500/10 border border-violet-500/20">
                     <p className="font-bold">{selectedTest.name}</p>
                     <p className="text-xs text-gray-500">{selectedTest.prep_instructions}</p>
                   </div>
                   {loading ? (
-                    <ThemedLoader variant="lab" label="Finding nearby lab centers…" />
+                    <ThemedLoader variant="lab" label={t("finding_lab_centers")} />
                   ) : (
                     <div className="space-y-3 max-h-[380px] overflow-y-auto pr-1">
                       {centers.map((c) => (
@@ -283,7 +285,7 @@ export default function LabTestsPage() {
                               {c.name}
                               {c.offers_home_collection && (
                                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-teal-500/15 text-teal-500 border border-teal-500/30 flex items-center gap-1">
-                                  <HomeIcon size={10} /> Home collection
+                                  <HomeIcon size={10} /> {t("home_collection_badge")}
                                 </span>
                               )}
                             </p>
@@ -302,7 +304,7 @@ export default function LabTestsPage() {
                         </button>
                       ))}
                       {centers.length === 0 && (
-                        <p className="text-center text-gray-400 py-8">No active lab centers found yet.</p>
+                        <p className="text-center text-gray-400 py-8">{t("no_active_lab_centers")}</p>
                       )}
                     </div>
                   )}
@@ -316,23 +318,23 @@ export default function LabTestsPage() {
                     onClick={() => setStep("center")}
                     className="flex items-center gap-1.5 text-sm font-semibold text-gray-500 hover:text-violet-500 mb-4"
                   >
-                    <ArrowLeft size={15} /> Back to lab centers
+                    <ArrowLeft size={15} /> {t("back_to_lab_centers")}
                   </button>
 
                   <div className="neu-panel p-4 mb-4">
                     <p className="font-bold">{selectedTest.name}</p>
-                    <p className="text-sm text-gray-500">at {selectedCenter.name}</p>
+                    <p className="text-sm text-gray-500">{t("at_lab_center_prefix")} {selectedCenter.name}</p>
                   </div>
 
                   {profiles.length > 0 && (
                     <div className="mb-4">
-                      <label className="text-sm font-semibold block mb-1.5">Who is this test for?</label>
+                      <label className="text-sm font-semibold block mb-1.5">{t("who_is_test_for")}</label>
                       <select
                         value={forProfileId}
                         onChange={(e) => setForProfileId(e.target.value === "" ? "" : Number(e.target.value))}
                         className="w-full p-3 rounded-xl bg-white/50 dark:bg-black/20 border border-white/30 focus:outline-none focus:ring-2 focus:ring-violet-400"
                       >
-                        <option value="">Myself</option>
+                        <option value="">{t("myself")}</option>
                         {profiles.map((p) => (
                           <option key={p.id} value={p.id}>{p.full_name} ({p.relation})</option>
                         ))}
@@ -349,13 +351,13 @@ export default function LabTestsPage() {
                         className="w-4 h-4 accent-teal-500"
                       />
                       <span className="text-sm font-semibold flex items-center gap-1.5">
-                        <HomeIcon size={15} className="text-teal-500" /> Collect the sample at home instead of visiting the lab
+                        <HomeIcon size={15} className="text-teal-500" /> {t("collect_sample_home")}
                       </span>
                     </label>
                   )}
 
                   <div className="mb-4">
-                    <label className="text-sm font-semibold block mb-1.5">Preferred date &amp; time (optional)</label>
+                    <label className="text-sm font-semibold block mb-1.5">{t("preferred_datetime_optional")}</label>
                     <input
                       type="datetime-local"
                       value={scheduledAt}
@@ -365,12 +367,12 @@ export default function LabTestsPage() {
                   </div>
 
                   <div className="mb-6">
-                    <label className="text-sm font-semibold block mb-1.5">Notes (optional)</label>
+                    <label className="text-sm font-semibold block mb-1.5">{t("notes_optional")}</label>
                     <textarea
                       rows={2}
                       value={notes}
                       onChange={(e) => setNotes(e.target.value)}
-                      placeholder="Anything the lab should know…"
+                      placeholder={t("lab_notes_placeholder")}
                       className="w-full p-3 rounded-xl bg-white/50 dark:bg-black/20 border border-white/30 focus:outline-none focus:ring-2 focus:ring-violet-400 resize-none"
                     />
                   </div>
@@ -381,7 +383,7 @@ export default function LabTestsPage() {
                     disabled={booking}
                     className="neu-button w-full py-3 bg-violet-500 text-white font-bold rounded-xl disabled:opacity-50"
                   >
-                    {booking ? "Booking…" : "Confirm Booking"}
+                    {booking ? t("booking_ellipsis") : t("confirm_booking")}
                   </button>
                 </div>
               )}
@@ -389,18 +391,18 @@ export default function LabTestsPage() {
               {step === "done" && (
                 <div className="text-center py-10">
                   <CheckCircle size={48} className="text-emerald-500 mx-auto mb-4" />
-                  <h2 className="text-xl font-bold mb-2">Test booked!</h2>
-                  <p className="text-gray-500 mb-6">The lab will update the status as your sample moves through the process.</p>
+                  <h2 className="text-xl font-bold mb-2">{t("test_booked")}</h2>
+                  <p className="text-gray-500 mb-6">{t("test_booked_note")}</p>
                   <div className="flex gap-3 justify-center">
                     <button type="button" onClick={resetBooking} className="neu-button px-5 py-2.5 font-bold rounded-xl">
-                      Book another
+                      {t("book_another")}
                     </button>
                     <button
                       type="button"
                       onClick={() => { setTab("mine"); resetBooking(); }}
                       className="neu-button px-5 py-2.5 bg-violet-500 text-white font-bold rounded-xl"
                     >
-                      View My Bookings
+                      {t("view_my_bookings")}
                     </button>
                   </div>
                 </div>
@@ -410,9 +412,9 @@ export default function LabTestsPage() {
 
           {tab === "mine" && (
             bookingsLoading ? (
-              <ThemedLoader variant="lab" label="Loading your bookings…" />
+              <ThemedLoader variant="lab" label={t("loading_your_bookings")} />
             ) : bookings.length === 0 ? (
-              <p className="text-center text-gray-400 py-12">No lab tests booked yet.</p>
+              <p className="text-center text-gray-400 py-12">{t("no_lab_tests_booked")}</p>
             ) : (
               <div className="space-y-4">
                 {bookings.map((b) => (
@@ -423,12 +425,12 @@ export default function LabTestsPage() {
                         <p className="text-xs text-gray-500">{centerNames[b.lab_center_id] || `Lab #${b.lab_center_id}`}</p>
                       </div>
                       <span className={`shrink-0 px-2.5 py-1 rounded-full text-xs font-bold border ${STATUS_STYLE[b.status]}`}>
-                        {STATUS_LABEL[b.status]}
+                        {t(STATUS_LABEL_KEY[b.status])}
                       </span>
                     </div>
                     <div className="flex flex-wrap items-center gap-3 text-xs text-gray-400">
                       {b.home_collection && (
-                        <span className="flex items-center gap-1"><HomeIcon size={12} /> Home collection</span>
+                        <span className="flex items-center gap-1"><HomeIcon size={12} /> {t("home_collection_badge")}</span>
                       )}
                       {b.scheduled_at && (
                         <span className="flex items-center gap-1"><Clock size={12} /> {new Date(b.scheduled_at).toLocaleString()}</span>
@@ -438,7 +440,7 @@ export default function LabTestsPage() {
                     {(b.status === "REPORT_READY" || b.status === "COMPLETED") && b.report_payload && (
                       <div className="mt-3 pt-3 border-t border-white/10">
                         <p className="text-sm font-bold flex items-center gap-1.5 mb-2">
-                          <FileText size={14} className="text-teal-500" /> Report
+                          <FileText size={14} className="text-teal-500" /> {t("report_label")}
                         </p>
                         {b.report_payload.summary && (
                           <p className="text-sm text-gray-600 dark:text-gray-300 mb-2">{b.report_payload.summary}</p>
@@ -456,7 +458,7 @@ export default function LabTestsPage() {
                         )}
                         {b.report_payload.file_url && (
                           <a href={b.report_payload.file_url} target="_blank" rel="noreferrer" className="text-xs font-bold text-violet-500 hover:underline">
-                            View full report file
+                            {t("view_full_report_file")}
                           </a>
                         )}
                         {b.status === "REPORT_READY" && (
@@ -465,7 +467,7 @@ export default function LabTestsPage() {
                             onClick={() => markViewed(b.id)}
                             className="mt-3 w-full neu-button py-2 text-sm font-bold rounded-lg"
                           >
-                            Mark as viewed
+                            {t("mark_as_viewed")}
                           </button>
                         )}
                       </div>
