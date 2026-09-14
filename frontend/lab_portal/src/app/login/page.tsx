@@ -7,7 +7,7 @@ import { LogIn, UserPlus, FlaskConical } from 'lucide-react';
 import api from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
 
-type Mode = 'login' | 'register';
+type Mode = 'login' | 'register' | 'forgot';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -19,6 +19,7 @@ export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [fullName, setFullName] = useState('');
   const [error, setError] = useState('');
+  const [info, setInfo] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   const doLogin = async (loginUsername: string, loginPassword: string) => {
@@ -45,9 +46,15 @@ export default function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setInfo('');
     setSubmitting(true);
 
     try {
+      if (mode === 'forgot') {
+        await api.post('/auth/forgot-password', { email });
+        setInfo('If that email has an account, a password reset link is on its way.');
+        return;
+      }
       if (mode === 'register') {
         await api.post('/auth/register', {
           username,
@@ -70,7 +77,9 @@ export default function LoginPage() {
             ? message
             : mode === 'login'
               ? 'Invalid username or password.'
-              : 'Registration failed. Please check your details and try again.'
+              : mode === 'forgot'
+                ? 'Could not send the reset link. Please try again.'
+                : 'Registration failed. Please check your details and try again.'
         );
       }
     } finally {
@@ -90,20 +99,24 @@ export default function LoginPage() {
           <h1 className="text-3xl font-bold text-center text-[var(--foreground)]">GramCare Lab</h1>
         </div>
         <p className="text-center text-gray-500 mb-8">
-          {mode === 'login' ? 'Sign in to your laboratory portal.' : 'Register your diagnostic center.'}
+          {mode === 'login'
+            ? 'Sign in to your laboratory portal.'
+            : mode === 'register'
+              ? 'Register your diagnostic center.'
+              : "Enter your account email and we'll send a reset link."}
         </p>
 
         <div className="flex mb-8 rounded-xl bg-white/40 dark:bg-black/40 p-1 border border-white/20">
           <button
             type="button"
-            onClick={() => { setMode('login'); setError(''); }}
+            onClick={() => { setMode('login'); setError(''); setInfo(''); }}
             className={`flex-1 py-2 rounded-lg font-semibold flex items-center justify-center gap-2 transition-colors ${mode === 'login' ? 'bg-[var(--primary)] text-white' : 'text-gray-500'}`}
           >
             <LogIn size={16} /> Sign In
           </button>
           <button
             type="button"
-            onClick={() => { setMode('register'); setError(''); }}
+            onClick={() => { setMode('register'); setError(''); setInfo(''); }}
             className={`flex-1 py-2 rounded-lg font-semibold flex items-center justify-center gap-2 transition-colors ${mode === 'register' ? 'bg-purple-500 text-white' : 'text-gray-500'}`}
           >
             <UserPlus size={16} /> Register
@@ -111,8 +124,11 @@ export default function LoginPage() {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {mode !== 'forgot' && (
           <div>
-            <label className="block text-sm font-semibold mb-2">Username</label>
+            <label className="block text-sm font-semibold mb-2">
+              {mode === 'login' ? 'Username or Email' : 'Username'}
+            </label>
             <input
               required
               type="text"
@@ -123,6 +139,21 @@ export default function LoginPage() {
               className="w-full p-3 rounded-xl bg-white/50 dark:bg-black/20 border border-white/20 focus:ring-2 focus:ring-[var(--primary)] focus:outline-none"
             />
           </div>
+          )}
+
+          {mode === 'forgot' && (
+            <div>
+              <label className="block text-sm font-semibold mb-2">Email</label>
+              <input
+                required
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                autoComplete="email"
+                className="w-full p-3 rounded-xl bg-white/50 dark:bg-black/20 border border-white/20 focus:ring-2 focus:ring-[var(--primary)] focus:outline-none"
+              />
+            </div>
+          )}
 
           {mode === 'register' && (
             <>
@@ -151,6 +182,7 @@ export default function LoginPage() {
             </>
           )}
 
+          {mode !== 'forgot' && (
           <div>
             <label className="block text-sm font-semibold mb-2">Password</label>
             <input
@@ -163,9 +195,13 @@ export default function LoginPage() {
               className="w-full p-3 rounded-xl bg-white/50 dark:bg-black/20 border border-white/20 focus:ring-2 focus:ring-[var(--primary)] focus:outline-none"
             />
           </div>
+          )}
 
           {error && (
             <p role="alert" className="text-red-500 text-sm font-semibold text-center">{error}</p>
+          )}
+          {info && (
+            <p role="status" className="text-emerald-500 text-sm font-semibold text-center">{info}</p>
           )}
 
           <button
@@ -173,8 +209,34 @@ export default function LoginPage() {
             disabled={submitting}
             className="neu-button w-full py-3 bg-[var(--primary)] text-white font-bold rounded-xl disabled:opacity-50"
           >
-            {submitting ? 'Please wait...' : mode === 'login' ? 'Sign In' : 'Create Lab Account'}
+            {submitting
+              ? 'Please wait...'
+              : mode === 'login'
+                ? 'Sign In'
+                : mode === 'register'
+                  ? 'Create Lab Account'
+                  : 'Send Reset Link'}
           </button>
+
+          <p className="text-center text-sm">
+            {mode === 'forgot' ? (
+              <button
+                type="button"
+                onClick={() => { setMode('login'); setError(''); setInfo(''); }}
+                className="text-[var(--primary)] font-semibold hover:underline"
+              >
+                &larr; Back to sign in
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => { setMode('forgot'); setError(''); setInfo(''); }}
+                className="text-gray-500 font-semibold hover:underline"
+              >
+                Forgot password?
+              </button>
+            )}
+          </p>
         </form>
       </motion.div>
     </div>

@@ -50,4 +50,29 @@ services:
       - key: TURN_CREDENTIAL
         sync: false
 
+  # 3. Lab Portal (LAB role)
+  #
+  # The only surface the LAB role has: login/onboarding, the test catalog,
+  # bookings, and report upload (frontend/lab_portal). It was never declared
+  # here, and gramcare-lab.onrender.com does not respond — so labs currently
+  # have no way in at all, even though the app itself is complete and the
+  # backend's /lab endpoints are live.
+  #
+  # NOTE: the patient web portal and the pharmacist dashboard are
+  # deliberately NOT declared here — those are already deployed and
+  # configured outside this blueprint; adding them would fight their
+  # existing setup.
+  - type: web
+    name: gramcare-lab
+    env: node
+    plan: free
+    rootDir: frontend/lab_portal
+    buildCommand: npm install && npm run build
+    startCommand: npm run start -- --port $PORT
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: NEXT_PUBLIC_API_URL
+        value: "https://gramcare-fastapi.onrender.com/api/v1"
+
 
