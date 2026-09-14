@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { Users, Calendar, ShieldAlert, Video, FileText, CheckCircle, Clock, Plus, Trash2, Brain, BarChart3, AlertTriangle, Share2 } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
+import { useLocale } from '../../../contexts/LocaleContext';
 import { useRouter } from 'next/navigation';
 import api from '../../../lib/api';
 import { io } from 'socket.io-client';
@@ -24,6 +25,7 @@ interface AssistSummary {
 /** AI Doctor Assistant panel — the planning doc's pre-consultation summary
  * ("டாக்டர்ஸ் பேஷன்ட்ட பாக்குறதுக்கு முன்னாடியே... சம்மரி ரிப்போர்ட்"). */
 function AssistPanel({ patientId, familyProfileId }: { patientId: number; familyProfileId?: number | null }) {
+  const { t } = useLocale();
   const [summary, setSummary] = useState<AssistSummary | null>(null);
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
@@ -51,35 +53,35 @@ function AssistPanel({ patientId, familyProfileId }: { patientId: number; family
         onClick={load}
         className="mt-2 flex items-center gap-2 text-sm font-semibold text-purple-600 hover:text-purple-800"
       >
-        <Brain size={16} /> {open ? 'Hide AI summary' : 'AI pre-consult summary'}
+        <Brain size={16} /> {open ? t('hide_ai_summary') : t('ai_preconsult_summary')}
       </button>
       {open && (
         <div className="mt-2 p-3 rounded-xl bg-purple-500/10 border border-purple-500/20 text-sm">
           {loading ? (
-            <span className="text-gray-500">Preparing summary…</span>
+            <span className="text-gray-500">{t('preparing_summary_ellipsis')}</span>
           ) : summary ? (
             <>
               <div className="flex items-center gap-2 mb-1">
                 <span className={`px-2 py-0.5 rounded text-xs font-bold ${summary.risk_flag === 'HIGH' ? 'bg-red-500 text-white' : summary.risk_flag === 'MODERATE' ? 'bg-yellow-500 text-black' : 'bg-green-500 text-white'}`}>
-                  {summary.risk_flag} RISK
+                  {summary.risk_flag} {t('risk_label')}
                 </span>
                 <span className="text-xs text-gray-500">({summary.generated_by})</span>
               </div>
               <p className="mb-2">{summary.summary_text}</p>
               {summary.active_medicines.length > 0 && (
                 <p className="text-xs text-gray-600">
-                  <strong>Active medicines:</strong>{' '}
+                  <strong>{t('active_medicines_label')}:</strong>{' '}
                   {summary.active_medicines.map((m) => `${m.name} (${m.days_remaining}d left)`).join(', ')}
                 </p>
               )}
               {summary.latest_vitals && (
                 <p className="text-xs text-gray-600">
-                  <strong>Latest vitals:</strong> HR {summary.latest_vitals.heart_rate}, SpO2 {summary.latest_vitals.spo2}%, {summary.latest_vitals.temperature}°C
+                  <strong>{t('latest_vitals_label')}:</strong> HR {summary.latest_vitals.heart_rate}, SpO2 {summary.latest_vitals.spo2}%, {summary.latest_vitals.temperature}°C
                 </p>
               )}
             </>
           ) : (
-            <span className="text-gray-500">No summary available for this patient.</span>
+            <span className="text-gray-500">{t('no_summary_available')}</span>
           )}
         </div>
       )}
@@ -91,6 +93,7 @@ function AssistPanel({ patientId, familyProfileId }: { patientId: number; family
  * (planning doc: bookings only happen inside the doctor's published
  * calendar). */
 function SlotManager({ doctorId }: { doctorId: number }) {
+  const { t } = useLocale();
   const [slots, setSlots] = useState<Slot[]>([]);
   const [newStart, setNewStart] = useState('');
   const [error, setError] = useState('');
@@ -103,9 +106,9 @@ function SlotManager({ doctorId }: { doctorId: number }) {
       });
       setSlots(res.data);
     } catch {
-      setError('Could not load your schedule.');
+      setError(t('could_not_load_schedule'));
     }
-  }, [doctorId]);
+  }, [doctorId, t]);
 
   useEffect(() => {
     (async () => { await load(); })();
@@ -125,7 +128,7 @@ function SlotManager({ doctorId }: { doctorId: number }) {
       await load();
     } catch (err) {
       const message = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
-      setError(typeof message === 'string' ? message : 'Could not publish the slot.');
+      setError(typeof message === 'string' ? message : t('could_not_publish_slot'));
     } finally {
       setBusy(false);
     }
@@ -137,14 +140,14 @@ function SlotManager({ doctorId }: { doctorId: number }) {
       await load();
     } catch (err) {
       const message = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
-      setError(typeof message === 'string' ? message : 'Could not remove the slot.');
+      setError(typeof message === 'string' ? message : t('could_not_remove_slot'));
     }
   };
 
   return (
     <div className="neu-panel p-6">
       <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-        <Clock className="text-teal-500" /> My Availability
+        <Clock className="text-teal-500" /> {t('my_availability')}
       </h2>
       {error && <p role="alert" className="text-red-500 text-sm font-semibold mb-3">{error}</p>}
 
@@ -168,7 +171,7 @@ function SlotManager({ doctorId }: { doctorId: number }) {
 
       <div className="space-y-2 max-h-64 overflow-y-auto">
         {slots.length === 0 ? (
-          <p className="text-sm text-gray-500">No published slots. Patients cannot book you until you add some.</p>
+          <p className="text-sm text-gray-500">{t('no_published_slots')}</p>
         ) : (
           slots.map((s) => (
             <div key={s.id} className="flex items-center justify-between p-2 rounded-lg bg-white/40 dark:bg-black/30 text-sm">
@@ -179,7 +182,7 @@ function SlotManager({ doctorId }: { doctorId: number }) {
                 })}
               </span>
               {s.is_booked ? (
-                <span className="text-xs font-bold text-indigo-500 bg-indigo-500/10 px-2 py-1 rounded">Booked</span>
+                <span className="text-xs font-bold text-indigo-500 bg-indigo-500/10 px-2 py-1 rounded">{t('booked_label')}</span>
               ) : (
                 <button
                   onClick={() => removeSlot(s.id)}
@@ -209,6 +212,7 @@ const REFERRAL_STATUS_STYLE: Record<Referral['status'], string> = {
  * target specialty). Shows both directions — referrals waiting on this
  * doctor to act, and ones this doctor has sent out. */
 function ReferralsPanel({ doctorId }: { doctorId: number }) {
+  const { t } = useLocale();
   const [tab, setTab] = useState<'incoming' | 'sent'>('incoming');
   const [incoming, setIncoming] = useState<Referral[]>([]);
   const [sent, setSent] = useState<Referral[]>([]);
@@ -227,11 +231,11 @@ function ReferralsPanel({ doctorId }: { doctorId: number }) {
       setIncoming(incRes.data);
       setSent(sentRes.data);
     } catch {
-      setError('Could not load referrals.');
+      setError(t('could_not_load_referrals'));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -246,7 +250,7 @@ function ReferralsPanel({ doctorId }: { doctorId: number }) {
       await load();
     } catch (err) {
       const message = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
-      setError(typeof message === 'string' ? message : 'Could not update this referral.');
+      setError(typeof message === 'string' ? message : t('could_not_update_referral'));
     } finally {
       setBusyId(null);
     }
@@ -257,7 +261,7 @@ function ReferralsPanel({ doctorId }: { doctorId: number }) {
   return (
     <div className="neu-panel p-6">
       <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-        <Share2 className="text-indigo-500" /> Referrals
+        <Share2 className="text-indigo-500" /> {t('referrals_title')}
       </h2>
 
       <div className="flex gap-2 mb-4">
@@ -266,24 +270,24 @@ function ReferralsPanel({ doctorId }: { doctorId: number }) {
           onClick={() => setTab('incoming')}
           className={`flex-1 py-2 rounded-lg text-sm font-bold transition-colors ${tab === 'incoming' ? 'bg-indigo-500 text-white' : 'bg-white/40 dark:bg-black/20'}`}
         >
-          Incoming{incoming.length > 0 ? ` (${incoming.length})` : ''}
+          {t('incoming_label')}{incoming.length > 0 ? ` (${incoming.length})` : ''}
         </button>
         <button
           type="button"
           onClick={() => setTab('sent')}
           className={`flex-1 py-2 rounded-lg text-sm font-bold transition-colors ${tab === 'sent' ? 'bg-indigo-500 text-white' : 'bg-white/40 dark:bg-black/20'}`}
         >
-          Sent
+          {t('sent_label')}
         </button>
       </div>
 
       {error && <p role="alert" className="text-red-500 text-sm font-semibold mb-3">{error}</p>}
 
       {loading ? (
-        <p className="text-sm text-gray-500 text-center py-6">Loading…</p>
+        <p className="text-sm text-gray-500 text-center py-6">{t('loading_ellipsis')}</p>
       ) : list.length === 0 ? (
         <p className="text-sm text-gray-500 text-center py-6">
-          {tab === 'incoming' ? 'No referrals waiting on you.' : "Referrals you've sent will appear here."}
+          {tab === 'incoming' ? t('no_referrals_waiting') : t('sent_referrals_appear_here')}
         </p>
       ) : (
         <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
@@ -295,10 +299,10 @@ function ReferralsPanel({ doctorId }: { doctorId: number }) {
                   {r.status}
                 </span>
               </div>
-              <p className="text-xs text-gray-500 mb-1">Patient #{r.patient_id}</p>
+              <p className="text-xs text-gray-500 mb-1">{t('patient_hash')}{r.patient_id}</p>
               <p className="text-xs text-gray-600 dark:text-gray-300 mb-2">{r.reason}</p>
               {!r.referred_to_doctor_id && r.status === 'PENDING' && (
-                <p className="text-xs text-indigo-500 font-semibold mb-2">Open referral — accepting claims it</p>
+                <p className="text-xs text-indigo-500 font-semibold mb-2">{t('open_referral_note')}</p>
               )}
               {tab === 'incoming' && r.status === 'PENDING' && (
                 <div className="flex gap-2">
@@ -308,7 +312,7 @@ function ReferralsPanel({ doctorId }: { doctorId: number }) {
                     onClick={() => act(r.id, 'accept')}
                     className="flex-1 py-1.5 bg-teal-500 text-white rounded-lg text-xs font-bold disabled:opacity-50"
                   >
-                    Accept
+                    {t('accept_btn')}
                   </button>
                   <button
                     type="button"
@@ -316,7 +320,7 @@ function ReferralsPanel({ doctorId }: { doctorId: number }) {
                     onClick={() => act(r.id, 'decline')}
                     className="flex-1 py-1.5 bg-red-500 text-white rounded-lg text-xs font-bold disabled:opacity-50"
                   >
-                    Decline
+                    {t('decline_btn')}
                   </button>
                 </div>
               )}
@@ -327,7 +331,7 @@ function ReferralsPanel({ doctorId }: { doctorId: number }) {
                   onClick={() => act(r.id, 'complete')}
                   className="w-full py-1.5 bg-emerald-500 text-white rounded-lg text-xs font-bold disabled:opacity-50"
                 >
-                  Mark Complete
+                  {t('mark_complete_btn')}
                 </button>
               )}
             </div>
@@ -340,6 +344,7 @@ function ReferralsPanel({ doctorId }: { doctorId: number }) {
 
 export default function DoctorDashboard() {
   const { user, loading: authLoading } = useAuth();
+  const { t } = useLocale();
   const router = useRouter();
 
   const [appointments, setAppointments] = useState<Appointment[]>([]);
@@ -431,9 +436,9 @@ export default function DoctorDashboard() {
     try {
       await api.put(`/sos/${sosId}/respond`);
       setActiveSOS(activeSOS.filter(sos => sos.id !== sosId));
-      alert("You have responded to the SOS. Routing to patient location...");
+      alert(t('sos_responded_alert'));
     } catch {
-      alert("Failed to respond to SOS.");
+      alert(t('sos_respond_failed_alert'));
     }
   };
 
@@ -442,12 +447,12 @@ export default function DoctorDashboard() {
       await api.put(`/appointments/${apptId}`, { status: "COMPLETED" });
       setAppointments(appointments.filter(app => app.id !== apptId));
     } catch {
-      alert("Failed to complete appointment.");
+      alert(t('appointment_complete_failed_alert'));
     }
   };
 
   if (authLoading) {
-    return <div className="min-h-screen flex items-center justify-center">Loading Doctor Portal...</div>;
+    return <div className="min-h-screen flex items-center justify-center">{t('loading_doctor_portal')}</div>;
   }
 
   if (loading) {
@@ -485,23 +490,22 @@ export default function DoctorDashboard() {
             <Clock className="mx-auto mb-4 text-amber-500" size={48} />
           )}
           <h1 className="text-2xl font-bold mb-2">
-            {isRejected ? 'Application Not Approved' : 'Application Under Review'}
+            {isRejected ? t('application_not_approved') : t('application_under_review')}
           </h1>
           <p className="text-gray-500 mb-4">
             {isRejected
-              ? 'Your doctor account was not approved by the government reviewer.'
-              : 'Your doctor account is pending government verification. You’ll be notified by email once it’s reviewed, and can log in normally after approval.'}
+              ? t('doctor_account_not_approved_note')
+              : t('doctor_account_pending_note')}
           </p>
           {isRejected && rejectionReason && (
             <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-sm text-left mb-4">
-              <strong>Reason:</strong> {rejectionReason}
+              <strong>{t('reason_label')}:</strong> {rejectionReason}
             </div>
           )}
           <p className="text-sm text-gray-500">
-            You can still update your profile details (specialty, qualifications, license number,
-            and license document) from{' '}
-            <a href="/doctor/profile" className="underline text-indigo-500">your profile page</a>{' '}
-            {isRejected ? 'and resubmit for review.' : 'while you wait.'}
+            {t('profile_update_note_prefix')}{' '}
+            <a href="/doctor/profile" className="underline text-indigo-500">{t('your_profile_page_link')}</a>{' '}
+            {isRejected ? t('resubmit_for_review_suffix') : t('while_you_wait_suffix')}
           </p>
         </motion.div>
       </div>
@@ -517,9 +521,9 @@ export default function DoctorDashboard() {
 
       <header className="flex justify-between items-center mb-12">
         <div>
-          <h1 className="text-4xl font-extrabold">Welcome, Dr. {user?.username}</h1>
+          <h1 className="text-4xl font-extrabold">{t('welcome_dr_prefix')} {user?.username}</h1>
           <p className="text-gray-500 mt-1 flex items-center gap-2">
-            Status: {socketConnected ? <span className="text-green-500 font-bold">Online</span> : <span className="text-red-500 font-bold">Offline</span>}
+            {t('status_label')}: {socketConnected ? <span className="text-green-500 font-bold">{t('online_label')}</span> : <span className="text-red-500 font-bold">{t('offline_label')}</span>}
           </p>
         </div>
         <div className="flex gap-4">
@@ -527,7 +531,7 @@ export default function DoctorDashboard() {
             onClick={() => router.push('/doctor/analytics')}
             className="neu-button px-6 py-2 bg-purple-500 text-white font-bold rounded-xl flex items-center gap-2"
           >
-            <BarChart3 size={20} /> Health Intelligence
+            <BarChart3 size={20} /> {t('health_intelligence_btn')}
           </button>
         </div>
       </header>
@@ -536,7 +540,7 @@ export default function DoctorDashboard() {
       {activeSOS.length > 0 && (
         <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="mb-12">
           <h2 className="text-2xl font-bold text-red-500 mb-6 flex items-center gap-2">
-            <ShieldAlert className="animate-pulse" /> Active Emergencies
+            <ShieldAlert className="animate-pulse" /> {t('active_emergencies_title')}
           </h2>
 
           <div className="mb-6 rounded-2xl overflow-hidden border border-red-500/30 h-[300px] w-full">
@@ -568,26 +572,26 @@ export default function DoctorDashboard() {
             {activeSOS.map(sos => (
               <div key={sos.id} className="bg-red-500/10 border border-red-500/30 p-6 rounded-2xl relative overflow-hidden">
                 <div className="absolute top-0 right-0 p-4">
-                  <span className="bg-red-500 text-white text-xs font-bold px-3 py-1 rounded-full animate-pulse">CRITICAL</span>
+                  <span className="bg-red-500 text-white text-xs font-bold px-3 py-1 rounded-full animate-pulse">{t('critical_label')}</span>
                 </div>
-                <h3 className="text-xl font-bold mb-2">SOS from Patient #{sos.patient_id}</h3>
+                <h3 className="text-xl font-bold mb-2">{t('sos_from_patient_prefix')} #{sos.patient_id}</h3>
                 <p className="text-sm text-gray-600 dark:text-gray-300 mb-1">
-                  Location: {sos.location_lat != null
+                  {t('location_label')}: {sos.location_lat != null
                     ? <a className="underline" target="_blank" rel="noreferrer" href={`https://maps.google.com/?q=${sos.location_lat},${sos.location_lng}`}>{sos.location_lat}, {sos.location_lng}</a>
-                    : (sos.location_text || 'Unknown')}
+                    : (sos.location_text || t('unknown_label'))}
                 </p>
                 {sos.voice_note && (
                   <p className="text-sm italic text-gray-700 dark:text-gray-200 mb-1">&ldquo;{sos.voice_note}&rdquo;</p>
                 )}
                 {(sos.escalation_level ?? 0) > 0 && (
-                  <p className="text-xs font-bold text-orange-600 mb-1">Escalated ×{sos.escalation_level} (unanswered)</p>
+                  <p className="text-xs font-bold text-orange-600 mb-1">{t('escalated_label')} ×{sos.escalation_level} ({t('unanswered_label')})</p>
                 )}
-                <p className="text-xs text-gray-500 mb-6">Triggered at: {new Date(sos.created_at).toLocaleTimeString()}</p>
+                <p className="text-xs text-gray-500 mb-6">{t('triggered_at_label')}: {new Date(sos.created_at).toLocaleTimeString()}</p>
                 <button
                   onClick={() => respondToSOS(sos.id)}
                   className="w-full py-3 bg-red-500 hover:bg-red-600 text-white font-bold rounded-xl transition-colors"
                 >
-                  Acknowledge & Respond
+                  {t('acknowledge_respond_btn')}
                 </button>
               </div>
             ))}
@@ -600,18 +604,18 @@ export default function DoctorDashboard() {
 
         {/* Appointment Queue */}
         <div className="lg:col-span-2">
-          <h2 className="text-2xl font-bold mb-6 flex items-center gap-2"><Calendar className="text-teal-500" /> Patient Queue</h2>
+          <h2 className="text-2xl font-bold mb-6 flex items-center gap-2"><Calendar className="text-teal-500" /> {t('patient_queue_title')}</h2>
 
           <div className="glass-panel p-6">
             {appointments.length === 0 ? (
-              <div className="text-center p-10 text-gray-500">No upcoming appointments.</div>
+              <div className="text-center p-10 text-gray-500">{t('no_upcoming_appointments')}</div>
             ) : (
               <div className="space-y-4">
                 {appointments.map((appt) => (
                   <div key={appt.id} className="flex flex-col md:flex-row justify-between items-start md:items-center p-4 bg-white/40 dark:bg-black/40 border border-white/20 rounded-xl">
                     <div className="mb-4 md:mb-0">
                       <div className="flex items-center gap-3 mb-1">
-                        <h3 className="font-bold text-lg">Patient #{appt.patient_id}</h3>
+                        <h3 className="font-bold text-lg">{t('patient_hash')}{appt.patient_id}</h3>
                         <span className="text-xs font-bold bg-teal-500/20 text-teal-500 px-2 py-1 rounded">{appt.status}</span>
                         {/* Predictive Risk Stratification (planning doc): the
                             queue itself is already severity-sorted server-side —
@@ -622,12 +626,12 @@ export default function DoctorDashboard() {
                               ? 'bg-red-500 text-white animate-pulse'
                               : 'bg-orange-500 text-white'
                           }`}>
-                            <AlertTriangle size={12} /> Risk {appt.triage_severity_score}/100
+                            <AlertTriangle size={12} /> {t('risk_label')} {appt.triage_severity_score}/100
                           </span>
                         )}
                       </div>
-                      <p className="text-sm text-gray-500">Scheduled: {new Date(appt.scheduled_at).toLocaleString()}</p>
-                      {appt.triage_summary && <p className="text-sm mt-2 text-gray-600 dark:text-gray-300"><strong>Triage:</strong> {appt.triage_summary}</p>}
+                      <p className="text-sm text-gray-500">{t('scheduled_label')}: {new Date(appt.scheduled_at).toLocaleString()}</p>
+                      {appt.triage_summary && <p className="text-sm mt-2 text-gray-600 dark:text-gray-300"><strong>{t('triage_label')}:</strong> {appt.triage_summary}</p>}
                       <AssistPanel patientId={appt.patient_id} familyProfileId={appt.family_profile_id} />
                     </div>
 
@@ -636,13 +640,13 @@ export default function DoctorDashboard() {
                         onClick={() => router.push(`/consultation/${appt.id}`)}
                         className="flex-1 md:flex-none px-4 py-2 bg-indigo-500 text-white rounded-lg flex items-center justify-center gap-2 text-sm font-semibold hover:bg-indigo-600 transition-colors"
                       >
-                        <Video size={16} /> Consult
+                        <Video size={16} /> {t('consult_btn')}
                       </button>
                       <button
                         onClick={() => router.push(`/doctor/prescription/${appt.id}?patient_id=${appt.patient_id}`)}
                         className="flex-1 md:flex-none px-4 py-2 bg-teal-500 text-white rounded-lg flex items-center justify-center gap-2 text-sm font-semibold hover:bg-teal-600 transition-colors"
                       >
-                        <FileText size={16} /> Write Rx
+                        <FileText size={16} /> {t('write_rx_btn')}
                       </button>
                       <button
                         onClick={() => completeAppointment(appt.id)}
@@ -665,13 +669,13 @@ export default function DoctorDashboard() {
           {user?.id != null && <ReferralsPanel doctorId={user.id} />}
 
           <div className="neu-panel p-6">
-            <h2 className="text-xl font-bold mb-4 flex items-center gap-2"><Users className="text-indigo-500" /> Patient Directory</h2>
-            <p className="text-sm text-gray-500 mb-4">Recent patient records across the network.</p>
+            <h2 className="text-xl font-bold mb-4 flex items-center gap-2"><Users className="text-indigo-500" /> {t('patient_directory_title')}</h2>
+            <p className="text-sm text-gray-500 mb-4">{t('patient_directory_subtitle')}</p>
             <button
               onClick={() => router.push('/doctor/directory')}
               className="w-full py-3 bg-indigo-500 text-white font-bold rounded-xl hover:bg-indigo-600 transition-colors"
             >
-              View Directory
+              {t('view_directory_btn')}
             </button>
           </div>
         </div>
