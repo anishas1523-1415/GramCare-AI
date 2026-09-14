@@ -9,7 +9,28 @@ this is a background job, not an endpoint.
 import asyncio
 from datetime import datetime, timedelta, timezone
 
+import pytest
+
 from tests.conftest import auth
+
+
+@pytest.fixture(autouse=True)
+def stub_sms(monkeypatch):
+    """Stub the SMS provider for every test in this module.
+
+    These tests cover which appointments the watchdog selects and how it
+    stamps them — not MSG91 connectivity. Without this the send-path tests
+    only pass on a machine that happens to have MSG91_AUTH_KEY and a
+    DLT-approved template configured, since SMSService raises 503 when
+    unconfigured and the watchdog (correctly) treats that as a retryable
+    delivery failure.
+    """
+    from core.sms_service import SMSService
+
+    async def _ok(self, phone, message):
+        return {"stubbed": True}
+
+    monkeypatch.setattr(SMSService, "send_sms", _ok)
 
 
 def _user_id(client, token):
