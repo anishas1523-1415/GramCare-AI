@@ -15,6 +15,7 @@ import {
   Copy, Check, AlertTriangle,
 } from "lucide-react";
 import { useAuth } from "../../../contexts/AuthContext";
+import { useLocale } from "../../../contexts/LocaleContext";
 import ThemedLoader from "../../../components/ThemedLoader";
 import api from "../../../lib/api";
 import type {
@@ -22,6 +23,7 @@ import type {
 } from "../../../types";
 
 function RegisterPatientForm({ onRegistered }: { onRegistered: () => void }) {
+  const { t } = useLocale();
   const [fullName, setFullName] = useState("");
   const [age, setAge] = useState("");
   const [gender, setGender] = useState("Female");
@@ -53,7 +55,7 @@ function RegisterPatientForm({ onRegistered }: { onRegistered: () => void }) {
       onRegistered();
     } catch (err) {
       const message = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
-      setError(typeof message === "string" ? message : "Could not register this patient.");
+      setError(typeof message === "string" ? message : t("could_not_register_patient"));
     } finally {
       setSubmitting(false);
     }
@@ -74,22 +76,22 @@ function RegisterPatientForm({ onRegistered }: { onRegistered: () => void }) {
   return (
     <div className="neu-panel p-6">
       <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-        <UserPlus className="text-teal-500" /> Register a Walk-in Patient
+        <UserPlus className="text-teal-500" /> {t("register_walkin_patient")}
       </h2>
 
       {result && (
         <div className="mb-5 p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-sm">
-          <p className="font-bold text-emerald-600 mb-2">Patient registered — write these down now</p>
+          <p className="font-bold text-emerald-600 mb-2">{t("patient_registered_write_down")}</p>
           <div className="flex items-center justify-between gap-3 font-mono text-sm bg-white/50 dark:bg-black/30 rounded-lg p-3">
             <div>
-              <div>Username: <span className="font-bold">{result.username}</span></div>
-              <div>Password: <span className="font-bold">{result.temporary_password}</span></div>
+              <div>{t("username_label_colon")} <span className="font-bold">{result.username}</span></div>
+              <div>{t("password_label_colon")} <span className="font-bold">{result.temporary_password}</span></div>
             </div>
             <button
               type="button"
               onClick={copyCredentials}
               className="neu-button p-2 rounded-lg shrink-0"
-              title="Copy credentials"
+              title={t("copy_credentials_title")}
             >
               {copied ? <Check size={16} className="text-emerald-500" /> : <Copy size={16} />}
             </button>
@@ -102,7 +104,7 @@ function RegisterPatientForm({ onRegistered }: { onRegistered: () => void }) {
 
       <form onSubmit={submit} className="grid sm:grid-cols-2 gap-3">
         <div className="sm:col-span-2">
-          <label htmlFor="chw-full-name" className="block text-xs font-semibold mb-1">Full name</label>
+          <label htmlFor="chw-full-name" className="block text-xs font-semibold mb-1">{t("full_name_label")}</label>
           <input
             id="chw-full-name"
             value={fullName}
@@ -113,7 +115,7 @@ function RegisterPatientForm({ onRegistered }: { onRegistered: () => void }) {
           />
         </div>
         <div>
-          <label htmlFor="chw-age" className="block text-xs font-semibold mb-1">Age</label>
+          <label htmlFor="chw-age" className="block text-xs font-semibold mb-1">{t("age_label")}</label>
           <input
             id="chw-age"
             type="number"
@@ -126,7 +128,7 @@ function RegisterPatientForm({ onRegistered }: { onRegistered: () => void }) {
           />
         </div>
         <div>
-          <label htmlFor="chw-gender" className="block text-xs font-semibold mb-1">Gender</label>
+          <label htmlFor="chw-gender" className="block text-xs font-semibold mb-1">{t("gender_label")}</label>
           <select
             id="chw-gender"
             value={gender}
@@ -139,7 +141,7 @@ function RegisterPatientForm({ onRegistered }: { onRegistered: () => void }) {
           </select>
         </div>
         <div>
-          <label htmlFor="chw-phone" className="block text-xs font-semibold mb-1">Phone (optional)</label>
+          <label htmlFor="chw-phone" className="block text-xs font-semibold mb-1">{t("phone_optional_label")}</label>
           <input
             id="chw-phone"
             value={phone}
@@ -149,7 +151,7 @@ function RegisterPatientForm({ onRegistered }: { onRegistered: () => void }) {
           />
         </div>
         <div>
-          <label htmlFor="chw-address" className="block text-xs font-semibold mb-1">Address note (optional)</label>
+          <label htmlFor="chw-address" className="block text-xs font-semibold mb-1">{t("address_note_optional")}</label>
           <input
             id="chw-address"
             value={addressNote}
@@ -163,7 +165,7 @@ function RegisterPatientForm({ onRegistered }: { onRegistered: () => void }) {
           disabled={submitting || !fullName || !age}
           className="sm:col-span-2 neu-button py-2.5 bg-teal-500 text-white font-bold rounded-lg disabled:opacity-50"
         >
-          {submitting ? "Registering…" : "Register Patient"}
+          {submitting ? t("registering_ellipsis") : t("register_patient_btn")}
         </button>
       </form>
     </div>
@@ -171,6 +173,7 @@ function RegisterPatientForm({ onRegistered }: { onRegistered: () => void }) {
 }
 
 function TriagePanel({ patient }: { patient: CHWPatientSummary }) {
+  const { t } = useLocale();
   const [symptoms, setSymptoms] = useState("");
   const [age, setAge] = useState("");
   const [loading, setLoading] = useState(false);
@@ -188,7 +191,7 @@ function TriagePanel({ patient }: { patient: CHWPatientSummary }) {
       });
       setResult(res.data);
     } catch {
-      setError("Could not run triage for this patient.");
+      setError(t("could_not_run_triage"));
     } finally {
       setLoading(false);
     }
@@ -196,7 +199,7 @@ function TriagePanel({ patient }: { patient: CHWPatientSummary }) {
 
   return (
     <div className="p-4 rounded-xl bg-white/40 dark:bg-black/20 border border-white/10">
-      <label htmlFor={`chw-symptoms-${patient.id}`} className="block text-xs font-semibold mb-1">Symptoms</label>
+      <label htmlFor={`chw-symptoms-${patient.id}`} className="block text-xs font-semibold mb-1">{t("symptoms_label")}</label>
       <textarea
         id={`chw-symptoms-${patient.id}`}
         value={symptoms}
@@ -212,7 +215,7 @@ function TriagePanel({ patient }: { patient: CHWPatientSummary }) {
           max={150}
           value={age}
           onChange={(e) => setAge(e.target.value)}
-          placeholder="Age"
+          placeholder={t("age_label")}
           className="w-24 p-2 rounded-lg bg-white/50 dark:bg-black/30 border border-white/20 text-sm focus:ring-2 focus:ring-teal-400 outline-none"
         />
         <button
@@ -221,7 +224,7 @@ function TriagePanel({ patient }: { patient: CHWPatientSummary }) {
           disabled={loading || !symptoms || !age}
           className="neu-button px-4 py-2 bg-indigo-500 text-white text-sm font-bold rounded-lg disabled:opacity-50"
         >
-          {loading ? "Analyzing…" : "Run AI Triage"}
+          {loading ? t("analyzing_ellipsis") : t("run_ai_triage")}
         </button>
       </div>
 
@@ -232,12 +235,12 @@ function TriagePanel({ patient }: { patient: CHWPatientSummary }) {
           <div className="flex items-center justify-between">
             <span className="font-bold">{result.predicted_condition}</span>
             <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-600">
-              Severity {result.severity_score}
+              {t("severity_label")} {result.severity_score}
             </span>
           </div>
           <p className="text-xs text-gray-600 dark:text-gray-300">{result.doctor_recommendation}</p>
           {result.home_remedies && (
-            <p className="text-xs text-gray-500"><span className="font-semibold">Home care:</span> {result.home_remedies}</p>
+            <p className="text-xs text-gray-500"><span className="font-semibold">{t("home_care_label")}:</span> {result.home_remedies}</p>
           )}
           <p className="text-[11px] text-gray-400 pt-1 border-t border-white/10 mt-1">{result.disclaimer}</p>
         </div>
@@ -247,6 +250,7 @@ function TriagePanel({ patient }: { patient: CHWPatientSummary }) {
 }
 
 function BookingPanel({ patient }: { patient: CHWPatientSummary }) {
+  const { t } = useLocale();
   const [doctors, setDoctors] = useState<DoctorPublic[]>([]);
   const [doctor, setDoctor] = useState<DoctorPublic | null>(null);
   const [slots, setSlots] = useState<Slot[]>([]);
@@ -261,7 +265,7 @@ function BookingPanel({ patient }: { patient: CHWPatientSummary }) {
         const res = await api.get<DoctorPublic[]>("/doctors");
         setDoctors(res.data.filter((d) => d.is_available && d.consultation_fee === 0));
       } catch {
-        setError("Could not load doctors.");
+        setError(t("could_not_load_doctors"));
       } finally {
         setLoading(false);
       }
@@ -275,7 +279,7 @@ function BookingPanel({ patient }: { patient: CHWPatientSummary }) {
       const res = await api.get<Slot[]>(`/doctors/${d.id}/slots`);
       setSlots(res.data);
     } catch {
-      setError("Could not load this doctor's available times.");
+      setError(t("could_not_load_doctor_times"));
     }
   };
 
@@ -290,14 +294,14 @@ function BookingPanel({ patient }: { patient: CHWPatientSummary }) {
       setBooked(true);
     } catch (err) {
       const message = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
-      setError(typeof message === "string" ? message : "Could not book this consultation.");
+      setError(typeof message === "string" ? message : t("could_not_book_consultation"));
     }
   };
 
   if (booked) {
     return (
       <p className="text-sm text-emerald-600 font-semibold p-3">
-        Consultation booked for {patient.full_name}.
+        {t("consultation_booked_for")} {patient.full_name}.
       </p>
     );
   }
@@ -306,15 +310,14 @@ function BookingPanel({ patient }: { patient: CHWPatientSummary }) {
     <div className="p-4 rounded-xl bg-white/40 dark:bg-black/20 border border-white/10">
       <p className="text-xs text-gray-500 mb-3 flex items-start gap-1.5">
         <AlertTriangle size={13} className="shrink-0 mt-0.5" />
-        Only free consultations can be booked here — a paid doctor requires the
-        patient&apos;s own payment, so this list only shows doctors with no fee.
+        {t("chw_free_consult_only_note")}
       </p>
       {error && <p role="alert" className="text-red-500 text-xs font-semibold mb-2">{error}</p>}
       {loading ? (
-        <p className="text-sm text-gray-500">Loading doctors…</p>
+        <p className="text-sm text-gray-500">{t("loading_doctors_ellipsis")}</p>
       ) : !doctor ? (
         doctors.length === 0 ? (
-          <p className="text-sm text-gray-500">No free-consultation doctors are available right now.</p>
+          <p className="text-sm text-gray-500">{t("no_free_doctors_available")}</p>
         ) : (
           <div className="space-y-2">
             {doctors.map((d) => (
@@ -337,10 +340,10 @@ function BookingPanel({ patient }: { patient: CHWPatientSummary }) {
             onClick={() => { setDoctor(null); setSlots([]); }}
             className="text-xs text-gray-500 mb-2 hover:text-teal-500"
           >
-            &larr; Choose a different doctor
+            &larr; {t("choose_different_doctor")}
           </button>
           {slots.length === 0 ? (
-            <p className="text-sm text-gray-500">This doctor has no open slots right now.</p>
+            <p className="text-sm text-gray-500">{t("chw_no_open_slots")}</p>
           ) : (
             <div className="grid grid-cols-2 gap-2">
               {slots.map((s) => (
@@ -364,6 +367,7 @@ function BookingPanel({ patient }: { patient: CHWPatientSummary }) {
 }
 
 function PatientRow({ patient }: { patient: CHWPatientSummary }) {
+  const { t } = useLocale();
   const [expanded, setExpanded] = useState<"triage" | "book" | null>(null);
 
   return (
@@ -372,7 +376,7 @@ function PatientRow({ patient }: { patient: CHWPatientSummary }) {
         <div>
           <p className="font-bold">{patient.full_name}</p>
           <p className="text-xs text-gray-500">
-            @{patient.username}{patient.phone ? ` · ${patient.phone}` : ""} · registered {new Date(patient.created_at).toLocaleDateString()}
+            @{patient.username}{patient.phone ? ` · ${patient.phone}` : ""} · {t("registered_on_prefix")} {new Date(patient.created_at).toLocaleDateString()}
           </p>
         </div>
         <div className="flex gap-2 shrink-0">
@@ -381,14 +385,14 @@ function PatientRow({ patient }: { patient: CHWPatientSummary }) {
             onClick={() => setExpanded(expanded === "triage" ? null : "triage")}
             className={`neu-button px-3 py-1.5 text-xs font-bold rounded-lg flex items-center gap-1 ${expanded === "triage" ? "bg-indigo-500 text-white" : ""}`}
           >
-            <Stethoscope size={13} /> Triage {expanded === "triage" ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+            <Stethoscope size={13} /> {t("triage_label")} {expanded === "triage" ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
           </button>
           <button
             type="button"
             onClick={() => setExpanded(expanded === "book" ? null : "book")}
             className={`neu-button px-3 py-1.5 text-xs font-bold rounded-lg flex items-center gap-1 ${expanded === "book" ? "bg-teal-500 text-white" : ""}`}
           >
-            <CalendarDays size={13} /> Book {expanded === "book" ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+            <CalendarDays size={13} /> {t("book_label")} {expanded === "book" ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
           </button>
         </div>
       </div>
@@ -412,6 +416,7 @@ function PatientRow({ patient }: { patient: CHWPatientSummary }) {
 
 export default function CHWDashboard() {
   const { user, loading: authLoading } = useAuth();
+  const { t } = useLocale();
   const [patients, setPatients] = useState<CHWPatientSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -423,11 +428,11 @@ export default function CHWDashboard() {
       const res = await api.get<CHWPatientSummary[]>("/chw/my-patients");
       setPatients(res.data);
     } catch {
-      setError("Could not load your registered patients.");
+      setError(t("could_not_load_registered_patients"));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -435,13 +440,13 @@ export default function CHWDashboard() {
   }, [user, loadPatients]);
 
   if (authLoading) {
-    return <ThemedLoader variant="doctor" label="Loading…" />;
+    return <ThemedLoader variant="doctor" label={t("loading_ellipsis")} />;
   }
 
   if (!user) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <p className="text-xl text-gray-500">Please log in to see your CHW dashboard.</p>
+        <p className="text-xl text-gray-500">{t("please_login_chw_dashboard")}</p>
       </div>
     );
   }
@@ -455,23 +460,23 @@ export default function CHWDashboard() {
       >
         <div>
           <h1 className="text-3xl font-extrabold mb-1 flex items-center gap-3">
-            <Users className="text-teal-500" /> CHW Dashboard
+            <Users className="text-teal-500" /> {t("chw_dashboard_title")}
           </h1>
           <p className="text-gray-500">
-            Register walk-in villagers and manage triage or booking on their behalf.
+            {t("chw_dashboard_subtitle")}
           </p>
         </div>
 
         <RegisterPatientForm onRegistered={loadPatients} />
 
         <div className="neu-panel p-6">
-          <h2 className="text-xl font-bold mb-4">My Registered Patients</h2>
+          <h2 className="text-xl font-bold mb-4">{t("my_registered_patients")}</h2>
           {error && <p role="alert" className="text-red-500 text-sm font-semibold mb-4">{error}</p>}
           {loading ? (
-            <p className="text-sm text-gray-500 text-center py-6">Loading…</p>
+            <p className="text-sm text-gray-500 text-center py-6">{t("loading_ellipsis")}</p>
           ) : patients.length === 0 ? (
             <p className="text-sm text-gray-500 text-center py-6">
-              You haven&apos;t registered any patients yet.
+              {t("no_patients_registered_yet")}
             </p>
           ) : (
             <div className="space-y-3">
