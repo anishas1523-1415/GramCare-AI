@@ -79,10 +79,16 @@ async def health_clusters(
     _authorize(current_user, db)
     cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
 
+    # TriageLog carries no location field at all today (patient location
+    # isn't captured at triage time — SOS is the only flow that records
+    # GPS). Every previous call to this endpoint threw an AttributeError on
+    # `models.TriageLog.location_text`, which doesn't exist on the model or
+    # the table — a 500 on every single request, masked by the frontend's
+    # generic "Not authorized" catch-all. Grouping by condition only until
+    # triage actually captures a location to cluster by.
     rows = (
         db.query(
             func.lower(models.TriageLog.ai_predicted_condition).label("cond"),
-            func.coalesce(models.TriageLog.location_text, "Unknown").label("loc"),
             func.count(models.TriageLog.id).label("n"),
             func.avg(models.TriageLog.ai_severity_score).label("avg_sev"),
             func.max(models.TriageLog.ai_severity_score).label("max_sev"),
@@ -96,7 +102,6 @@ async def health_clusters(
         )
         .group_by(
             func.lower(models.TriageLog.ai_predicted_condition),
-            func.coalesce(models.TriageLog.location_text, "Unknown")
         )
         .order_by(func.count(models.TriageLog.id).desc())
         .limit(50)
@@ -106,7 +111,7 @@ async def health_clusters(
     return [
         HealthCluster(
             condition=r.cond,
-            location=r.loc,
+            location="Unknown",
             case_count=r.n,
             avg_severity=round(float(r.avg_sev or 0), 1),
             max_severity=int(r.max_sev or 0),
@@ -180,27 +185,31 @@ async def resource_forecasting(
             ))
             
     # 2. Medicine Restocking Forecast (Based on recurring high-severity triage logs)
+    #
+    # TriageLog (unlike EmergencySOS above) carries no location field at all
+    # — this referenced models.TriageLog.location_text, which doesn't exist
+    # on the model or the table, throwing an AttributeError on every single
+    # call. Grouping by condition only until triage actually captures a
+    # location to forecast by.
     triage_rows = (
         db.query(
             func.lower(models.TriageLog.ai_predicted_condition).label("cond"),
-            func.coalesce(models.TriageLog.location_text, "Unknown Region").label("loc"),
             func.count(models.TriageLog.id).label("n")
         )
         .filter(models.TriageLog.ai_severity_score >= 60)
         .group_by(
             func.lower(models.TriageLog.ai_predicted_condition),
-            func.coalesce(models.TriageLog.location_text, "Unknown Region")
         )
         .order_by(func.count(models.TriageLog.id).desc())
         .limit(5)
         .all()
     )
-    
+
     for r in triage_rows:
         if r.n >= 5:
             forecasts.append(ResourceForecast(
                 resource_type="medicines",
-                recommended_location=r.loc,
+                recommended_location="Unknown",
                 urgency="HIGH" if r.n >= 15 else "MEDIUM",
                 reason=f"Spike in {r.cond} ({r.n} severe cases). Restock relevant generic medicines."
             ))
