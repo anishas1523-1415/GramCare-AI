@@ -194,7 +194,8 @@ const Map<String, String> _en = {
   'no_doctors_available': 'No doctors are currently available.',
   'yrs_experience': 'yrs experience',
   'free': 'Free',
-  'pay_on_web': 'Pay on web portal',
+  'per_consult': 'per consult',
+  'pay_and_book': 'Pay and Book —',
   'choose_different_doctor': 'Choose a different doctor',
   'available_times_for': 'Available times for',
   'no_open_slots': 'This doctor has no open slots right now. Please check back later.',
@@ -209,6 +210,11 @@ const Map<String, String> _en = {
   'no_appointments_yet': 'No appointments yet. Book a consultation to get started.',
   'join_video_call': 'Join Video Call',
   'video_consultation': 'Video Consultation',
+  'payment_verification_failed': 'Payment verification failed.',
+  'payment_init_failed': 'Failed to initiate payment.',
+  'payment_confirm_network_error': 'Could not confirm your payment due to a network error. If you were charged, it will be reconciled automatically — please check your booking status before paying again.',
+  'payment_cancelled': 'Payment cancelled. You have not been charged.',
+  'payment_failed': 'Payment failed. Please try again.',
 };
 
 const Map<String, String> _ta = {
@@ -366,7 +372,8 @@ const Map<String, String> _ta = {
   'no_doctors_available': 'தற்போது மருத்துவர்கள் யாரும் கிடைக்கவில்லை.',
   'yrs_experience': 'ஆண்டுகள் அனுபவம்',
   'free': 'இலவசம்',
-  'pay_on_web': 'வெப் போர்ட்டலில் செலுத்தவும்',
+  'per_consult': 'ஆலோசனைக்கு',
+  'pay_and_book': 'செலுத்தி பதிவு செய் —',
   'choose_different_doctor': 'வேறு மருத்துவரைத் தேர்வு செய்க',
   'available_times_for': 'கிடைக்கும் நேரங்கள் — ',
   'no_open_slots': 'இந்த மருத்துவருக்கு தற்போது திறந்த நேரங்கள் இல்லை. பின்னர் மீண்டும் பாருங்கள்.',
@@ -381,4 +388,9 @@ const Map<String, String> _ta = {
   'no_appointments_yet': 'இன்னும் அப்பாயின்ட்மென்ட்கள் இல்லை. ஆலோசனை பதிவு செய்யத் தொடங்குங்கள்.',
   'join_video_call': 'வீடியோ அழைப்பில் சேர',
   'video_consultation': 'வீடியோ ஆலோசனை',
+  'payment_verification_failed': 'கட்டணச் சரிபார்ப்பு தோல்வியடைந்தது.',
+  'payment_init_failed': 'கட்டணத்தைத் தொடங்க முடியவில்லை.',
+  'payment_confirm_network_error': 'நெட்வொர்க் பிழையால் உங்கள் கட்டணத்தை உறுதிப்படுத்த முடியவில்லை. நீங்கள் கட்டணம் செலுத்தியிருந்தால், அது தானாக சரிசெய்யப்படும் — மீண்டும் செலுத்தும் முன் உங்கள் பதிவு நிலையைச் சரிபார்க்கவும்.',
+  'payment_cancelled': 'கட்டணம் ரத்து செய்யப்பட்டது. உங்களிடமிருந்து பணம் வசூலிக்கப்படவில்லை.',
+  'payment_failed': 'கட்டணம் தோல்வியடைந்தது. மீண்டும் முயற்சிக்கவும்.',
 };

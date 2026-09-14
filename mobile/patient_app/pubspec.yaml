@@ -82,6 +82,9 @@ dependencies:
   # talking to the same Node signaling server (gramcare-signaling).
   flutter_webrtc: ^1.6.0
   socket_io_client: ^3.1.6
+  # Paid-doctor consultation booking — same gateway the web portal's
+  # RazorpayCheckout.tsx drives (POST /payments/create-order + /verify).
+  razorpay_flutter: ^1.4.0
 
 dev_dependencies:
   flutter_test:
