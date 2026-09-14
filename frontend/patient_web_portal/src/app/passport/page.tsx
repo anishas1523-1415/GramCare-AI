@@ -13,6 +13,7 @@ import QRCode from 'qrcode';
 import { Stethoscope, ShieldCheck, RefreshCw, Copy, Check, Download } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useProfile } from '../../contexts/ProfileContext';
+import { useLocale } from '../../contexts/LocaleContext';
 import { useRouter } from 'next/navigation';
 import api from '../../lib/api';
 
@@ -27,6 +28,7 @@ interface PassportSelf {
 export default function HealthPassportPage() {
   const { user, loading: authLoading } = useAuth();
   const { profiles, activeProfile, setActiveProfile } = useProfile();
+  const { t } = useLocale();
   const router = useRouter();
 
   const [passport, setPassport] = useState<PassportSelf | null>(null);
@@ -50,7 +52,7 @@ export default function HealthPassportPage() {
         const res = await api.get<PassportSelf>('/passport/me');
         setPassport(res.data);
       } catch {
-        setError('Could not load your health passport.');
+        setError(t('could_not_load_passport'));
       } finally {
         setLoading(false);
       }
@@ -87,24 +89,24 @@ export default function HealthPassportPage() {
         chronic_conditions: passport.chronic_conditions || undefined,
       });
       setPassport(res.data);
-      setSuccess('Health passport saved.');
+      setSuccess(t('passport_saved'));
     } catch {
-      setError('Could not save your health passport.');
+      setError(t('could_not_save_passport'));
     } finally {
       setSaving(false);
     }
   };
 
   const regenerate = async () => {
-    if (!window.confirm('This makes any previously printed or shared QR code stop working. Continue?')) return;
+    if (!window.confirm(t('regenerate_qr_confirm'))) return;
     setRegenerating(true);
     setError('');
     try {
       const res = await api.post<PassportSelf>('/passport/me/regenerate-token');
       setPassport(res.data);
-      setSuccess('New QR code generated — the old one no longer works.');
+      setSuccess(t('new_qr_generated'));
     } catch {
-      setError('Could not regenerate your QR code.');
+      setError(t('could_not_regenerate_qr'));
     } finally {
       setRegenerating(false);
     }
@@ -134,24 +136,23 @@ export default function HealthPassportPage() {
       link.remove();
       URL.revokeObjectURL(url);
     } catch {
-      setError('Could not export health records.');
+      setError(t('could_not_export_records'));
     } finally {
       setExporting(false);
     }
   };
 
   if (authLoading || loading || !passport) {
-    return <div className="min-h-screen flex items-center justify-center text-gray-500">Loading your health passport…</div>;
+    return <div className="min-h-screen flex items-center justify-center text-gray-500">{t('loading_passport')}</div>;
   }
 
   return (
     <div className="min-h-screen p-8 lg:p-16 max-w-3xl mx-auto">
       <h1 className="text-3xl font-extrabold flex items-center gap-3 mb-2">
-        <ShieldCheck className="text-red-500" /> Digital Health Passport
+        <ShieldCheck className="text-red-500" /> {t('nav_health_passport')}
       </h1>
       <p className="text-gray-500 mb-6">
-        A QR code for your blood group, allergies, and conditions — readable by an EMT or hospital
-        desk without needing to log in. Keep it in your wallet or as a phone lock-screen photo.
+        {t('passport_subtitle')}
       </p>
 
       {error && <p role="alert" className="text-red-500 font-semibold mb-4">{error}</p>}
@@ -160,7 +161,7 @@ export default function HealthPassportPage() {
       <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-6 mb-6">
         <form onSubmit={save} className="glass-panel p-6 space-y-4">
           <div>
-            <label htmlFor="passport-blood-group" className="block text-sm font-semibold mb-1.5">Blood Group</label>
+            <label htmlFor="passport-blood-group" className="block text-sm font-semibold mb-1.5">{t('blood_group_label')}</label>
             <input
               id="passport-blood-group"
               value={passport.blood_group ?? ''}
@@ -170,7 +171,7 @@ export default function HealthPassportPage() {
             />
           </div>
           <div>
-            <label htmlFor="passport-allergies" className="block text-sm font-semibold mb-1.5">Allergies</label>
+            <label htmlFor="passport-allergies" className="block text-sm font-semibold mb-1.5">{t('allergies_label')}</label>
             <textarea
               id="passport-allergies"
               value={passport.allergies ?? ''}
@@ -181,7 +182,7 @@ export default function HealthPassportPage() {
             />
           </div>
           <div>
-            <label htmlFor="passport-conditions" className="block text-sm font-semibold mb-1.5">Chronic Conditions</label>
+            <label htmlFor="passport-conditions" className="block text-sm font-semibold mb-1.5">{t('chronic_conditions_label')}</label>
             <textarea
               id="passport-conditions"
               value={passport.chronic_conditions ?? ''}
@@ -196,7 +197,7 @@ export default function HealthPassportPage() {
             disabled={saving}
             className="neu-button px-5 py-3 bg-red-500 text-white font-bold rounded-xl disabled:opacity-50"
           >
-            {saving ? 'Saving…' : 'Save Passport'}
+            {saving ? t('saving_ellipsis') : t('save_passport')}
           </button>
         </form>
 
@@ -211,7 +212,7 @@ export default function HealthPassportPage() {
                   onClick={copyLink}
                   className="neu-button px-3 py-2 text-xs font-bold rounded-lg flex items-center gap-1.5"
                 >
-                  {copied ? <Check size={14} /> : <Copy size={14} />} {copied ? 'Copied' : 'Copy Link'}
+                  {copied ? <Check size={14} /> : <Copy size={14} />} {copied ? t('copied') : t('copy_link')}
                 </button>
                 <button
                   type="button"
@@ -219,14 +220,14 @@ export default function HealthPassportPage() {
                   disabled={regenerating}
                   className="neu-button px-3 py-2 text-xs font-bold rounded-lg flex items-center gap-1.5 text-red-500 disabled:opacity-50"
                 >
-                  <RefreshCw size={14} /> {regenerating ? 'Regenerating…' : 'New Code'}
+                  <RefreshCw size={14} /> {regenerating ? t('regenerating_ellipsis') : t('new_code')}
                 </button>
               </div>
             </>
           ) : (
             <div className="text-sm text-gray-500 flex flex-col items-center gap-2">
               <Stethoscope size={32} className="text-gray-400" />
-              Save the form to generate your QR code.
+              {t('save_form_for_qr')}
             </div>
           )}
         </div>
@@ -234,15 +235,14 @@ export default function HealthPassportPage() {
 
       <div className="glass-panel p-6 mb-6">
         <h2 className="text-lg font-bold mb-1.5 flex items-center gap-2">
-          <Download size={18} className="text-indigo-500" /> Export Health Records
+          <Download size={18} className="text-indigo-500" /> {t('export_health_records')}
         </h2>
         <p className="text-sm text-gray-500 mb-4">
-          Download your full Family Health Wallet — prescriptions, lab reports, vaccinations, and
-          notes — as a FHIR-shaped file a receiving hospital or clinic&apos;s EHR system can read.
+          {t('export_health_records_note')}
         </p>
         {profiles.length > 0 && (
           <div className="mb-4 max-w-xs">
-            <label htmlFor="passport-export-profile" className="text-sm font-semibold block mb-1.5">For</label>
+            <label htmlFor="passport-export-profile" className="text-sm font-semibold block mb-1.5">{t('acting_for')}</label>
             <select
               id="passport-export-profile"
               value={activeProfile?.id ?? ''}
@@ -252,7 +252,7 @@ export default function HealthPassportPage() {
               }}
               className="w-full p-2.5 rounded-xl bg-white/50 dark:bg-black/20 border border-white/30 focus:outline-none focus:ring-2 focus:ring-indigo-400"
             >
-              <option value="">Myself</option>
+              <option value="">{t('myself')}</option>
               {profiles.map((p) => (
                 <option key={p.id} value={p.id}>{p.full_name} ({p.relation})</option>
               ))}
@@ -265,14 +265,12 @@ export default function HealthPassportPage() {
           disabled={exporting}
           className="neu-button px-5 py-3 bg-indigo-500 text-white font-bold rounded-xl disabled:opacity-50 flex items-center gap-2"
         >
-          <Download size={16} /> {exporting ? 'Preparing…' : 'Download (FHIR JSON)'}
+          <Download size={16} /> {exporting ? t('preparing_ellipsis') : t('download_fhir')}
         </button>
       </div>
 
       <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-xs text-gray-400 text-center">
-        Anyone with this QR code or link can see your blood group, allergies, conditions, and
-        emergency contacts — no password needed. That&apos;s the point in an emergency, but keep the
-        code itself private otherwise, and use &quot;New Code&quot; if you ever lose it.
+        {t('passport_privacy_note')}
       </motion.p>
     </div>
   );
