@@ -20,6 +20,15 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    # Idempotent: this table was created directly on the production database
+    # to unblock uploads ahead of the deploy that carries this migration, so
+    # `alembic upgrade head` must not fail on finding it already present.
+    # startCommand runs that on every boot (see render.yaml) — a hard failure
+    # here takes the whole service down, not just the migration.
+    inspector = sa.inspect(op.get_bind())
+    if 'stored_files' in inspector.get_table_names():
+        return
+
     op.create_table(
         'stored_files',
         sa.Column('id', sa.Integer(), nullable=False),

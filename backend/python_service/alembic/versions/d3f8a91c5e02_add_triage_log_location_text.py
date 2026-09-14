@@ -28,6 +28,16 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     """Upgrade schema."""
+    # Idempotent: this column was added directly on the production database
+    # to stop the 500s immediately, ahead of the deploy that carries this
+    # migration. `alembic upgrade head` runs on every boot (render.yaml's
+    # startCommand), so failing on an already-present column would take the
+    # whole service down rather than just the migration.
+    inspector = sa.inspect(op.get_bind())
+    existing = {c['name'] for c in inspector.get_columns('triage_logs')}
+    if 'location_text' in existing:
+        return
+
     op.add_column('triage_logs', sa.Column('location_text', sa.String(), nullable=True))
     op.create_index(op.f('ix_triage_logs_location_text'), 'triage_logs', ['location_text'], unique=False)
 
