@@ -5,6 +5,7 @@ import { motion } from 'framer-motion';
 import { Mic, MicOff, Video, VideoOff, PhoneOff, MonitorUp, Activity, Wifi, WifiOff, MessageSquare, Send } from 'lucide-react';
 import { io, Socket } from 'socket.io-client';
 import { useAuth } from '../../../contexts/AuthContext';
+import { useLocale } from '../../../contexts/LocaleContext';
 import { useRouter } from 'next/navigation';
 
 type CallMode = 'video' | 'audio' | 'text';
@@ -23,6 +24,7 @@ interface ChatMessage {
 export default function ConsultationRoom({ params }: { params: Promise<{ id: string }> }) {
   const { id: roomId } = use(params);
   const { user } = useAuth();
+  const { t } = useLocale();
   const router = useRouter();
 
   const [isMuted, setIsMuted] = useState(false);
@@ -319,9 +321,9 @@ export default function ConsultationRoom({ params }: { params: Promise<{ id: str
   };
 
   const qualityBadge = {
-    good: { label: 'Good connection', className: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/50', icon: Wifi },
-    poor: { label: 'Poor connection', className: 'bg-orange-500/20 text-orange-400 border-orange-500/50', icon: Wifi },
-    critical: { label: 'Very poor connection', className: 'bg-red-500/20 text-red-400 border-red-500/50', icon: WifiOff },
+    good: { label: t('good_connection'), className: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/50', icon: Wifi },
+    poor: { label: t('poor_connection'), className: 'bg-orange-500/20 text-orange-400 border-orange-500/50', icon: Wifi },
+    critical: { label: t('very_poor_connection'), className: 'bg-red-500/20 text-red-400 border-red-500/50', icon: WifiOff },
   }[networkQuality];
   const QualityIcon = qualityBadge.icon;
 
@@ -336,7 +338,7 @@ export default function ConsultationRoom({ params }: { params: Promise<{ id: str
             <div className="flex-1 overflow-y-auto space-y-3 mb-4">
               {chatMessages.length === 0 ? (
                 <p className="text-center text-white/40 mt-10">
-                  Connection is too weak for audio/video — continuing by text.
+                  {t('connection_too_weak_text_mode')}
                 </p>
               ) : (
                 chatMessages.map((m, i) => (
@@ -351,7 +353,7 @@ export default function ConsultationRoom({ params }: { params: Promise<{ id: str
                 value={chatInput}
                 onChange={(e) => setChatInput(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && sendChatMessage()}
-                placeholder="Type a message…"
+                placeholder={t('type_a_message')}
                 className="flex-1 p-3 rounded-xl bg-white/10 text-white placeholder-white/40 border border-white/20 focus:outline-none focus:ring-2 focus:ring-teal-400"
               />
               <button onClick={sendChatMessage} className="w-12 h-12 rounded-xl bg-teal-500 text-white flex items-center justify-center shrink-0">
@@ -364,7 +366,7 @@ export default function ConsultationRoom({ params }: { params: Promise<{ id: str
             {!isConnected && (
               <div className="flex flex-col items-center text-white/50 animate-pulse">
                 <div className="w-20 h-20 rounded-full border-4 border-t-teal-500 border-white/20 animate-spin mb-4" />
-                <p>Waiting for other party to join...</p>
+                <p>{t('waiting_for_other_party')}</p>
               </div>
             )}
             <video
@@ -376,8 +378,8 @@ export default function ConsultationRoom({ params }: { params: Promise<{ id: str
             {isConnected && callMode === 'audio' && (
               <div className="flex flex-col items-center text-white/70 gap-3">
                 <WifiOff size={48} className="text-orange-400" />
-                <p className="font-semibold">Audio-only — weak connection detected</p>
-                <p className="text-sm text-white/40">Video will resume automatically once the connection improves.</p>
+                <p className="font-semibold">{t('audio_only_weak_connection')}</p>
+                <p className="text-sm text-white/40">{t('video_resumes_automatically')}</p>
               </div>
             )}
           </>
@@ -388,16 +390,16 @@ export default function ConsultationRoom({ params }: { params: Promise<{ id: str
       <div className="relative z-10 p-6 flex justify-between items-center bg-gradient-to-b from-black/80 to-transparent">
         <div>
           <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-            <Activity className="text-teal-400" /> Tele-ICU Consultation
+            <Activity className="text-teal-400" /> {t('teleicu_consultation_title')}
           </h1>
-          <p className="text-white/70 text-sm">Room: {roomId}</p>
+          <p className="text-white/70 text-sm">{t('room_label')}: {roomId}</p>
         </div>
         <div className="flex items-center gap-2">
           <div className={`px-3 py-1 rounded-full text-xs font-bold border flex items-center gap-2 ${qualityBadge.className}`}>
             <QualityIcon size={14} /> {qualityBadge.label}
           </div>
           <div className="bg-red-500/20 text-red-500 px-4 py-1 rounded-full text-sm font-bold border border-red-500/50 flex items-center gap-2 animate-pulse">
-            <div className="w-2 h-2 bg-red-500 rounded-full" /> LIVE
+            <div className="w-2 h-2 bg-red-500 rounded-full" /> {t('live_label')}
           </div>
         </div>
       </div>
@@ -429,7 +431,7 @@ export default function ConsultationRoom({ params }: { params: Promise<{ id: str
       <div className="mt-auto relative z-10 p-8 flex justify-center items-center gap-6 bg-gradient-to-t from-black/80 to-transparent">
         <button
           onClick={toggleMute}
-          aria-label={isMuted ? 'Unmute microphone' : 'Mute microphone'}
+          aria-label={isMuted ? t('unmute_microphone') : t('mute_microphone')}
           aria-pressed={isMuted}
           className={`w-14 h-14 rounded-full flex items-center justify-center transition-colors ${isMuted ? 'bg-red-500 text-white' : 'bg-white/20 text-white hover:bg-white/30 backdrop-blur-md'}`}
         >
@@ -438,7 +440,7 @@ export default function ConsultationRoom({ params }: { params: Promise<{ id: str
 
         <button
           onClick={toggleVideo}
-          aria-label={isVideoOff ? 'Turn camera on' : 'Turn camera off'}
+          aria-label={isVideoOff ? t('turn_camera_on') : t('turn_camera_off')}
           aria-pressed={isVideoOff}
           className={`w-14 h-14 rounded-full flex items-center justify-center transition-colors ${isVideoOff ? 'bg-red-500 text-white' : 'bg-white/20 text-white hover:bg-white/30 backdrop-blur-md'}`}
         >
@@ -447,8 +449,8 @@ export default function ConsultationRoom({ params }: { params: Promise<{ id: str
 
         <button
           onClick={toggleScreenShare}
-          title={isScreenSharing ? 'Stop sharing your screen' : 'Share your screen'}
-          aria-label={isScreenSharing ? 'Stop sharing your screen' : 'Share your screen'}
+          title={isScreenSharing ? t('stop_sharing_screen') : t('share_your_screen')}
+          aria-label={isScreenSharing ? t('stop_sharing_screen') : t('share_your_screen')}
           aria-pressed={isScreenSharing}
           className={`w-14 h-14 rounded-full flex items-center justify-center transition-colors ${isScreenSharing ? 'bg-teal-500 text-white' : 'bg-white/20 text-white hover:bg-white/30 backdrop-blur-md'}`}
         >
@@ -457,8 +459,8 @@ export default function ConsultationRoom({ params }: { params: Promise<{ id: str
 
         <button
           onClick={() => applyCallMode(callMode === 'text' ? 'video' : 'text')}
-          title={callMode === 'text' ? 'Return to video' : 'Switch to text chat'}
-          aria-label={callMode === 'text' ? 'Return to video call' : 'Switch to text chat (for low bandwidth)'}
+          title={callMode === 'text' ? t('return_to_video') : t('switch_to_text_chat')}
+          aria-label={callMode === 'text' ? t('return_to_video') : t('switch_to_text_chat')}
           aria-pressed={callMode === 'text'}
           className={`w-14 h-14 rounded-full flex items-center justify-center transition-colors ${callMode === 'text' ? 'bg-teal-500 text-white' : 'bg-white/20 text-white hover:bg-white/30 backdrop-blur-md'}`}
         >
@@ -467,7 +469,7 @@ export default function ConsultationRoom({ params }: { params: Promise<{ id: str
 
         <button
           onClick={endCall}
-          aria-label="End call"
+          aria-label={t('end_call')}
           className="w-16 h-16 rounded-full flex items-center justify-center bg-red-600 hover:bg-red-700 text-white shadow-lg transition-transform hover:scale-110"
         >
           <PhoneOff size={28} />
