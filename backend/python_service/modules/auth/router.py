@@ -368,7 +368,19 @@ def remove_government_whitelist_entry(
 
 @router.post("/login", dependencies=[Depends(rate_limit("login", 15, 300))])
 def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
-    user = db.query(models.User).filter(models.User.username == form_data.username).first()
+    # OAuth2PasswordRequestForm's field is spec-named "username", but every
+    # client (web + all 3 mobile apps) now labels it "Username or Email" —
+    # accept either. Username match stays exact (unchanged); email match is
+    # case-insensitive since registration doesn't normalize email casing.
+    identifier = form_data.username
+    user = (
+        db.query(models.User)
+        .filter(
+            (models.User.username == identifier)
+            | (func.lower(models.User.email) == identifier.lower())
+        )
+        .first()
+    )
     if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

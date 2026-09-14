@@ -118,7 +118,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   child: TextField(
                     controller: _usernameController,
                     decoration: InputDecoration(
-                      hintText: s.t('username_hint'),
+                      hintText: s.t('username_or_email_hint'),
                       border: InputBorder.none,
                       contentPadding: const EdgeInsets.all(20),
                     ),

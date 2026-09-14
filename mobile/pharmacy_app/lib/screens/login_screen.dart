@@ -110,7 +110,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 const SizedBox(height: 40),
                 TextField(
                   controller: _usernameController,
-                  decoration: InputDecoration(hintText: locale.t('username_hint')),
+                  decoration: InputDecoration(hintText: locale.t('username_or_email_hint')),
                 ),
                 const SizedBox(height: 16),
                 TextField(
