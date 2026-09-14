@@ -11,6 +11,7 @@ import { motion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import { Smartphone, MonitorSmartphone, ShieldOff } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
+import { useLocale } from '../../../contexts/LocaleContext';
 import api from '../../../lib/api';
 
 interface UserSession {
@@ -33,6 +34,7 @@ function describeDevice(ua?: string | null): string {
 
 export default function SessionsPage() {
   const { user, loading: authLoading } = useAuth();
+  const { t } = useLocale();
   const router = useRouter();
 
   const [sessions, setSessions] = useState<UserSession[]>([]);
@@ -48,12 +50,12 @@ export default function SessionsPage() {
         const res = await api.get<UserSession[]>('/auth/sessions');
         setSessions(res.data);
       } catch {
-        setError('Could not load your active sessions.');
+        setError(t('could_not_load_sessions'));
       } finally {
         setLoading(false);
       }
     })();
-  }, [user, authLoading, router]);
+  }, [user, authLoading, router, t]);
 
   const revoke = async (id: number) => {
     setRevoking(id);
@@ -62,29 +64,29 @@ export default function SessionsPage() {
       await api.delete(`/auth/sessions/${id}`);
       setSessions((prev) => prev.filter((s) => s.id !== id));
     } catch {
-      setError('Could not sign out that device.');
+      setError(t('could_not_sign_out_device'));
     } finally {
       setRevoking(null);
     }
   };
 
   if (authLoading || loading) {
-    return <div className="min-h-screen flex items-center justify-center text-gray-500">Loading your devices…</div>;
+    return <div className="min-h-screen flex items-center justify-center text-gray-500">{t('loading_devices')}</div>;
   }
 
   return (
     <div className="min-h-screen p-8 lg:p-16 max-w-2xl mx-auto">
       <h1 className="text-3xl font-extrabold flex items-center gap-3 mb-2">
-        <MonitorSmartphone className="text-teal-500" /> My Devices
+        <MonitorSmartphone className="text-teal-500" /> {t('nav_my_devices')}
       </h1>
       <p className="text-gray-500 mb-6">
-        Every device currently signed in to your account. Lost your phone? Sign it out from here.
+        {t('devices_subtitle')}
       </p>
 
       {error && <p role="alert" className="text-red-500 font-semibold mb-4">{error}</p>}
 
       {sessions.length === 0 ? (
-        <div className="glass-panel p-8 text-center text-gray-500">No active sessions found.</div>
+        <div className="glass-panel p-8 text-center text-gray-500">{t('no_active_sessions')}</div>
       ) : (
         <div className="space-y-3">
           {sessions.map((s) => (
@@ -108,7 +110,7 @@ export default function SessionsPage() {
                 disabled={revoking === s.id}
                 className="neu-button px-3 py-2 text-sm font-bold rounded-xl flex items-center gap-2 text-red-500 disabled:opacity-50 shrink-0"
               >
-                <ShieldOff size={15} /> {revoking === s.id ? 'Signing out…' : 'Sign out'}
+                <ShieldOff size={15} /> {revoking === s.id ? t('signing_out') : t('sign_out')}
               </button>
             </motion.div>
           ))}

@@ -12,12 +12,14 @@ import { ShieldCheck, Syringe, Stethoscope, FlaskConical, ChevronRight } from "l
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useProfile } from "../../contexts/ProfileContext";
+import { useLocale } from "../../contexts/LocaleContext";
 import ThemedLoader from "../../components/ThemedLoader";
 import api from "../../lib/api";
 import type { PreventiveReminder } from "../../types";
 
 export default function PreventiveCarePage() {
   const router = useRouter();
+  const { t } = useLocale();
   const { profiles, activeProfile, setActiveProfile } = useProfile();
   const [reminders, setReminders] = useState<PreventiveReminder[]>([]);
   const [loading, setLoading] = useState(true);
@@ -36,7 +38,7 @@ export default function PreventiveCarePage() {
       });
       setReminders(res.data);
     } catch {
-      setError("Could not load preventive care reminders.");
+      setError(t('could_not_load_preventive'));
     } finally {
       setLoading(false);
     }
@@ -64,15 +66,15 @@ export default function PreventiveCarePage() {
         className="glass-panel max-w-2xl w-full p-8"
       >
         <h1 className="text-3xl font-extrabold mb-1 flex items-center gap-3">
-          <ShieldCheck className="text-emerald-500" /> Preventive Care
+          <ShieldCheck className="text-emerald-500" /> {t('nav_preventive_care')}
         </h1>
         <p className="text-gray-500 mb-6">
-          Screening and vaccination reminders based on age, health history, and existing records — not a diagnosis.
+          {t('preventive_care_subtitle')}
         </p>
 
         {profiles.length > 0 && (
           <div className="mb-4">
-            <label className="text-sm font-semibold block mb-1.5">For</label>
+            <label className="text-sm font-semibold block mb-1.5">{t('acting_for')}</label>
             <select
               value={activeProfile?.id ?? ""}
               onChange={(e) => {
@@ -81,7 +83,7 @@ export default function PreventiveCarePage() {
               }}
               className="w-full p-2.5 rounded-xl bg-white/50 dark:bg-black/20 border border-white/30 focus:outline-none focus:ring-2 focus:ring-emerald-400"
             >
-              <option value="">Myself</option>
+              <option value="">{t('myself')}</option>
               {profiles.map((p) => (
                 <option key={p.id} value={p.id}>{p.full_name} ({p.relation})</option>
               ))}
@@ -96,16 +98,16 @@ export default function PreventiveCarePage() {
             onChange={(e) => setIncludeUpcoming(e.target.checked)}
             className="w-4 h-4 accent-emerald-500"
           />
-          Also show upcoming (not yet due)
+          {t('show_upcoming_toggle')}
         </label>
 
         {error && <p role="alert" className="text-red-500 font-semibold mb-6">{error}</p>}
 
         {loading ? (
-          <ThemedLoader variant="wallet" label="Checking your preventive care schedule…" />
+          <ThemedLoader variant="wallet" label={t('checking_preventive_schedule')} />
         ) : reminders.length === 0 ? (
           <p className="text-center text-gray-400 py-12">
-            {includeUpcoming ? "No applicable screenings or vaccinations found." : "Nothing due right now. 🎉"}
+            {includeUpcoming ? t('no_screenings_found') : t('nothing_due_now')}
           </p>
         ) : (
           <div className="space-y-3">
@@ -125,7 +127,7 @@ export default function PreventiveCarePage() {
                   <div>
                     <p className="font-bold flex items-center gap-2">
                       {r.title}
-                      {!r.due && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-400/15 text-gray-400">Upcoming</span>}
+                      {!r.due && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-400/15 text-gray-400">{t('upcoming_badge')}</span>}
                     </p>
                     <p className="text-xs text-gray-500 mt-0.5">{r.reason}</p>
                     {r.last_done_date && (
@@ -133,7 +135,7 @@ export default function PreventiveCarePage() {
                     )}
                     <p className="text-xs font-semibold text-emerald-500 mt-1 flex items-center gap-1">
                       {r.suggested_action === "lab_test" ? <FlaskConical size={12} /> : <Stethoscope size={12} />}
-                      {r.suggested_action === "lab_test" ? "Book a lab test" : "Book a consultation"}
+                      {r.suggested_action === "lab_test" ? t('book_a_lab_test') : t('book_a_consultation')}
                     </p>
                   </div>
                 </div>

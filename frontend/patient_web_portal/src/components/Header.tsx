@@ -126,11 +126,12 @@ export default function Header() {
         <Link href="/chw/dashboard" className="hover:text-teal-500 transition-colors" onClick={() => setMenuOpen(false)}>{t('nav_chw_dashboard')}</Link>
       )}
       {user.role === 'PHARMACIST' && (
-        <>
-          <Link href="/pharmacy/dashboard" className="hover:text-emerald-500 transition-colors" onClick={() => setMenuOpen(false)}>{t('nav_pharmacy_dashboard')}</Link>
-          <Link href="/pharmacy/stock" className="hover:text-emerald-500 transition-colors" onClick={() => setMenuOpen(false)}>{t('nav_pharmacy_stock')}</Link>
-          <Link href="/pharmacy/profile" className="hover:text-emerald-500 transition-colors" onClick={() => setMenuOpen(false)}>{t('nav_my_profile')}</Link>
-        </>
+        // The pharmacist portal is a separate deployed app
+        // (gramcare-pharmacy.onrender.com) — see the login redirect for the
+        // full explanation. A PHARMACIST session landing here at all means
+        // an old bookmark/session; point them at the real portal rather
+        // than the thinner in-portal pages.
+        <a href="https://gramcare-pharmacy.onrender.com" className="hover:text-emerald-500 transition-colors font-bold" onClick={() => setMenuOpen(false)}>{t('nav_pharmacy_dashboard')}</a>
       )}
       <span className="text-gray-500 md:order-last">
         {user.full_name || user.username} ({ROLE_LABEL[user.role] || user.role})

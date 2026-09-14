@@ -10,6 +10,7 @@ import { motion } from 'framer-motion';
 import { Users, Plus, Edit2, Trash2 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useProfile } from '../../contexts/ProfileContext';
+import { useLocale } from '../../contexts/LocaleContext';
 import ThemedLoader from '../../components/ThemedLoader';
 import api from '../../lib/api';
 import type { FamilyProfile } from '../../types';
@@ -32,6 +33,7 @@ const emptyForm: FormState = {
 
 export default function FamilyProfiles() {
   const { user } = useAuth();
+  const { t } = useLocale();
   const { profiles, refreshProfiles, activeProfile, setActiveProfile, loading } = useProfile();
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<FamilyProfile | null>(null);
@@ -79,27 +81,27 @@ export default function FamilyProfiles() {
       setFormData(emptyForm);
     } catch (err) {
       const message = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
-      setError(typeof message === 'string' ? message : 'Failed to save profile. Please try again.');
+      setError(typeof message === 'string' ? message : t('failed_save_profile'));
     } finally {
       setSubmitting(false);
     }
   };
 
   const handleDelete = async (p: FamilyProfile) => {
-    if (!window.confirm(`Remove ${p.full_name}'s profile? Their health records will be kept.`)) return;
+    if (!window.confirm(`${t('remove_profile_confirm')} ${p.full_name}?`)) return;
     try {
       await api.delete(`/family/${p.id}`);
       if (activeProfile?.id === p.id) setActiveProfile(null);
       await refreshProfiles();
     } catch {
-      setError('Failed to delete profile.');
+      setError(t('failed_delete_profile'));
     }
   };
 
   if (!user) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <p className="text-xl text-gray-500">Please log in to manage family profiles.</p>
+        <p className="text-xl text-gray-500">{t('please_login_family')}</p>
       </div>
     );
   }
@@ -114,15 +116,15 @@ export default function FamilyProfiles() {
         <div className="flex justify-between items-center mb-10">
           <div>
             <h1 className="text-4xl font-extrabold flex items-center gap-3">
-              <Users className="text-indigo-500" size={40} /> Family Profiles
+              <Users className="text-indigo-500" size={40} /> {t('nav_family_profiles')}
             </h1>
-            <p className="text-gray-500 mt-2">Manage healthcare records for your dependents.</p>
+            <p className="text-gray-500 mt-2">{t('family_subtitle')}</p>
           </div>
           <button
             onClick={() => { setShowForm(!showForm); setEditing(null); setFormData(emptyForm); setError(''); }}
             className="neu-button px-6 py-3 bg-teal-500 text-white font-bold rounded-xl flex items-center gap-2"
           >
-            {showForm ? 'Cancel' : <><Plus size={20} /> Add Member</>}
+            {showForm ? t('cancel') : <><Plus size={20} /> {t('add_member')}</>}
           </button>
         </div>
 
@@ -140,19 +142,19 @@ export default function FamilyProfiles() {
             <div className="absolute inset-0 bg-white/40 dark:bg-black/40 z-0"></div>
             <div className="relative z-10 grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label htmlFor="family-fullname" className="block text-sm font-semibold mb-2">Full Name</label>
+                <label htmlFor="family-fullname" className="block text-sm font-semibold mb-2">{t('full_name_label')}</label>
                 <input id="family-fullname" required type="text" value={formData.full_name} onChange={(e) => setFormData({ ...formData, full_name: e.target.value })} className="w-full p-3 rounded-xl bg-white/50 dark:bg-black/20 border border-white/20 focus:ring-2 focus:ring-indigo-500 outline-none" />
               </div>
               <div>
-                <label htmlFor="family-relation" className="block text-sm font-semibold mb-2">Relationship</label>
-                <input id="family-relation" required type="text" value={formData.relation} onChange={(e) => setFormData({ ...formData, relation: e.target.value })} placeholder="e.g. Mother, Son, Spouse" className="w-full p-3 rounded-xl bg-white/50 dark:bg-black/20 border border-white/20 focus:ring-2 focus:ring-indigo-500 outline-none" />
+                <label htmlFor="family-relation" className="block text-sm font-semibold mb-2">{t('relationship_label')}</label>
+                <input id="family-relation" required type="text" value={formData.relation} onChange={(e) => setFormData({ ...formData, relation: e.target.value })} placeholder={t('relationship_placeholder')} className="w-full p-3 rounded-xl bg-white/50 dark:bg-black/20 border border-white/20 focus:ring-2 focus:ring-indigo-500 outline-none" />
               </div>
               <div>
-                <label htmlFor="family-age" className="block text-sm font-semibold mb-2">Age</label>
+                <label htmlFor="family-age" className="block text-sm font-semibold mb-2">{t('age_label')}</label>
                 <input id="family-age" required type="number" min={0} max={150} value={formData.age} onChange={(e) => setFormData({ ...formData, age: e.target.value })} className="w-full p-3 rounded-xl bg-white/50 dark:bg-black/20 border border-white/20 focus:ring-2 focus:ring-indigo-500 outline-none" />
               </div>
               <div>
-                <label htmlFor="family-gender" className="block text-sm font-semibold mb-2">Gender</label>
+                <label htmlFor="family-gender" className="block text-sm font-semibold mb-2">{t('gender_label')}</label>
                 <select id="family-gender" value={formData.gender} onChange={(e) => setFormData({ ...formData, gender: e.target.value })} className="w-full p-3 rounded-xl bg-white/50 dark:bg-black/20 border border-white/20 focus:ring-2 focus:ring-indigo-500 outline-none">
                   <option>Male</option>
                   <option>Female</option>
@@ -160,16 +162,16 @@ export default function FamilyProfiles() {
                 </select>
               </div>
               <div>
-                <label htmlFor="family-blood" className="block text-sm font-semibold mb-2">Blood Group (Optional)</label>
+                <label htmlFor="family-blood" className="block text-sm font-semibold mb-2">{t('blood_group_optional')}</label>
                 <input id="family-blood" type="text" value={formData.blood_group} onChange={(e) => setFormData({ ...formData, blood_group: e.target.value })} placeholder="e.g. O+" className="w-full p-3 rounded-xl bg-white/50 dark:bg-black/20 border border-white/20 focus:ring-2 focus:ring-indigo-500 outline-none" />
               </div>
               <div>
-                <label htmlFor="family-conditions" className="block text-sm font-semibold mb-2">Chronic Conditions (Optional)</label>
+                <label htmlFor="family-conditions" className="block text-sm font-semibold mb-2">{t('chronic_conditions_optional')}</label>
                 <input id="family-conditions" type="text" value={formData.chronic_conditions} onChange={(e) => setFormData({ ...formData, chronic_conditions: e.target.value })} className="w-full p-3 rounded-xl bg-white/50 dark:bg-black/20 border border-white/20 focus:ring-2 focus:ring-indigo-500 outline-none" />
               </div>
               <div className="md:col-span-2 flex justify-end">
                 <button type="submit" disabled={submitting} className="neu-button px-8 py-3 bg-indigo-500 text-white font-bold rounded-xl disabled:opacity-50">
-                  {submitting ? 'Saving...' : editing ? 'Update Profile' : 'Save Profile'}
+                  {submitting ? t('saving_ellipsis') : editing ? t('update_profile') : t('save_profile')}
                 </button>
               </div>
             </div>
@@ -177,10 +179,10 @@ export default function FamilyProfiles() {
         )}
 
         {loading ? (
-          <ThemedLoader variant="wallet" label="Loading family profiles…" />
+          <ThemedLoader variant="wallet" label={t('loading_family_profiles')} />
         ) : profiles.length === 0 ? (
           <div className="glass-panel p-10 text-center text-gray-500">
-            No family profiles added yet. Add your family members to keep their health records in one place.
+            {t('no_family_profiles')}
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -209,18 +211,18 @@ export default function FamilyProfiles() {
                   </div>
 
                   <div className="space-y-2 text-sm">
-                    <div className="flex justify-between"><span className="text-gray-500">Age / Gender:</span> <span className="font-semibold">{profile.age} yrs / {profile.gender}</span></div>
+                    <div className="flex justify-between"><span className="text-gray-500">{t('age_gender_label')}:</span> <span className="font-semibold">{profile.age} {t('years_short')} / {profile.gender}</span></div>
                     {profile.blood_group && (
-                      <div className="flex justify-between"><span className="text-gray-500">Blood Group:</span> <span className="font-semibold">{profile.blood_group}</span></div>
+                      <div className="flex justify-between"><span className="text-gray-500">{t('blood_group_label')}:</span> <span className="font-semibold">{profile.blood_group}</span></div>
                     )}
-                    <div className="flex justify-between"><span className="text-gray-500">Conditions:</span> <span className="font-semibold text-orange-500">{profile.chronic_conditions || 'None'}</span></div>
+                    <div className="flex justify-between"><span className="text-gray-500">{t('conditions_label')}:</span> <span className="font-semibold text-orange-500">{profile.chronic_conditions || t('none_label')}</span></div>
                   </div>
 
                   <button
                     onClick={() => setActiveProfile(activeProfile?.id === profile.id ? null : profile)}
                     className={`mt-4 w-full py-2 rounded-xl font-bold text-sm transition-colors ${activeProfile?.id === profile.id ? 'bg-teal-500 text-white' : 'bg-white/40 dark:bg-black/40 hover:bg-teal-500/20'}`}
                   >
-                    {activeProfile?.id === profile.id ? 'Currently Selected' : 'Act for this member'}
+                    {activeProfile?.id === profile.id ? t('currently_selected') : t('act_for_member')}
                   </button>
                 </div>
               </motion.div>

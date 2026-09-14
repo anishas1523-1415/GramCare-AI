@@ -10,12 +10,14 @@ import { FileText, CheckCircle, Clock } from 'lucide-react';
 import api from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { useProfile } from '../../contexts/ProfileContext';
+import { useLocale } from '../../contexts/LocaleContext';
 import ThemedLoader from '../../components/ThemedLoader';
 import type { Prescription } from '../../types';
 
 export default function MyPrescriptions() {
   const { user } = useAuth();
   const { activeProfile } = useProfile();
+  const { t } = useLocale();
   const [prescriptions, setPrescriptions] = useState<Prescription[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -32,18 +34,18 @@ export default function MyPrescriptions() {
         });
         if (!cancelled) setPrescriptions(res.data);
       } catch {
-        if (!cancelled) setError('Could not load prescriptions. Please try again.');
+        if (!cancelled) setError(t('could_not_load_prescriptions'));
       } finally {
         if (!cancelled) setLoading(false);
       }
     })();
     return () => { cancelled = true; };
-  }, [user, activeProfile]);
+  }, [user, activeProfile, t]);
 
   if (!user) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <p className="text-xl text-gray-500">Please log in to view prescriptions.</p>
+        <p className="text-xl text-gray-500">{t('please_login_prescriptions')}</p>
       </div>
     );
   }
@@ -53,19 +55,19 @@ export default function MyPrescriptions() {
       <div className="max-w-3xl mx-auto">
         <h1 className="text-4xl font-extrabold flex items-center gap-3 mb-2">
           <FileText className="text-indigo-500" size={40} />
-          {activeProfile ? `${activeProfile.full_name}'s Prescriptions` : 'My Prescriptions'}
+          {activeProfile ? `${activeProfile.full_name} — ${t('nav_my_prescriptions')}` : t('nav_my_prescriptions')}
         </h1>
         <p className="text-gray-500 mb-10">
-          Digital prescriptions from your consultations — automatically shared with the pharmacy network.
+          {t('prescriptions_subtitle')}
         </p>
 
         {error && <p role="alert" className="text-red-500 font-semibold mb-6">{error}</p>}
 
         {loading ? (
-          <ThemedLoader variant="wallet" label="Loading your prescriptions…" />
+          <ThemedLoader variant="wallet" label={t('loading_prescriptions')} />
         ) : prescriptions.length === 0 ? (
           <div className="glass-panel p-10 text-center text-gray-500">
-            No prescriptions yet. They will appear here after a doctor consultation.
+            {t('no_prescriptions_yet')}
           </div>
         ) : (
           <div className="space-y-6">
@@ -84,7 +86,7 @@ export default function MyPrescriptions() {
                     </p>
                   </div>
                   <span className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold ${rx.is_fulfilled ? 'bg-green-500/10 text-green-600' : 'bg-orange-500/10 text-orange-600'}`}>
-                    {rx.is_fulfilled ? <><CheckCircle size={14} /> Collected</> : <><Clock size={14} /> Awaiting pickup</>}
+                    {rx.is_fulfilled ? <><CheckCircle size={14} /> {t('collected')}</> : <><Clock size={14} /> {t('awaiting_pickup')}</>}
                   </span>
                 </div>
 
@@ -98,10 +100,10 @@ export default function MyPrescriptions() {
                 </div>
 
                 {rx.dosage_instructions && (
-                  <p className="mt-4 text-sm"><span className="font-bold">Instructions: </span>{rx.dosage_instructions}</p>
+                  <p className="mt-4 text-sm"><span className="font-bold">{t('instructions_label')}: </span>{rx.dosage_instructions}</p>
                 )}
                 {rx.notes && (
-                  <p className="mt-1 text-sm text-gray-500"><span className="font-bold">Notes: </span>{rx.notes}</p>
+                  <p className="mt-1 text-sm text-gray-500"><span className="font-bold">{t('notes')}: </span>{rx.notes}</p>
                 )}
               </motion.div>
             ))}

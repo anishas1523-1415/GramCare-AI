@@ -18,6 +18,7 @@ import { useEffect, useState } from "react";
 import type { ComponentType } from "react";
 import Link from "next/link";
 import { useAuth } from "../../contexts/AuthContext";
+import { useLocale } from "../../contexts/LocaleContext";
 import ThemedLoader from "../../components/ThemedLoader";
 import api from "../../lib/api";
 import type { NavigatorItem } from "../../types";
@@ -40,6 +41,7 @@ const CATEGORY_ICON: Record<string, ComponentType<{ size?: number; className?: s
 
 export default function MyCarePage() {
   const { user } = useAuth();
+  const { t } = useLocale();
   const [items, setItems] = useState<NavigatorItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -54,7 +56,7 @@ export default function MyCarePage() {
         const res = await api.get<NavigatorItem[]>("/navigator/next-steps");
         if (!cancelled) setItems(res.data);
       } catch {
-        if (!cancelled) setError("Could not load your next steps. Please try again.");
+        if (!cancelled) setError(t('could_not_load_next_steps'));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -62,12 +64,12 @@ export default function MyCarePage() {
     return () => {
       cancelled = true;
     };
-  }, [user]);
+  }, [user, t]);
 
   if (!user) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <p className="text-xl text-gray-500">Please log in to see your next steps.</p>
+        <p className="text-xl text-gray-500">{t('please_login_my_care')}</p>
       </div>
     );
   }
@@ -82,16 +84,16 @@ export default function MyCarePage() {
         <div className="absolute inset-0 bg-gradient-to-br from-teal-400/5 to-indigo-500/5 z-0" />
         <div className="relative z-10">
           <h1 className="text-3xl font-extrabold mb-1 flex items-center gap-3">
-            <Compass className="text-teal-500" /> My Care
+            <Compass className="text-teal-500" /> {t('nav_my_care')}
           </h1>
           <p className="text-gray-500 mb-6">
-            Everything that needs your attention right now, ranked by urgency.
+            {t('my_care_subtitle')}
           </p>
 
           {error && <p role="alert" className="text-red-500 font-semibold mb-6">{error}</p>}
 
           {loading ? (
-            <ThemedLoader variant="wallet" label="Checking on your care…" />
+            <ThemedLoader variant="wallet" label={t('checking_on_your_care')} />
           ) : (
             <div className="space-y-3">
               {items.map((item, i) => {

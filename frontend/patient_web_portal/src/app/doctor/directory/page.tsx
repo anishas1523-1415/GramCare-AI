@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Filter, ChevronRight } from 'lucide-react';
 import api from '../../../lib/api';
+import { useLocale } from '../../../contexts/LocaleContext';
 import type { EHRRecord } from '../../../types';
 
 interface DirectoryEntry {
@@ -14,6 +15,7 @@ interface DirectoryEntry {
 }
 
 export default function PatientDirectory() {
+  const { t } = useLocale();
   const [patients, setPatients] = useState<DirectoryEntry[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
@@ -46,7 +48,7 @@ export default function PatientDirectory() {
         setPatients(Array.from(byPatient.values()));
       } catch (e) {
         console.error("Failed to fetch patients", e);
-        setError('Could not load the directory (doctors only).');
+        setError(t('could_not_load_directory'));
       } finally {
         setLoading(false);
       }
@@ -62,31 +64,31 @@ export default function PatientDirectory() {
     <div className="min-h-screen p-8 max-w-7xl mx-auto">
       <div className="flex justify-between items-center mb-8">
         <div>
-          <h1 className="text-3xl font-bold text-gray-800">Patient Directory</h1>
-          <p className="text-gray-500">Search and view historical Electronic Health Records (EHR)</p>
+          <h1 className="text-3xl font-bold text-gray-800">{t('nav_patient_directory')}</h1>
+          <p className="text-gray-500">{t('directory_subtitle')}</p>
         </div>
       </div>
 
       <div className="neo-glass-container p-6 mb-8 flex gap-4">
         <div className="flex-1 relative">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input 
+          <input
             type="text"
-            placeholder="Search patient name or ID..."
+            placeholder={t('search_patient_placeholder')}
             className="w-full bg-gray-100 rounded-xl py-3 pl-12 pr-4 outline-none focus:ring-2 focus:ring-indigo-500"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
         <button className="neu-button px-6 flex items-center gap-2">
-          <Filter size={20} /> Filter
+          <Filter size={20} /> {t('filter')}
         </button>
       </div>
 
       {error && <p role="alert" className="text-red-500 font-semibold mb-6">{error}</p>}
 
       {loading ? (
-        <div className="text-center py-20 text-gray-500">Loading patients...</div>
+        <div className="text-center py-20 text-gray-500">{t('loading_patients')}</div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredPatients.map(patient => (
@@ -97,19 +99,19 @@ export default function PatientDirectory() {
                     #{patient.patientId}
                   </div>
                   <div>
-                    <h3 className="font-bold text-gray-800 text-lg">Patient #{patient.patientId}</h3>
-                    <p className="text-sm text-gray-500">{patient.recordCount} record{patient.recordCount === 1 ? '' : 's'}</p>
+                    <h3 className="font-bold text-gray-800 text-lg">{t('patient_hash')}{patient.patientId}</h3>
+                    <p className="text-sm text-gray-500">{patient.recordCount} {patient.recordCount === 1 ? t('record_singular') : t('record_plural')}</p>
                   </div>
                 </div>
               </div>
 
               <div className="bg-gray-50 rounded-lg p-3 mb-4">
-                <p className="text-sm text-gray-600"><span className="font-bold">Last record:</span> {new Date(patient.lastVisit).toLocaleDateString()}</p>
+                <p className="text-sm text-gray-600"><span className="font-bold">{t('last_record')}:</span> {new Date(patient.lastVisit).toLocaleDateString()}</p>
                 <p className="text-sm text-gray-600 truncate"><span className="font-bold">{patient.lastType}:</span> {patient.lastTitle}</p>
               </div>
 
               <div className="flex justify-between items-center text-indigo-600 font-semibold text-sm">
-                <span>Latest activity</span>
+                <span>{t('latest_activity')}</span>
                 <ChevronRight size={16} />
               </div>
             </div>
@@ -117,7 +119,7 @@ export default function PatientDirectory() {
 
           {filteredPatients.length === 0 && (
             <div className="col-span-full text-center py-10 text-gray-500">
-              No patients found matching your search.
+              {t('no_patients_found')}
             </div>
           )}
         </div>

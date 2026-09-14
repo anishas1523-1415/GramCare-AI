@@ -11,6 +11,7 @@ import { motion } from "framer-motion";
 import { Share2, Stethoscope, ArrowRightCircle, Clock } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useAuth } from "../../contexts/AuthContext";
+import { useLocale } from "../../contexts/LocaleContext";
 import ThemedLoader from "../../components/ThemedLoader";
 import api from "../../lib/api";
 import type { Referral } from "../../types";
@@ -22,15 +23,15 @@ const STATUS_STYLE: Record<Referral["status"], string> = {
   COMPLETED: "bg-emerald-500/15 text-emerald-500 border-emerald-500/30",
 };
 
-const STATUS_LABEL: Record<Referral["status"], string> = {
-  PENDING: "Pending",
-  ACCEPTED: "Accepted",
-  DECLINED: "Declined",
-  COMPLETED: "Completed",
-};
-
 export default function ReferralsPage() {
   const { user } = useAuth();
+  const { t } = useLocale();
+  const STATUS_LABEL: Record<Referral["status"], string> = {
+    PENDING: t('status_pending_referral'),
+    ACCEPTED: t('status_accepted'),
+    DECLINED: t('status_declined'),
+    COMPLETED: t('status_completed'),
+  };
   const [referrals, setReferrals] = useState<Referral[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -44,17 +45,17 @@ export default function ReferralsPage() {
         const res = await api.get<Referral[]>("/referrals/mine");
         setReferrals(res.data);
       } catch {
-        setError("Could not load your referrals.");
+        setError(t('could_not_load_referrals'));
       } finally {
         setLoading(false);
       }
     })();
-  }, [user]);
+  }, [user, t]);
 
   if (!user) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <p className="text-xl text-gray-500">Please log in to see your referrals.</p>
+        <p className="text-xl text-gray-500">{t('please_login_referrals')}</p>
       </div>
     );
   }
@@ -69,18 +70,18 @@ export default function ReferralsPage() {
         <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 to-teal-400/5 z-0" />
         <div className="relative z-10">
           <h1 className="text-3xl font-extrabold mb-1 flex items-center gap-3">
-            <Share2 className="text-indigo-500" /> Referrals
+            <Share2 className="text-indigo-500" /> {t('nav_referrals')}
           </h1>
           <p className="text-gray-500 mb-8">
-            Specialist referrals made about you by your doctors, and their current status.
+            {t('referrals_subtitle')}
           </p>
 
           {error && <p role="alert" className="text-red-500 font-semibold mb-6">{error}</p>}
 
           {loading ? (
-            <ThemedLoader variant="doctor" label="Loading your referrals…" />
+            <ThemedLoader variant="doctor" label={t('loading_referrals')} />
           ) : referrals.length === 0 ? (
-            <p className="text-center text-gray-400 py-12">No referrals have been made about you yet.</p>
+            <p className="text-center text-gray-400 py-12">{t('no_referrals_yet')}</p>
           ) : (
             <div className="space-y-4">
               {referrals.map((r) => (
@@ -100,8 +101,8 @@ export default function ReferralsPage() {
                     <span className="flex items-center gap-1">
                       <ArrowRightCircle size={12} />
                       {r.referred_to_doctor_id
-                        ? `Referred to Doctor #${r.referred_to_doctor_id}`
-                        : `Open referral — awaiting a ${r.specialty} doctor`}
+                        ? `${t('referred_to_doctor')} #${r.referred_to_doctor_id}`
+                        : `${t('open_referral_awaiting')} ${r.specialty}`}
                     </span>
                     <span className="flex items-center gap-1">
                       <Clock size={12} /> {new Date(r.created_at).toLocaleString()}

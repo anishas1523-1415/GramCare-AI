@@ -10,6 +10,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Building2, FileUp, Save, MapPin } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
+import { useLocale } from '../../../contexts/LocaleContext';
 import { useRouter } from 'next/navigation';
 import api from '../../../lib/api';
 
@@ -40,6 +41,7 @@ const EMPTY: HospitalSelf = { id: 0, name: '' };
 
 export default function HospitalProfilePage() {
   const { user, loading: authLoading } = useAuth();
+  const { t } = useLocale();
   const router = useRouter();
 
   const [profile, setProfile] = useState<HospitalSelf>(EMPTY);
@@ -66,7 +68,7 @@ export default function HospitalProfilePage() {
         if (status === 409) {
           setIsNew(true); // no hospital registered yet — show the same form, empty
         } else {
-          setError('Could not load your hospital profile.');
+          setError(t('could_not_load_hospital_profile'));
         }
       } finally {
         setLoading(false);
@@ -88,7 +90,7 @@ export default function HospitalProfilePage() {
           lng: pos.coords.longitude,
         }));
       },
-      () => setError('Could not access location — enter it manually or skip.'),
+      () => setError(t('could_not_access_location')),
     );
   };
 
@@ -111,9 +113,9 @@ export default function HospitalProfilePage() {
       });
       setProfile(res.data);
       setIsNew(false);
-      setSuccess('Hospital profile saved.');
+      setSuccess(t('hospital_profile_saved'));
     } catch {
-      setError('Could not save your hospital profile.');
+      setError(t('could_not_save_hospital_profile'));
     } finally {
       setSaving(false);
     }
@@ -128,9 +130,9 @@ export default function HospitalProfilePage() {
       const image_base64 = await readAsBase64(file);
       const res = await api.post<HospitalSelf>('/hospital/me/license-document', { image_base64 });
       setProfile(res.data);
-      setSuccess('License document uploaded.');
+      setSuccess(t('license_document_uploaded'));
     } catch {
-      setError('Document upload failed.');
+      setError(t('document_upload_failed'));
     } finally {
       setUploadingDoc(false);
       if (docInputRef.current) docInputRef.current.value = '';
@@ -138,16 +140,16 @@ export default function HospitalProfilePage() {
   };
 
   if (authLoading || loading) {
-    return <div className="min-h-screen flex items-center justify-center text-gray-500">Loading hospital profile…</div>;
+    return <div className="min-h-screen flex items-center justify-center text-gray-500">{t('loading_hospital_profile')}</div>;
   }
 
   return (
     <div className="min-h-screen p-8 lg:p-16 max-w-3xl mx-auto">
       <h1 className="text-3xl font-extrabold flex items-center gap-3 mb-2">
-        <Building2 className="text-red-500" /> {isNew ? 'Register Your Hospital' : 'Hospital Profile'}
+        <Building2 className="text-red-500" /> {isNew ? t('register_your_hospital') : t('nav_hospital_profile')}
       </h1>
       <p className="text-gray-500 mb-6">
-        Used for the Emergency Desk and patient-facing hospital information.
+        {t('hospital_profile_subtitle')}
       </p>
 
       {error && <p role="alert" className="text-red-500 font-semibold mb-4">{error}</p>}
@@ -155,7 +157,7 @@ export default function HospitalProfilePage() {
 
       <form onSubmit={save} className="glass-panel p-6 space-y-4 mb-6">
         <div>
-          <label htmlFor="hosp-name" className="block text-sm font-semibold mb-1.5">Hospital Name</label>
+          <label htmlFor="hosp-name" className="block text-sm font-semibold mb-1.5">{t('hospital_name_label')}</label>
           <input
             id="hosp-name"
             required
@@ -228,7 +230,7 @@ export default function HospitalProfilePage() {
           onClick={useMyLocation}
           className="text-sm font-semibold text-red-500 flex items-center gap-1"
         >
-          <MapPin size={14} /> Use my current location
+          <MapPin size={14} /> {t('use_my_current_location')}
         </button>
 
         <button
@@ -236,21 +238,21 @@ export default function HospitalProfilePage() {
           disabled={saving}
           className="neu-button px-5 py-3 bg-red-500 text-white font-bold rounded-xl flex items-center gap-2 disabled:opacity-50"
         >
-          <Save size={16} /> {saving ? 'Saving…' : isNew ? 'Register Hospital' : 'Save Profile'}
+          <Save size={16} /> {saving ? t('saving_ellipsis') : isNew ? t('register_hospital') : t('save_profile')}
         </button>
       </form>
 
       {!isNew && (
         <div className="glass-panel p-6">
-          <h2 className="font-bold mb-2 flex items-center gap-2"><FileUp size={18} /> License Document</h2>
-          <p className="text-sm text-gray-500 mb-4">Upload a scan of your hospital&apos;s registration/license.</p>
+          <h2 className="font-bold mb-2 flex items-center gap-2"><FileUp size={18} /> {t('license_document')}</h2>
+          <p className="text-sm text-gray-500 mb-4">{t('license_document_note')}</p>
           {profile.license_document_url && (
             <a
               href={profile.license_document_url}
               target="_blank" rel="noreferrer"
               className="text-sm text-red-500 underline block mb-3"
             >
-              View currently uploaded document
+              {t('view_document')}
             </a>
           )}
           <input ref={docInputRef} type="file" accept="image/*,application/pdf" className="hidden" onChange={uploadLicenseDocument} />
@@ -259,7 +261,7 @@ export default function HospitalProfilePage() {
             disabled={uploadingDoc}
             className="neu-button px-4 py-2 text-sm font-bold rounded-xl flex items-center gap-2 disabled:opacity-50"
           >
-            <FileUp size={16} /> {uploadingDoc ? 'Uploading…' : profile.license_document_url ? 'Replace Document' : 'Upload Document'}
+            <FileUp size={16} /> {uploadingDoc ? t('uploading_ellipsis') : profile.license_document_url ? t('replace_document') : t('upload_document')}
           </button>
         </div>
       )}

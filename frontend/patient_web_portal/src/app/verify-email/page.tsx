@@ -9,8 +9,10 @@ import React, { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { CheckCircle2, XCircle, Loader2 } from 'lucide-react';
 import api from '../../lib/api';
+import { useLocale } from '../../contexts/LocaleContext';
 
 function VerifyEmailInner() {
+  const { t } = useLocale();
   const params = useSearchParams();
   const token = params.get('token');
 
@@ -21,7 +23,7 @@ function VerifyEmailInner() {
     (async () => {
       if (!token) {
         setStatus('error');
-        setMessage('This verification link is missing its token.');
+        setMessage(t('verify_link_missing_token'));
         return;
       }
       try {
@@ -30,10 +32,10 @@ function VerifyEmailInner() {
       } catch (err) {
         const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
         setStatus('error');
-        setMessage(typeof detail === 'string' ? detail : 'This link is invalid or has expired.');
+        setMessage(typeof detail === 'string' ? detail : t('verify_link_invalid'));
       }
     })();
-  }, [token]);
+  }, [token, t]);
 
   return (
     <div className="min-h-screen flex items-center justify-center p-8">
@@ -41,25 +43,25 @@ function VerifyEmailInner() {
         {status === 'checking' && (
           <>
             <Loader2 className="mx-auto mb-4 animate-spin text-indigo-500" size={40} />
-            <p className="text-gray-500">Verifying your email…</p>
+            <p className="text-gray-500">{t('verifying_your_email')}</p>
           </>
         )}
         {status === 'success' && (
           <>
             <CheckCircle2 className="mx-auto mb-4 text-emerald-500" size={44} />
-            <h1 className="text-xl font-bold mb-2">Email verified</h1>
-            <p className="text-gray-500 mb-6">You can now sign in to your account.</p>
+            <h1 className="text-xl font-bold mb-2">{t('email_verified')}</h1>
+            <p className="text-gray-500 mb-6">{t('can_now_sign_in')}</p>
             <a href="/login" className="neu-button inline-block px-6 py-3 bg-indigo-500 text-white font-bold rounded-xl">
-              Go to Sign In
+              {t('go_to_sign_in')}
             </a>
           </>
         )}
         {status === 'error' && (
           <>
             <XCircle className="mx-auto mb-4 text-red-500" size={44} />
-            <h1 className="text-xl font-bold mb-2">Verification failed</h1>
+            <h1 className="text-xl font-bold mb-2">{t('verification_failed')}</h1>
             <p className="text-gray-500 mb-6">{message}</p>
-            <a href="/login" className="text-indigo-500 font-semibold hover:underline">Back to Sign In</a>
+            <a href="/login" className="text-indigo-500 font-semibold hover:underline">{t('back_to_login')}</a>
           </>
         )}
       </div>
@@ -68,8 +70,9 @@ function VerifyEmailInner() {
 }
 
 export default function VerifyEmailPage() {
+  const { t } = useLocale();
   return (
-    <Suspense fallback={<div className="min-h-screen flex items-center justify-center text-gray-500">Loading…</div>}>
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center text-gray-500">{t('loading_ellipsis')}</div>}>
       <VerifyEmailInner />
     </Suspense>
   );

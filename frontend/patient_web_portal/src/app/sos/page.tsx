@@ -15,16 +15,17 @@ import { ShieldAlert, MapPin, Phone, Plus, Trash2, Clock, CheckCircle2 } from "l
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "../../contexts/AuthContext";
 import { useProfile } from "../../contexts/ProfileContext";
+import { useLocale } from "../../contexts/LocaleContext";
 import api from "../../lib/api";
 import type { EmergencySOS, EmergencyContact } from "../../types";
 
-function getBestEffortLocation(): Promise<{ lat: number | null; lng: number | null; text: string }> {
+function getBestEffortLocation(unavailableText: string): Promise<{ lat: number | null; lng: number | null; text: string }> {
   return new Promise((resolve) => {
     if (typeof navigator === "undefined" || !navigator.geolocation) {
-      resolve({ lat: null, lng: null, text: "Location unavailable" });
+      resolve({ lat: null, lng: null, text: unavailableText });
       return;
     }
-    const timeout = setTimeout(() => resolve({ lat: null, lng: null, text: "Location unavailable" }), 5000);
+    const timeout = setTimeout(() => resolve({ lat: null, lng: null, text: unavailableText }), 5000);
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         clearTimeout(timeout);
@@ -32,22 +33,23 @@ function getBestEffortLocation(): Promise<{ lat: number | null; lng: number | nu
       },
       () => {
         clearTimeout(timeout);
-        resolve({ lat: null, lng: null, text: "Location permission denied" });
+        resolve({ lat: null, lng: null, text: unavailableText });
       },
       { enableHighAccuracy: true, timeout: 4500 }
     );
   });
 }
 
-const STATUS_META: Record<EmergencySOS["status"], { label: string; cls: string }> = {
-  ACTIVE: { label: "Waiting for response…", cls: "bg-red-500/15 text-red-500 border-red-500/30" },
-  RESPONDED: { label: "Help is on the way", cls: "bg-emerald-500/15 text-emerald-500 border-emerald-500/30" },
-  RESOLVED: { label: "Resolved", cls: "bg-gray-500/15 text-gray-400 border-gray-500/30" },
-};
-
 export default function SosPage() {
   const { user } = useAuth();
   const { profiles, activeProfile } = useProfile();
+  const { t } = useLocale();
+
+  const STATUS_META: Record<EmergencySOS["status"], { label: string; cls: string }> = {
+    ACTIVE: { label: t('sos_waiting_response'), cls: "bg-red-500/15 text-red-500 border-red-500/30" },
+    RESPONDED: { label: t('sos_help_on_way'), cls: "bg-emerald-500/15 text-emerald-500 border-emerald-500/30" },
+    RESOLVED: { label: t('sos_resolved'), cls: "bg-gray-500/15 text-gray-400 border-gray-500/30" },
+  };
 
   const [confirming, setConfirming] = useState(false);
   const [note, setNote] = useState("");
@@ -109,7 +111,7 @@ export default function SosPage() {
     setSending(true);
     setError("");
     try {
-      const loc = await getBestEffortLocation();
+      const loc = await getBestEffortLocation(t('location_unavailable'));
       await api.post("/sos/trigger", {
         location_lat: loc.lat,
         location_lng: loc.lng,
@@ -123,7 +125,7 @@ export default function SosPage() {
       await loadHistory();
     } catch (err) {
       const message = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
-      setError(typeof message === "string" ? message : "Could not send the alert. If this is a life-threatening emergency, call 108 immediately.");
+      setError(typeof message === "string" ? message : t('sos_send_failed'));
     } finally {
       setSending(false);
     }
@@ -134,7 +136,7 @@ export default function SosPage() {
       await api.put(`/sos/${id}/resolve`);
       loadHistory();
     } catch {
-      setError("Could not update this alert.");
+      setError(t('sos_update_failed'));
     }
   };
 
@@ -149,7 +151,7 @@ export default function SosPage() {
       loadContacts();
     } catch (err) {
       const message = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
-      setError(typeof message === "string" ? message : "Could not save this contact.");
+      setError(typeof message === "string" ? message : t('sos_contact_save_failed'));
     } finally {
       setAddingContact(false);
     }
@@ -160,14 +162,14 @@ export default function SosPage() {
       await api.delete(`/sos/contacts/${id}`);
       loadContacts();
     } catch {
-      setError("Could not remove this contact.");
+      setError(t('sos_contact_remove_failed'));
     }
   };
 
   if (!user) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <p className="text-xl text-gray-500">Please log in to access Emergency SOS.</p>
+        <p className="text-xl text-gray-500">{t('please_login_sos')}</p>
       </div>
     );
   }
@@ -182,10 +184,10 @@ export default function SosPage() {
         <div className="absolute inset-0 bg-gradient-to-br from-red-500/10 to-orange-400/5 z-0" />
         <div className="relative z-10">
           <h1 className="text-3xl font-extrabold mb-1 flex items-center gap-3">
-            <ShieldAlert className="text-red-500" /> Emergency SOS
+            <ShieldAlert className="text-red-500" /> {t('emergency_sos')}
           </h1>
           <p className="text-gray-500 mb-8">
-            Sends your location instantly to the nearest hospital&apos;s emergency desk. Only for real emergencies.
+            {t('sos_page_subtitle')}
           </p>
 
           {error && <p role="alert" className="text-red-500 font-semibold mb-6">{error}</p>}
@@ -210,7 +212,7 @@ export default function SosPage() {
                 onClick={() => resolveSos(active.id)}
                 className="neu-button w-full py-2.5 text-sm font-bold rounded-xl"
               >
-                I&apos;m safe now — mark resolved
+                {t('im_safe_mark_resolved')}
               </button>
             </div>
           ) : !confirming ? (
@@ -222,21 +224,21 @@ export default function SosPage() {
               transition={{ duration: 1.8, repeat: Infinity }}
               className="w-full py-8 mb-8 rounded-2xl bg-red-500 text-white font-extrabold text-2xl flex items-center justify-center gap-3"
             >
-              <ShieldAlert size={32} /> TRIGGER SOS
+              <ShieldAlert size={32} /> {t('trigger_sos')}
             </motion.button>
           ) : (
             <div className="mb-8 p-5 rounded-2xl border-2 border-red-500/30 bg-red-500/5">
-              <p className="font-bold mb-4">This will immediately alert the nearest hospital with your location. Continue?</p>
+              <p className="font-bold mb-4">{t('sos_confirm_prompt')}</p>
 
               {profiles.length > 0 && (
                 <div className="mb-3">
-                  <label className="text-sm font-semibold block mb-1.5">Who needs help?</label>
+                  <label className="text-sm font-semibold block mb-1.5">{t('who_needs_help')}</label>
                   <select
                     value={forProfileId}
                     onChange={(e) => setForProfileId(e.target.value === "" ? "" : Number(e.target.value))}
                     className="w-full p-2.5 rounded-xl bg-white/50 dark:bg-black/20 border border-white/30 focus:outline-none focus:ring-2 focus:ring-red-400"
                   >
-                    <option value="">Myself</option>
+                    <option value="">{t('myself')}</option>
                     {profiles.map((p) => (
                       <option key={p.id} value={p.id}>{p.full_name} ({p.relation})</option>
                     ))}
@@ -248,7 +250,7 @@ export default function SosPage() {
                 rows={2}
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
-                placeholder="What's happening? (optional)"
+                placeholder={t('whats_happening_optional')}
                 className="w-full p-2.5 rounded-xl bg-white/50 dark:bg-black/20 border border-white/30 focus:outline-none focus:ring-2 focus:ring-red-400 resize-none mb-4"
               />
 
@@ -259,7 +261,7 @@ export default function SosPage() {
                   disabled={sending}
                   className="flex-1 neu-button py-3 font-bold rounded-xl disabled:opacity-50"
                 >
-                  Cancel
+                  {t('cancel')}
                 </button>
                 <button
                   type="button"
@@ -267,7 +269,7 @@ export default function SosPage() {
                   disabled={sending}
                   className="flex-1 py-3 bg-red-500 text-white font-bold rounded-xl disabled:opacity-50"
                 >
-                  {sending ? "Sending…" : "Confirm & Send"}
+                  {sending ? t('sending_ellipsis') : t('confirm_and_send')}
                 </button>
               </div>
             </div>
@@ -276,9 +278,9 @@ export default function SosPage() {
           {/* Emergency contacts */}
           <div className="mb-8">
             <h2 className="text-lg font-bold mb-3 flex items-center gap-2">
-              <Phone size={18} className="text-red-500" /> Emergency Contacts
+              <Phone size={18} className="text-red-500" /> {t('emergency_contacts')}
             </h2>
-            <p className="text-xs text-gray-400 mb-3">Up to 5. Notified alongside the hospital when you trigger SOS.</p>
+            <p className="text-xs text-gray-400 mb-3">{t('emergency_contacts_note')}</p>
             <div className="space-y-2 mb-3">
               {contacts.map((c) => (
                 <div key={c.id} className="flex items-center justify-between neu-panel p-3">
@@ -292,28 +294,28 @@ export default function SosPage() {
                 </div>
               ))}
               {contacts.length === 0 && (
-                <p className="text-sm text-gray-400">No emergency contacts added yet.</p>
+                <p className="text-sm text-gray-400">{t('no_emergency_contacts')}</p>
               )}
             </div>
             {contacts.length < 5 && (
               <div className="flex flex-col sm:flex-row gap-2">
                 <input
                   type="text"
-                  placeholder="Name"
+                  placeholder={t('name')}
                   value={contactName}
                   onChange={(e) => setContactName(e.target.value)}
                   className="flex-1 p-2.5 rounded-xl bg-white/50 dark:bg-black/20 border border-white/30 text-sm focus:outline-none focus:ring-2 focus:ring-red-400"
                 />
                 <input
                   type="tel"
-                  placeholder="Phone"
+                  placeholder={t('phone')}
                   value={contactPhone}
                   onChange={(e) => setContactPhone(e.target.value)}
                   className="flex-1 p-2.5 rounded-xl bg-white/50 dark:bg-black/20 border border-white/30 text-sm focus:outline-none focus:ring-2 focus:ring-red-400"
                 />
                 <input
                   type="text"
-                  placeholder="Relation"
+                  placeholder={t('relation')}
                   value={contactRelation}
                   onChange={(e) => setContactRelation(e.target.value)}
                   className="sm:w-28 p-2.5 rounded-xl bg-white/50 dark:bg-black/20 border border-white/30 text-sm focus:outline-none focus:ring-2 focus:ring-red-400"
@@ -333,7 +335,7 @@ export default function SosPage() {
           {/* History */}
           {!historyLoading && history.filter((s) => s.status === "RESOLVED").length > 0 && (
             <div>
-              <h2 className="text-lg font-bold mb-3">Past Alerts</h2>
+              <h2 className="text-lg font-bold mb-3">{t('past_alerts')}</h2>
               <div className="space-y-2">
                 {history.filter((s) => s.status === "RESOLVED").slice(0, 5).map((s) => (
                   <div key={s.id} className="flex items-center justify-between neu-panel p-3 text-sm">

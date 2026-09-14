@@ -13,6 +13,7 @@ import { motion } from "framer-motion";
 import { CalendarClock, Video, XCircle, User } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../../contexts/AuthContext";
+import { useLocale } from "../../contexts/LocaleContext";
 import { useRouter } from "next/navigation";
 import api from "../../lib/api";
 import type { Appointment, DoctorPublic } from "../../types";
@@ -26,6 +27,7 @@ const STATUS_STYLE: Record<Appointment["status"], string> = {
 
 export default function MyAppointmentsPage() {
   const { user } = useAuth();
+  const { t } = useLocale();
   const router = useRouter();
 
   const [appointments, setAppointments] = useState<Appointment[]>([]);
@@ -45,7 +47,7 @@ export default function MyAppointmentsPage() {
       setAppointments(apptRes.data.sort((a, b) => new Date(b.scheduled_at).getTime() - new Date(a.scheduled_at).getTime()));
       setDoctors(Object.fromEntries(doctorsRes.data.map((d) => [d.id, d])));
     } catch {
-      setError("Could not load your appointments.");
+      setError(t('could_not_load_appointments'));
     } finally {
       setLoading(false);
     }
@@ -62,7 +64,7 @@ export default function MyAppointmentsPage() {
       await api.put(`/appointments/${id}`, { status: "CANCELLED" });
       await load();
     } catch {
-      setError("Could not cancel this appointment.");
+      setError(t('could_not_cancel_appointment'));
     } finally {
       setCancellingId(null);
     }
@@ -80,7 +82,7 @@ export default function MyAppointmentsPage() {
   if (!user) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <p className="text-xl text-gray-500">Please log in to view your appointments.</p>
+        <p className="text-xl text-gray-500">{t('please_login_appointments')}</p>
       </div>
     );
   }
@@ -93,7 +95,7 @@ export default function MyAppointmentsPage() {
           <div>
             <div className="flex items-center gap-2 mb-1">
               <User size={16} className="text-indigo-500" />
-              <p className="font-bold">{doctor ? doctor.full_name : `Doctor #${appt.doctor_id}`}</p>
+              <p className="font-bold">{doctor ? doctor.full_name : `${t('doctor_hash')}${appt.doctor_id}`}</p>
               <span className={`px-2 py-0.5 rounded-full text-xs font-bold border ${STATUS_STYLE[appt.status]}`}>
                 {appt.status}
               </span>
@@ -103,7 +105,7 @@ export default function MyAppointmentsPage() {
               <CalendarClock size={14} /> {new Date(appt.scheduled_at).toLocaleString()}
             </p>
             {appt.triage_summary && (
-              <p className="text-xs text-gray-400 mt-1">Reason: {appt.triage_summary}</p>
+              <p className="text-xs text-gray-400 mt-1">{t('reason_label')}: {appt.triage_summary}</p>
             )}
           </div>
 
@@ -114,13 +116,13 @@ export default function MyAppointmentsPage() {
                 onClick={() => router.push(`/consultation/${appt.id}`)}
                 className="neu-button px-4 py-2 bg-indigo-500 text-white rounded-lg flex items-center justify-center gap-2 text-sm font-semibold"
               >
-                <Video size={16} /> Join Consultation
+                <Video size={16} /> {t('join_consultation')}
               </button>
               <button
                 type="button"
                 onClick={() => cancelAppointment(appt.id)}
                 disabled={cancellingId === appt.id}
-                title="Cancel appointment"
+                title={t('cancel_appointment_title')}
                 className="p-2 border border-red-500/40 text-red-500 rounded-lg hover:bg-red-500/10 transition-colors disabled:opacity-50"
               >
                 <XCircle size={18} />
@@ -140,19 +142,19 @@ export default function MyAppointmentsPage() {
         className="glass-panel max-w-2xl w-full p-8"
       >
         <h1 className="text-3xl font-extrabold mb-1 flex items-center gap-3">
-          <CalendarClock className="text-indigo-500" /> My Appointments
+          <CalendarClock className="text-indigo-500" /> {t('nav_my_appointments')}
         </h1>
-        <p className="text-gray-500 mb-8">Join a video consultation, or manage an upcoming booking.</p>
+        <p className="text-gray-500 mb-8">{t('appointments_subtitle')}</p>
 
         {error && <p role="alert" className="text-red-500 font-semibold mb-6">{error}</p>}
 
         {loading ? (
-          <p className="text-center text-gray-400 py-12">Loading…</p>
+          <p className="text-center text-gray-400 py-12">{t('loading_ellipsis')}</p>
         ) : (
           <>
             <div className="space-y-3 mb-8">
               {upcoming.length === 0 ? (
-                <p className="text-gray-400 text-sm">No upcoming appointments. <a href="/book" className="text-indigo-500 font-semibold hover:underline">Book a consultation</a>.</p>
+                <p className="text-gray-400 text-sm">{t('no_upcoming_appointments')} <a href="/book" className="text-indigo-500 font-semibold hover:underline">{t('book_a_consultation')}</a>.</p>
               ) : (
                 upcoming.map(renderCard)
               )}
@@ -160,7 +162,7 @@ export default function MyAppointmentsPage() {
 
             {past.length > 0 && (
               <div>
-                <h2 className="text-lg font-bold mb-3">Past Appointments</h2>
+                <h2 className="text-lg font-bold mb-3">{t('past_appointments')}</h2>
                 <div className="space-y-3">{past.map(renderCard)}</div>
               </div>
             )}

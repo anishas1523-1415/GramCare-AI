@@ -12,6 +12,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Siren, MapPin, Mic, CheckCircle2, Clock, Ambulance, RefreshCw } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { useLocale } from '../../contexts/LocaleContext';
 import { useRouter } from 'next/navigation';
 import api from '../../lib/api';
 import { io } from 'socket.io-client';
@@ -22,6 +23,7 @@ const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "https://gramcare-signaling.onr
 
 export default function HospitalEmergencyDesk() {
   const { user, loading: authLoading } = useAuth();
+  const { t } = useLocale();
   const router = useRouter();
 
   const [active, setActive] = useState<EmergencySOS[]>([]);
@@ -38,7 +40,7 @@ export default function HospitalEmergencyDesk() {
       setLastUpdated(new Date());
       setError('');
     } catch {
-      setError('Could not load emergencies (hospital/doctor accounts only).');
+      setError(t('could_not_load_emergencies'));
     } finally {
       setLoading(false);
     }
@@ -79,7 +81,7 @@ export default function HospitalEmergencyDesk() {
       setResponded((prev) => [res.data, ...prev].slice(0, 10));
     } catch (err) {
       const message = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
-      setError(typeof message === 'string' ? message : 'Failed to acknowledge — it may already be handled.');
+      setError(typeof message === 'string' ? message : t('failed_acknowledge'));
       fetchSos();
     }
   };
@@ -89,7 +91,7 @@ export default function HospitalEmergencyDesk() {
       await api.put(`/sos/${sos.id}/resolve`);
       setResponded((prev) => prev.filter((s) => s.id !== sos.id));
     } catch {
-      setError('Failed to resolve.');
+      setError(t('failed_resolve'));
     }
   };
 
@@ -108,7 +110,7 @@ export default function HospitalEmergencyDesk() {
   if (authLoading || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <ThemedLoader variant="emergency" label="Connecting to Emergency Desk…" />
+        <ThemedLoader variant="emergency" label={t('connecting_emergency_desk')} />
       </div>
     );
   }
@@ -123,20 +125,20 @@ export default function HospitalEmergencyDesk() {
       <header className="flex flex-wrap justify-between items-center gap-4 mb-10">
         <div>
           <h1 className="text-3xl lg:text-4xl font-extrabold flex items-center gap-3">
-            <Siren className="text-red-500 animate-pulse" size={38} /> Emergency Desk
+            <Siren className="text-red-500 animate-pulse" size={38} /> {t('nav_emergency_desk')}
           </h1>
           <p className="text-gray-500 mt-1 flex items-center gap-3 text-sm">
             <span className={`flex items-center gap-1 font-bold ${live ? 'text-green-500' : 'text-red-500'}`}>
-              ● {live ? 'Live feed connected' : 'Live feed offline — polling every 30s'}
+              ● {live ? t('live_feed_connected') : t('live_feed_offline')}
             </span>
-            {lastUpdated && <span>Updated {lastUpdated.toLocaleTimeString()}</span>}
+            {lastUpdated && <span>{t('updated_label')} {lastUpdated.toLocaleTimeString()}</span>}
           </p>
         </div>
         <button
           onClick={fetchSos}
           className="neu-button px-5 py-2 font-bold rounded-xl flex items-center gap-2"
         >
-          <RefreshCw size={16} /> Refresh
+          <RefreshCw size={16} /> {t('refresh')}
         </button>
       </header>
 
@@ -162,11 +164,11 @@ export default function HospitalEmergencyDesk() {
       {/* ACTIVE — needs action NOW */}
       <section className="mb-12">
         <h2 className="text-xl font-bold text-red-600 mb-4">
-          Incoming — awaiting acknowledgement ({active.length})
+          {t('incoming_awaiting_ack')} ({active.length})
         </h2>
         {active.length === 0 ? (
           <div className="glass-panel p-10 text-center text-gray-500">
-            No active emergencies. Stay ready.
+            {t('no_active_emergencies')}
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
@@ -182,11 +184,11 @@ export default function HospitalEmergencyDesk() {
                     {sos.severity}
                   </span>
                   <span className="flex items-center gap-1 text-xs font-bold text-red-700">
-                    <Clock size={13} /> {ageMinutes(sos.created_at)} min ago
+                    <Clock size={13} /> {ageMinutes(sos.created_at)} {t('min_ago')}
                   </span>
                 </div>
 
-                <h3 className="text-lg font-bold mb-1">Patient #{sos.patient_id}</h3>
+                <h3 className="text-lg font-bold mb-1">{t('patient_hash')}{sos.patient_id}</h3>
 
                 <p className="text-sm text-gray-700 dark:text-gray-200 flex items-center gap-1 mb-1">
                   <MapPin size={14} className="shrink-0" />
@@ -196,10 +198,10 @@ export default function HospitalEmergencyDesk() {
                       target="_blank" rel="noreferrer"
                       href={`https://maps.google.com/?q=${sos.location_lat},${sos.location_lng}`}
                     >
-                      Open location in Maps
+                      {t('open_location_maps')}
                     </a>
                   ) : (
-                    sos.location_text || 'Location unknown'
+                    sos.location_text || t('location_unknown')
                   )}
                 </p>
 
@@ -211,7 +213,7 @@ export default function HospitalEmergencyDesk() {
 
                 {(sos.escalation_level ?? 0) > 0 && (
                   <p className="text-xs font-bold text-orange-600 mb-2">
-                    ⚠ Escalated ×{sos.escalation_level} — earlier hospital did not respond
+                    ⚠ {t('escalated_label')} ×{sos.escalation_level} — {t('earlier_hospital_no_response')}
                   </p>
                 )}
 
@@ -219,7 +221,7 @@ export default function HospitalEmergencyDesk() {
                   onClick={() => respond(sos)}
                   className="w-full mt-2 py-3 bg-red-600 hover:bg-red-700 text-white font-extrabold rounded-xl transition-colors flex items-center justify-center gap-2"
                 >
-                  <Ambulance size={18} /> ACKNOWLEDGE — HELP EN ROUTE
+                  <Ambulance size={18} /> {t('acknowledge_help_en_route')}
                 </button>
               </motion.div>
             ))}
@@ -230,27 +232,27 @@ export default function HospitalEmergencyDesk() {
       {/* RESPONDED — help en route, resolve on arrival */}
       <section>
         <h2 className="text-xl font-bold text-emerald-600 mb-4">
-          Help en route — this desk ({responded.length})
+          {t('help_en_route_desk')} ({responded.length})
         </h2>
         {responded.length === 0 ? (
           <p className="text-gray-500 text-sm">
-            Emergencies you acknowledge appear here until resolved.
+            {t('emergencies_appear_here')}
           </p>
         ) : (
           <div className="space-y-3 max-w-3xl">
             {responded.map((sos) => (
               <div key={sos.id} className="glass-panel p-4 flex items-center justify-between border-l-8 border-l-emerald-500">
                 <div>
-                  <span className="font-bold">Patient #{sos.patient_id}</span>
+                  <span className="font-bold">{t('patient_hash')}{sos.patient_id}</span>
                   <span className="text-sm text-gray-500 ml-3">
-                    acknowledged {new Date().toLocaleTimeString()}
+                    {t('acknowledged_label')} {new Date().toLocaleTimeString()}
                   </span>
                 </div>
                 <button
                   onClick={() => resolve(sos)}
                   className="px-4 py-2 border border-emerald-500 text-emerald-600 hover:bg-emerald-500 hover:text-white rounded-lg font-bold text-sm transition-colors flex items-center gap-1"
                 >
-                  <CheckCircle2 size={16} /> Mark resolved
+                  <CheckCircle2 size={16} /> {t('mark_resolved')}
                 </button>
               </div>
             ))}

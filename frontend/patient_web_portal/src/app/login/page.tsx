@@ -162,14 +162,22 @@ export default function LoginPage() {
 
       // Land each role on its own home (hospital desks go straight to the
       // Emergency Desk — seconds matter there).
+      if (loggedInRole === 'PHARMACIST') {
+        // The pharmacist portal is a separate deployed app
+        // (gramcare-pharmacy.onrender.com, frontend/admin_dashboard in the
+        // repo) with its own login and its own richer inventory/OCR/recall
+        // tooling — this portal's own /pharmacy/* pages are a newer,
+        // thinner duplicate and are not the canonical pharmacist UI.
+        // Sessions don't carry across origins, so this is a real redirect
+        // to that app's own sign-in, not a same-session handoff.
+        window.location.href = 'https://gramcare-pharmacy.onrender.com';
+        return;
+      }
       router.push(
         loggedInRole === 'HOSPITAL' ? '/hospital'
         : loggedInRole === 'DOCTOR' ? '/doctor/dashboard'
         : loggedInRole === 'ADMIN' ? '/authority'
         : loggedInRole === 'CHW' ? '/chw/dashboard'
-        // Previously fell through to '/' (the patient homepage) — a
-        // pharmacist had nowhere of their own to land.
-        : loggedInRole === 'PHARMACIST' ? '/pharmacy/dashboard'
         : '/'
       );
     } catch (err) {
@@ -302,7 +310,10 @@ export default function LoginPage() {
                   <option value="HOSPITAL">{t('hospital')}</option>
                 </select>
                 <p className="text-xs text-gray-500 mt-1">
-                  {t('pharmacists_labs_note')}
+                  {t('pharmacists_labs_note')}{' '}
+                  <a href="https://gramcare-pharmacy.onrender.com" className="underline text-indigo-500 font-semibold">
+                    {t('pharmacy_portal_link')}
+                  </a>
                 </p>
               </div>
 
