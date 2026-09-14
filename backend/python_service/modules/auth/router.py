@@ -528,7 +528,11 @@ async def forgot_password(
     db: Session = Depends(get_db),
     email_service: EmailService = Depends(get_email_service)
 ):
-    user = db.query(models.User).filter(models.User.email == payload.email).first()
+    # Case-insensitive, same as /auth/login — registration doesn't normalize
+    # email casing, so an exact match here silently missed any account whose
+    # stored email differs in case from what the user typed, returning the
+    # same "sent" message either way with no email ever attempted.
+    user = db.query(models.User).filter(func.lower(models.User.email) == payload.email.lower()).first()
     if not user:
         # Prevent email enumeration by returning a generic success message
         return {"message": "If that email is registered, a reset link has been sent."}
@@ -632,7 +636,8 @@ async def resend_verification(
     db: Session = Depends(get_db),
     email_service: EmailService = Depends(get_email_service),
 ):
-    user = db.query(models.User).filter(models.User.email == payload.email).first()
+    # Case-insensitive — same fix as /auth/login and /auth/forgot-password.
+    user = db.query(models.User).filter(func.lower(models.User.email) == payload.email.lower()).first()
     # Same email-enumeration-safe generic response as forgot-password.
     if user and not user.is_verified:
         await _send_verification_email(db, email_service, user)
