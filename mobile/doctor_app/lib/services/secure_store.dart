@@ -1,6 +1,8 @@
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:uuid/uuid.dart';
 
+import 'offline_cache.dart';
+
 /// Platform-keystore-backed storage for secrets.
 ///
 /// Mirrors apps/mobile_app's SecureStore verbatim (same clinical-app
@@ -34,6 +36,9 @@ class SecureStore {
   Future<void> clearAll() async {
     await _storage.delete(key: _tokenKey);
     await _storage.delete(key: _roleKey);
+    // Cached API responses outlive the token otherwise, letting the next
+    // account on this device read the previous doctor's patient queue offline.
+    await OfflineCache().clear();
   }
 
   /// Stable per-install identifier sent to POST /api/v1/auth/fcm-token as

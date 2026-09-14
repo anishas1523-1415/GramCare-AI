@@ -1,6 +1,8 @@
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:uuid/uuid.dart';
 
+import 'offline_cache.dart';
+
 /// Platform-keystore-backed storage for secrets.
 ///
 /// Same pattern as apps/mobile_app/lib/services/secure_store.dart (verbatim
@@ -34,6 +36,9 @@ class SecureStore {
   Future<void> clearAll() async {
     await _storage.delete(key: _tokenKey);
     await _storage.delete(key: _roleKey);
+    // Cached API responses outlive the token otherwise, letting the next
+    // account on this device read the previous pharmacist's stock offline.
+    await OfflineCache().clear();
   }
 
   /// Stable per-install identifier sent to POST /api/v1/auth/fcm-token as

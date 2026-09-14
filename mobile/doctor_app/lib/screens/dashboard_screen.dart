@@ -25,6 +25,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   List<Appointment> _appointments = [];
   bool _loading = true;
   String? _error;
+  String? _offlineAge;
 
   @override
   void initState() {
@@ -67,13 +68,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
       _error = null;
     });
     try {
-      final res = await ApiService().client.get('/appointments/doctor/$doctorId/queue');
+      final res = await ApiService().cachedGet('queue', '/appointments/doctor/$doctorId/queue');
       final list = (res.data as List)
           .map((j) => Appointment.fromJson(j as Map<String, dynamic>))
           .toList()
         ..sort((a, b) => a.scheduledAt.compareTo(b.scheduledAt));
       setState(() {
         _appointments = list;
+        _offlineAge = res.offlineAge;
         _loading = false;
       });
     } catch (e) {
@@ -119,7 +121,31 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (_error != null) {
       return _buildErrorBody(locale);
     }
-    return _buildQueueBody(locale);
+    if (_offlineAge == null) {
+      return _buildQueueBody(locale);
+    }
+    return Column(children: [
+      _buildOfflineBanner(locale),
+      Expanded(child: _buildQueueBody(locale)),
+    ]);
+  }
+
+  Widget _buildOfflineBanner(LocaleService locale) {
+    return Container(
+      width: double.infinity,
+      color: Colors.orange.withValues(alpha: 0.15),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(children: [
+        const Icon(Icons.cloud_off, size: 16, color: Colors.orange),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            '${locale.t('showing_offline_data')} · $_offlineAge',
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+          ),
+        ),
+      ]),
+    );
   }
 
   Widget _buildVerificationGate(LocaleService locale, DoctorProfile profile) {

@@ -92,6 +92,7 @@ const Map<String, String> _en = {
   'no_profile': 'No pharmacy profile found.',
   'error_generic': 'Something went wrong. Please try again.',
   'offline_note': 'Offline — check your connection and retry.',
+  'showing_offline_data': 'Offline — showing last synced data',
   'retry': 'Retry',
   // Registration + forgot-password — previously this app had no
   // registration or password-recovery surface at all, only login.
@@ -185,6 +186,7 @@ const Map<String, String> _ta = {
   'no_profile': 'மருந்தக சுயவிவரம் இல்லை.',
   'error_generic': 'ஏதோ தவறு நடந்தது. மீண்டும் முயற்சிக்கவும்.',
   'offline_note': 'ஆஃப்லைன் — உங்கள் இணைப்பைச் சரிபார்த்து மீண்டும் முயற்சிக்கவும்.',
+  'showing_offline_data': 'ஆஃப்லைன் — கடைசியாக ஒத்திசைக்கப்பட்ட தரவு காட்டப்படுகிறது',
   'retry': 'மீண்டும் முயற்சி',
   'forgot_password': 'கடவுச்சொல் மறந்துவிட்டதா?',
   'new_pharmacy_register': 'புதிய மருந்தாளரா? கணக்கை உருவாக்க',

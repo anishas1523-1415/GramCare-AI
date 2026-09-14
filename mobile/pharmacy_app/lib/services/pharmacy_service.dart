@@ -1,12 +1,46 @@
+import 'package:dio/dio.dart';
+
 import '../models/prescription.dart';
 import '../models/stock_item.dart';
 import 'api_service.dart';
+import 'offline_cache.dart';
 
 /// Thin wrapper around apps/backend_service/modules/pharmacy_inventory/router.py
 /// (mounted at /api/v1/pharmacy — see main.dart's include_router prefix in the
 /// backend). Every method here maps 1:1 to an endpoint read from that file.
 class PharmacyService {
   final _dio = ApiService().client;
+
+  /// When the most recent read on this instance was served from the offline
+  /// cache, this holds the age of that data ("2h ago"); null when the data
+  /// came from the network. Screens read it to show the offline banner.
+  String? servedFromCacheAge;
+
+  /// Runs a GET that stays useful without connectivity: the response is
+  /// cached on success, and a network failure falls back to the last cached
+  /// copy rather than an error screen. A server-side failure (4xx/5xx) is
+  /// still raised — a 409 "no pharmacy registered" or a 401 means something
+  /// the pharmacist has to act on, and hiding it behind stale data would be
+  /// worse than showing it.
+  Future<T> _cachedGet<T>(
+    String cacheKey,
+    String path, {
+    Map<String, dynamic>? queryParameters,
+    required T Function(dynamic payload) parse,
+  }) async {
+    try {
+      final res = await _dio.get(path, queryParameters: queryParameters);
+      await OfflineCache().save(cacheKey, res.data);
+      servedFromCacheAge = null;
+      return parse(res.data);
+    } on DioException catch (e) {
+      if (e.response != null) rethrow;
+      final cached = await OfflineCache().read(cacheKey);
+      if (cached == null) rethrow;
+      servedFromCacheAge = cached.ageLabel;
+      return parse(cached.payload);
+    }
+  }
 
   /// GET /pharmacy/me -> schemas.PharmacyResponse. Throws a DioException
   /// with statusCode 409 ("No pharmacy registered for this account yet.")
@@ -44,10 +78,13 @@ class PharmacyService {
 
   /// GET /pharmacy/stock -> List[_item_response(...)]
   Future<List<StockItem>> getStock() async {
-    final res = await _dio.get('/pharmacy/stock');
-    return (res.data as List<dynamic>)
-        .map((e) => StockItem.fromJson(Map<String, dynamic>.from(e as Map)))
-        .toList();
+    return _cachedGet(
+      'stock',
+      '/pharmacy/stock',
+      parse: (payload) => (payload as List<dynamic>)
+          .map((e) => StockItem.fromJson(Map<String, dynamic>.from(e as Map)))
+          .toList(),
+    );
   }
 
   /// POST /pharmacy/items — add a new item, or restock an existing one
@@ -109,19 +146,26 @@ class PharmacyService {
   /// GET /pharmacy/expiring?days=N -> orange-coded expiry list, soonest first
   /// (already sorted server-side by expiry_date; router.py:247-271).
   Future<List<StockItem>> getExpiring({int days = 90}) async {
-    final res = await _dio.get('/pharmacy/expiring', queryParameters: {'days': days});
-    return (res.data as List<dynamic>)
-        .map((e) => StockItem.fromJson(Map<String, dynamic>.from(e as Map)))
-        .toList();
+    return _cachedGet(
+      'expiring_$days',
+      '/pharmacy/expiring',
+      queryParameters: {'days': days},
+      parse: (payload) => (payload as List<dynamic>)
+          .map((e) => StockItem.fromJson(Map<String, dynamic>.from(e as Map)))
+          .toList(),
+    );
   }
 
   /// GET /pharmacy/queue -> List[schemas.PrescriptionResponse], unfulfilled
   /// prescriptions newest first (router.py:278-290).
   Future<List<PrescriptionQueueItem>> getQueue() async {
-    final res = await _dio.get('/pharmacy/queue');
-    return (res.data as List<dynamic>)
-        .map((e) => PrescriptionQueueItem.fromJson(Map<String, dynamic>.from(e as Map)))
-        .toList();
+    return _cachedGet(
+      'queue',
+      '/pharmacy/queue',
+      parse: (payload) => (payload as List<dynamic>)
+          .map((e) => PrescriptionQueueItem.fromJson(Map<String, dynamic>.from(e as Map)))
+          .toList(),
+    );
   }
 
   /// PUT /pharmacy/fulfill/{id} — no request body (router.py:293-346).

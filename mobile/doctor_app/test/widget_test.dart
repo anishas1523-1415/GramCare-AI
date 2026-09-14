@@ -15,6 +15,16 @@ import 'package:doctor_mobile_app/main.dart';
 import 'package:doctor_mobile_app/services/app_strings.dart';
 import 'package:doctor_mobile_app/services/doctor_session.dart';
 
+/// The app boots at /splash, which holds before routing on to /login (see
+/// BrandSplashScreen._navigateNext). A bare pumpAndSettle() returns while
+/// that gate is still pending, leaving the test looking at the splash
+/// screen — so advance past it explicitly first.
+Future<void> _settleThroughSplash(WidgetTester tester) async {
+  await tester.pump();
+  await tester.pump(const Duration(seconds: 2));
+  await tester.pumpAndSettle();
+}
+
 void main() {
   testWidgets('App boots to the login screen when logged out', (WidgetTester tester) async {
     // Without this, SecureStore().getToken() throws MissingPluginException
@@ -35,7 +45,7 @@ void main() {
         child: const DoctorApp(),
       ),
     );
-    await tester.pumpAndSettle();
+    await _settleThroughSplash(tester);
 
     expect(find.byType(TextField), findsWidgets);
   });
@@ -58,7 +68,7 @@ void main() {
         child: const DoctorApp(),
       ),
     );
-    await tester.pumpAndSettle();
+    await _settleThroughSplash(tester);
 
     await tester.enterText(find.byType(TextField).first, 'doctor1');
     await tester.enterText(find.byType(TextField).last, 'testpass');

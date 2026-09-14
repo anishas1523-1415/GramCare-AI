@@ -22,6 +22,7 @@ class _StockScreenState extends State<StockScreen> {
   final _service = PharmacyService();
   bool _loading = true;
   String? _error;
+  String? _offlineAge;
   List<StockItem> _items = [];
 
   @override
@@ -39,6 +40,7 @@ class _StockScreenState extends State<StockScreen> {
       final items = await _service.getStock();
       setState(() {
         _items = items;
+        _offlineAge = _service.servedFromCacheAge;
         _loading = false;
       });
     } catch (e) {
@@ -64,7 +66,25 @@ class _StockScreenState extends State<StockScreen> {
           if (added == true) _load();
         },
       ),
-      body: RefreshIndicator(
+      body: Column(children: [
+        if (_offlineAge != null)
+          Container(
+            width: double.infinity,
+            color: Colors.orange.withValues(alpha: 0.15),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Row(children: [
+              const Icon(Icons.cloud_off, size: 16, color: Colors.orange),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '${locale.t('showing_offline_data')} · $_offlineAge',
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                ),
+              ),
+            ]),
+          ),
+        Expanded(
+          child: RefreshIndicator(
         onRefresh: _load,
         child: _loading
             ? const Center(child: CircularProgressIndicator())
@@ -117,7 +137,9 @@ class _StockScreenState extends State<StockScreen> {
                           );
                         },
                       ),
-      ),
+          ),
+        ),
+      ]),
     );
   }
 }

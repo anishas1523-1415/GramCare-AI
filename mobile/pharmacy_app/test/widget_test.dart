@@ -11,6 +11,16 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:pharmacy_mobile_app/main.dart';
 import 'package:pharmacy_mobile_app/services/app_strings.dart';
 
+/// The app boots at /splash, which holds for 1700ms before routing to
+/// /login (see BrandSplashScreen._navigateNext). A bare pumpAndSettle()
+/// returns while that gate is still pending, leaving the test looking at
+/// the splash screen — so advance past it explicitly first.
+Future<void> _settleThroughSplash(WidgetTester tester) async {
+  await tester.pump();
+  await tester.pump(const Duration(seconds: 2));
+  await tester.pumpAndSettle();
+}
+
 void main() {
   testWidgets('Shows the login screen on first launch (no stored session)',
       (WidgetTester tester) async {
@@ -25,7 +35,7 @@ void main() {
         child: const PharmacyApp(),
       ),
     );
-    await tester.pumpAndSettle();
+    await _settleThroughSplash(tester);
 
     expect(find.text('GramCare Pharmacy'), findsOneWidget);
     expect(find.byType(TextField), findsNWidgets(2));
@@ -49,7 +59,7 @@ void main() {
         child: const PharmacyApp(),
       ),
     );
-    await tester.pumpAndSettle();
+    await _settleThroughSplash(tester);
 
     await tester.enterText(find.byType(TextField).first, 'pharma1');
     await tester.enterText(find.byType(TextField).last, 'testpass');

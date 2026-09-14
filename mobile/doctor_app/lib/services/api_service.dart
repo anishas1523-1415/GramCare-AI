@@ -1,6 +1,7 @@
 
 import 'package:dio/dio.dart';
 
+import 'offline_cache.dart';
 import 'secure_store.dart';
 
 /// Dio client for the Doctor mobile app — same base-URL resolution and auth
@@ -57,4 +58,39 @@ class ApiService {
   }
 
   Dio get client => _dio;
+
+  /// GET that stays useful without connectivity: caches the response on
+  /// success, and falls back to the last cached copy when the network is
+  /// unreachable, so a doctor in a low-signal area still sees their patient
+  /// queue and schedule instead of an error screen.
+  ///
+  /// A server-side failure (4xx/5xx) is still raised — a 403 from the
+  /// government-verification gate, say, is something the doctor must see,
+  /// and hiding it behind stale data would be worse.
+  Future<CachedResponse> cachedGet(
+    String cacheKey,
+    String path, {
+    Map<String, dynamic>? queryParameters,
+  }) async {
+    try {
+      final res = await _dio.get(path, queryParameters: queryParameters);
+      await OfflineCache().save(cacheKey, res.data);
+      return CachedResponse(data: res.data, offlineAge: null);
+    } on DioException catch (e) {
+      if (e.response != null) rethrow;
+      final cached = await OfflineCache().read(cacheKey);
+      if (cached == null) rethrow;
+      return CachedResponse(data: cached.payload, offlineAge: cached.ageLabel);
+    }
+  }
+}
+
+class CachedResponse {
+  final dynamic data;
+
+  /// Null when the data came from the network; otherwise how old the cached
+  /// copy is ("2h ago"), for the screen's offline banner.
+  final String? offlineAge;
+
+  const CachedResponse({required this.data, required this.offlineAge});
 }

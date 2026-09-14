@@ -37,6 +37,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   List<_Slot> _slots = [];
   bool _loading = true;
   String? _error;
+  String? _offlineAge;
   bool _togglingAvailability = false;
 
   @override
@@ -53,13 +54,16 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
       _error = null;
     });
     try {
-      final res = await ApiService()
-          .client
-          .get('/doctors/$doctorId/slots', queryParameters: {'include_booked': true});
+      final res = await ApiService().cachedGet(
+        'slots',
+        '/doctors/$doctorId/slots',
+        queryParameters: {'include_booked': true},
+      );
       final list = (res.data as List).map((j) => _Slot.fromJson(j as Map<String, dynamic>)).toList()
         ..sort((a, b) => a.start.compareTo(b.start));
       setState(() {
         _slots = list;
+        _offlineAge = res.offlineAge;
         _loading = false;
       });
     } catch (e) {
@@ -157,6 +161,26 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
         child: ListView(
           padding: const EdgeInsets.all(12),
           children: [
+            if (_offlineAge != null)
+              Container(
+                width: double.infinity,
+                margin: const EdgeInsets.only(bottom: 8),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                child: Row(children: [
+                  const Icon(Icons.cloud_off, size: 16, color: Colors.orange),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      '${locale.t('showing_offline_data')} · $_offlineAge',
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ]),
+              ),
             if (profile != null)
               Card(
                 child: SwitchListTile(
