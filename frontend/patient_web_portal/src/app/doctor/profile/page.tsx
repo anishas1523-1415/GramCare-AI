@@ -10,6 +10,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Stethoscope, Camera, FileUp, CheckCircle2, Clock, AlertTriangle, Save } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
+import { useLocale } from '../../../contexts/LocaleContext';
 import { useRouter } from 'next/navigation';
 import api from '../../../lib/api';
 
@@ -31,10 +32,10 @@ interface DoctorSelf {
   rejection_reason?: string | null;
 }
 
-const STATUS_STYLE: Record<string, { label: string; className: string; icon: React.ReactNode }> = {
-  PENDING: { label: 'Pending Review', className: 'bg-amber-500/15 text-amber-600 border-amber-500/30', icon: <Clock size={14} /> },
-  APPROVED: { label: 'Approved', className: 'bg-emerald-500/15 text-emerald-600 border-emerald-500/30', icon: <CheckCircle2 size={14} /> },
-  REJECTED: { label: 'Not Approved', className: 'bg-red-500/15 text-red-600 border-red-500/30', icon: <AlertTriangle size={14} /> },
+const STATUS_STYLE: Record<string, { labelKey: string; className: string; icon: React.ReactNode }> = {
+  PENDING: { labelKey: 'pending_review_status', className: 'bg-amber-500/15 text-amber-600 border-amber-500/30', icon: <Clock size={14} /> },
+  APPROVED: { labelKey: 'approved_status', className: 'bg-emerald-500/15 text-emerald-600 border-emerald-500/30', icon: <CheckCircle2 size={14} /> },
+  REJECTED: { labelKey: 'not_approved_status', className: 'bg-red-500/15 text-red-600 border-red-500/30', icon: <AlertTriangle size={14} /> },
 };
 
 function readAsBase64(file: File): Promise<string> {
@@ -48,6 +49,7 @@ function readAsBase64(file: File): Promise<string> {
 
 export default function DoctorProfilePage() {
   const { user, loading: authLoading } = useAuth();
+  const { t } = useLocale();
   const router = useRouter();
 
   const [profile, setProfile] = useState<DoctorSelf | null>(null);
@@ -72,12 +74,12 @@ export default function DoctorProfilePage() {
         const res = await api.get<DoctorSelf>('/doctors/me');
         setProfile(res.data);
       } catch {
-        setError('Could not load your profile.');
+        setError(t('could_not_load_doctor_profile'));
       } finally {
         setLoading(false);
       }
     })();
-  }, [user, authLoading, router]);
+  }, [user, authLoading, router, t]);
 
   const field = (key: keyof DoctorSelf, value: string) => {
     setProfile((prev) => (prev ? { ...prev, [key]: value } : prev));
@@ -101,9 +103,9 @@ export default function DoctorProfilePage() {
         service_hours: profile.service_hours,
       });
       setProfile(res.data);
-      setSuccess('Profile saved.');
+      setSuccess(t('profile_saved'));
     } catch {
-      setError('Could not save your profile.');
+      setError(t('could_not_save_doctor_profile'));
     } finally {
       setSaving(false);
     }
@@ -119,7 +121,7 @@ export default function DoctorProfilePage() {
       const res = await api.post<DoctorSelf>('/doctors/me/photo', { image_base64 });
       setProfile(res.data);
     } catch {
-      setError('Photo upload failed.');
+      setError(t('photo_upload_failed'));
     } finally {
       setUploadingPhoto(false);
       if (photoInputRef.current) photoInputRef.current.value = '';
@@ -135,9 +137,9 @@ export default function DoctorProfilePage() {
       const image_base64 = await readAsBase64(file);
       const res = await api.post<DoctorSelf>('/doctors/me/license-document', { image_base64 });
       setProfile(res.data);
-      setSuccess('License document uploaded.');
+      setSuccess(t('license_document_uploaded'));
     } catch {
-      setError('Document upload failed.');
+      setError(t('document_upload_failed'));
     } finally {
       setUploadingDoc(false);
       if (docInputRef.current) docInputRef.current.value = '';
@@ -145,10 +147,10 @@ export default function DoctorProfilePage() {
   };
 
   if (authLoading || loading) {
-    return <div className="min-h-screen flex items-center justify-center text-gray-500">Loading your profile…</div>;
+    return <div className="min-h-screen flex items-center justify-center text-gray-500">{t('loading_your_profile')}</div>;
   }
   if (!profile) {
-    return <div className="min-h-screen flex items-center justify-center text-red-500">{error || 'Profile unavailable.'}</div>;
+    return <div className="min-h-screen flex items-center justify-center text-red-500">{error || t('profile_unavailable')}</div>;
   }
 
   const status = STATUS_STYLE[profile.verification_status] || STATUS_STYLE.PENDING;
@@ -156,22 +158,22 @@ export default function DoctorProfilePage() {
   return (
     <div className="min-h-screen p-8 lg:p-16 max-w-3xl mx-auto">
       <h1 className="text-3xl font-extrabold flex items-center gap-3 mb-2">
-        <Stethoscope className="text-indigo-500" /> My Doctor Profile
+        <Stethoscope className="text-indigo-500" /> {t('my_doctor_profile')}
       </h1>
       <p className="text-gray-500 mb-6">
-        Patients see this once your application is approved by a government reviewer.
+        {t('doctor_profile_visibility_note')}
       </p>
 
       <div className="flex items-center gap-3 mb-8">
         <span className={`flex items-center gap-1.5 text-sm font-bold px-3 py-1.5 rounded-full border ${status.className}`}>
-          {status.icon} {status.label}
+          {status.icon} {t(status.labelKey)}
         </span>
       </div>
 
       {profile.verification_status === 'REJECTED' && profile.rejection_reason && (
         <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-sm mb-6">
-          <strong>Reviewer&apos;s reason:</strong> {profile.rejection_reason}
-          <p className="mt-1 text-gray-500">Update your details below and they&apos;ll be reviewed again.</p>
+          <strong>{t('reviewers_reason_label')}:</strong> {profile.rejection_reason}
+          <p className="mt-1 text-gray-500">{t('update_details_reviewed_again')}</p>
         </div>
       )}
 
@@ -194,7 +196,7 @@ export default function DoctorProfilePage() {
             disabled={uploadingPhoto}
             className="neu-button px-4 py-2 text-sm font-bold rounded-xl flex items-center gap-2 disabled:opacity-50"
           >
-            <Camera size={16} /> {uploadingPhoto ? 'Uploading…' : 'Change Photo'}
+            <Camera size={16} /> {uploadingPhoto ? t('uploading_ellipsis') : t('change_photo_btn')}
           </button>
         </div>
       </div>
@@ -202,7 +204,7 @@ export default function DoctorProfilePage() {
       <div className="glass-panel p-6 space-y-4 mb-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label htmlFor="doc-specialty" className="block text-sm font-semibold mb-1.5">Specialty</label>
+            <label htmlFor="doc-specialty" className="block text-sm font-semibold mb-1.5">{t('specialty_label')}</label>
             <input
               id="doc-specialty"
               value={profile.specialty}
@@ -211,7 +213,7 @@ export default function DoctorProfilePage() {
             />
           </div>
           <div>
-            <label htmlFor="doc-qualifications" className="block text-sm font-semibold mb-1.5">Qualifications</label>
+            <label htmlFor="doc-qualifications" className="block text-sm font-semibold mb-1.5">{t('qualifications_label')}</label>
             <input
               id="doc-qualifications"
               value={profile.qualifications ?? ''}
@@ -221,7 +223,7 @@ export default function DoctorProfilePage() {
             />
           </div>
           <div>
-            <label htmlFor="doc-experience" className="block text-sm font-semibold mb-1.5">Experience (years)</label>
+            <label htmlFor="doc-experience" className="block text-sm font-semibold mb-1.5">{t('experience_years_label')}</label>
             <input
               id="doc-experience"
               type="number" min={0} max={80}
@@ -231,7 +233,7 @@ export default function DoctorProfilePage() {
             />
           </div>
           <div>
-            <label htmlFor="doc-fee" className="block text-sm font-semibold mb-1.5">Consultation Fee (₹)</label>
+            <label htmlFor="doc-fee" className="block text-sm font-semibold mb-1.5">{t('consultation_fee_label')}</label>
             <input
               id="doc-fee"
               type="number" min={0}
@@ -241,7 +243,7 @@ export default function DoctorProfilePage() {
             />
           </div>
           <div>
-            <label htmlFor="doc-languages" className="block text-sm font-semibold mb-1.5">Languages</label>
+            <label htmlFor="doc-languages" className="block text-sm font-semibold mb-1.5">{t('languages_label')}</label>
             <input
               id="doc-languages"
               value={profile.languages ?? ''}
@@ -251,7 +253,7 @@ export default function DoctorProfilePage() {
             />
           </div>
           <div>
-            <label htmlFor="doc-hours" className="block text-sm font-semibold mb-1.5">Service Hours</label>
+            <label htmlFor="doc-hours" className="block text-sm font-semibold mb-1.5">{t('service_hours_label')}</label>
             <input
               id="doc-hours"
               value={profile.service_hours ?? ''}
@@ -264,7 +266,7 @@ export default function DoctorProfilePage() {
 
         <div>
           <label htmlFor="doc-license" className="block text-sm font-semibold mb-1.5">
-            Medical Registration / License Number
+            {t('medical_license_number_label')}
           </label>
           <input
             id="doc-license"
@@ -274,7 +276,7 @@ export default function DoctorProfilePage() {
             className="w-full p-3 rounded-xl bg-white/50 dark:bg-black/20 border border-white/20 focus:ring-2 focus:ring-indigo-400 focus:outline-none"
           />
           <p className="text-xs text-gray-500 mt-1">
-            This is what a government reviewer checks before approving your account.
+            {t('license_reviewer_check_note')}
           </p>
         </div>
 
@@ -283,14 +285,14 @@ export default function DoctorProfilePage() {
           disabled={saving}
           className="neu-button px-5 py-3 bg-indigo-500 text-white font-bold rounded-xl flex items-center gap-2 disabled:opacity-50"
         >
-          <Save size={16} /> {saving ? 'Saving…' : 'Save Profile'}
+          <Save size={16} /> {saving ? t('saving_ellipsis') : t('save_profile_btn')}
         </button>
       </div>
 
       <div className="glass-panel p-6">
-        <h2 className="font-bold mb-2 flex items-center gap-2"><FileUp size={18} /> License / ID Document</h2>
+        <h2 className="font-bold mb-2 flex items-center gap-2"><FileUp size={18} /> {t('license_id_document_title')}</h2>
         <p className="text-sm text-gray-500 mb-4">
-          Upload a clear photo or scan of your medical registration certificate.
+          {t('upload_license_scan_note')}
         </p>
         {profile.license_document_url && (
           <a
@@ -298,7 +300,7 @@ export default function DoctorProfilePage() {
             target="_blank" rel="noreferrer"
             className="text-sm text-indigo-500 underline block mb-3"
           >
-            View currently uploaded document
+            {t('view_uploaded_document')}
           </a>
         )}
         <input ref={docInputRef} type="file" accept="image/*,application/pdf" className="hidden" onChange={uploadLicenseDocument} />
@@ -307,7 +309,7 @@ export default function DoctorProfilePage() {
           disabled={uploadingDoc}
           className="neu-button px-4 py-2 text-sm font-bold rounded-xl flex items-center gap-2 disabled:opacity-50"
         >
-          <FileUp size={16} /> {uploadingDoc ? 'Uploading…' : profile.license_document_url ? 'Replace Document' : 'Upload Document'}
+          <FileUp size={16} /> {uploadingDoc ? t('uploading_ellipsis') : profile.license_document_url ? t('replace_document_btn') : t('upload_document_btn')}
         </button>
       </div>
     </div>
