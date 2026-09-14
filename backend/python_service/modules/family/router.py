@@ -114,7 +114,7 @@ async def upload_profile_photo(
     profile = resolve_owned_profile(profile_id, current_user, db)
 
     uploaded = cloudinary_client.upload_base64(
-        body.image_base64, folder=f"gramcare/family_photos/{current_user.id}"
+        body.image_base64, folder=f"gramcare/family_photos/{current_user.id}", db=db
     )
     if not uploaded:
         raise HTTPException(status_code=503, detail="Photo upload is temporarily unavailable.")

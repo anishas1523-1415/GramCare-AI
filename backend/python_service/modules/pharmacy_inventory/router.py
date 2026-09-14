@@ -415,7 +415,7 @@ async def issue_batch_recall(
     notice_url = None
     if body.notice_base64:
         uploaded = cloudinary_client.upload_base64(
-            body.notice_base64, folder="gramcare/recall_notices", resource_type="auto"
+            body.notice_base64, folder="gramcare/recall_notices", resource_type="auto", db=db
         )
         if not uploaded:
             raise HTTPException(status_code=503, detail="Notice upload is temporarily unavailable.")

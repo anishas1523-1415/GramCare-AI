@@ -15,6 +15,7 @@ import base64
 import io
 import logging
 import os
+import secrets
 import filetype
 from typing import Any, Dict, Optional
 
@@ -22,6 +23,15 @@ import cloudinary
 import cloudinary.uploader
 
 logger = logging.getLogger("gramcare.cloudinary")
+
+# Mime -> Cloudinary-style resource_type, used by the database fallback so
+# callers that branch on resource_type behave identically either way.
+_RESOURCE_TYPES = {
+    "image/jpeg": "image",
+    "image/png": "image",
+    "image/webp": "image",
+    "application/pdf": "raw",
+}
 
 
 class CloudinaryClient:
@@ -44,7 +54,7 @@ class CloudinaryClient:
             except Exception as e:
                 logger.error("Failed to initialize Cloudinary client: %s", e)
         else:
-            logger.warning("CLOUDINARY_* env vars missing. File uploads will be skipped/mocked.")
+            logger.info("CLOUDINARY_* env vars missing. Uploads fall back to database storage (GET /api/v1/files/{token}).")
 
     @staticmethod
     def _decode(data: str) -> bytes:
@@ -61,33 +71,41 @@ class CloudinaryClient:
         resource_type: str = "auto",
         public_id: Optional[str] = None,
         max_size_bytes: int = 10 * 1024 * 1024,
-        allowed_mimes: Optional[list[str]] = None
+        allowed_mimes: Optional[list[str]] = None,
+        db: Optional[Any] = None,
     ) -> Optional[Dict[str, Any]]:
         """Uploads a base64-encoded file and returns `{"url", "public_id",
-        "resource_type", "bytes"}`, or None if Cloudinary isn't configured or
-        the upload fails — callers must treat storage as best-effort and
-        never let it block the primary action (AI analysis, record
-        creation, etc.), same convention as NotificationService."""
+        "resource_type", "bytes"}`, or None if the upload fails — callers
+        must treat storage as best-effort and never let it block the primary
+        action (AI analysis, record creation, etc.), same convention as
+        NotificationService.
+
+        When Cloudinary credentials are absent, the file is stored in the
+        application database instead and served back from GET /files/{token}
+        (see modules/files/router.py). Pass `db` to enable that fallback;
+        without it an unconfigured client still returns None.
+        """
         if allowed_mimes is None:
             allowed_mimes = ["image/jpeg", "image/png", "image/webp", "application/pdf"]
-            
-        if not self.configured:
-            return None
+
         try:
             file_bytes = self._decode(data)
-            
+
             # Size validation
             if len(file_bytes) > max_size_bytes:
                 logger.error("Upload rejected: File size %d exceeds limit of %d bytes", len(file_bytes), max_size_bytes)
                 return None
-                
+
             # MIME type validation
             kind = filetype.guess(file_bytes)
             mime_type = kind.mime if kind else None
-            
+
             if not mime_type or mime_type not in allowed_mimes:
                 logger.error("Upload rejected: Invalid MIME type %s", mime_type)
                 return None
+
+            if not self.configured:
+                return self._store_in_db(file_bytes, mime_type, folder, db)
 
             result = cloudinary.uploader.upload(
                 io.BytesIO(file_bytes),
@@ -104,6 +122,42 @@ class CloudinaryClient:
             }
         except Exception as e:
             logger.error("Cloudinary upload failed (folder=%s): %s", folder, e)
+            return None
+
+    @staticmethod
+    def _store_in_db(
+        file_bytes: bytes, mime_type: str, folder: str, db: Optional[Any]
+    ) -> Optional[Dict[str, Any]]:
+        if db is None:
+            logger.warning("No storage backend for folder=%s (Cloudinary unconfigured, no db session passed).", folder)
+            return None
+        # Imported here rather than at module scope: models imports database,
+        # which this module must not pull in at import time (core/ is loaded
+        # before the DB engine is configured).
+        import models
+
+        try:
+            token = secrets.token_urlsafe(24)
+            stored = models.StoredFile(
+                token=token,
+                folder=folder,
+                content_type=mime_type,
+                size_bytes=len(file_bytes),
+                data=file_bytes,
+            )
+            db.add(stored)
+            db.flush()
+            # Absolute, because these URLs are stored on records and rendered
+            # by clients served from a different origin than the API.
+            base = os.getenv("PUBLIC_API_BASE_URL", "https://gramcare-fastapi.onrender.com").rstrip("/")
+            return {
+                "url": f"{base}/api/v1/files/{token}",
+                "public_id": token,
+                "resource_type": _RESOURCE_TYPES.get(mime_type, "raw"),
+                "bytes": len(file_bytes),
+            }
+        except Exception as e:
+            logger.error("Database file storage failed (folder=%s): %s", folder, e)
             return None
 
     def delete(self, public_id: str, resource_type: str = "image") -> bool:

@@ -235,6 +235,7 @@ async def list_recent_records(
 @router.post("/upload", response_model=schemas.ImageUploadResponse)
 async def upload_wallet_image(
     body: schemas.ImageUploadRequest,
+    db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
     """Uploads an image (e.g. a photographed prescription or lab report) to
@@ -243,10 +244,11 @@ async def upload_wallet_image(
     /sync — keeping the original scan retrievable alongside its OCR text,
     which was previously discarded once /triage/ocr finished reading it."""
     uploaded = cloudinary_client.upload_base64(
-        body.image_base64, folder=f"gramcare/health_wallet/{current_user.id}"
+        body.image_base64, folder=f"gramcare/health_wallet/{current_user.id}", db=db
     )
     if not uploaded:
         raise HTTPException(status_code=503, detail="Image upload is temporarily unavailable.")
+    db.commit()
     return schemas.ImageUploadResponse(url=uploaded["url"], public_id=uploaded["public_id"])
 
 

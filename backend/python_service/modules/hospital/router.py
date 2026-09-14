@@ -97,6 +97,7 @@ async def upload_license_document(
         body.image_base64,
         folder=f"gramcare/hospital_license_documents/{current_user.id}",
         resource_type="auto",
+        db=db,
     )
     if not uploaded:
         raise HTTPException(status_code=503, detail="Document upload is temporarily unavailable.")

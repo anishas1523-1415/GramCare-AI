@@ -173,7 +173,7 @@ async def run_triage_analysis(
         # Persist the original symptom photo (previously analyzed once and
         # discarded) so it's retrievable later — e.g. a doctor confirming
         # what the AI actually saw. Best-effort: never blocks the analysis.
-        uploaded = cloudinary_client.upload_base64(image_b64, folder="gramcare/symptom_photos")
+        uploaded = cloudinary_client.upload_base64(image_b64, folder="gramcare/symptom_photos", db=db)
         if uploaded:
             image_url = uploaded["url"]
 
@@ -319,7 +319,7 @@ Respond in JSON format only, no markdown:
     # Gemini Vision costs more per call than text triage — tighter window.
     dependencies=[Depends(rate_limit("ocr", 10, 300))],
 )
-async def extract_prescription_text(request: OCRRequest):
+async def extract_prescription_text(request: OCRRequest, db: Session = Depends(get_db)):
     """
     Extracts text from a prescription image. Routed through AIManager,
     which restricts OCR's candidate providers to ones that actually support
@@ -333,8 +333,10 @@ async def extract_prescription_text(request: OCRRequest):
         raise HTTPException(status_code=400, detail="Invalid Base64 Image provided to OCR.")
 
     # Best-effort: never blocks OCR if storage is unconfigured/unreachable.
-    uploaded = cloudinary_client.upload_base64(request.image_base64, folder="gramcare/ocr_scans")
+    uploaded = cloudinary_client.upload_base64(request.image_base64, folder="gramcare/ocr_scans", db=db)
     image_url = uploaded["url"] if uploaded else None
+    if uploaded:
+        db.commit()
 
     outcome = await ai_manager.run(AITask.OCR, prompt=OCR_PROMPT, image_base64=request.image_base64)
     data = dict(outcome.data)

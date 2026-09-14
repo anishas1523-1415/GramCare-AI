@@ -246,6 +246,7 @@ async def submit_report(
             body.file_base64,
             folder=f"gramcare/lab_reports/{lab.id}",
             resource_type="auto",  # PDF or image, whichever the lab scanned
+            db=db,
         )
         if not uploaded:
             raise HTTPException(status_code=503, detail="Report file upload is temporarily unavailable.")

@@ -1,6 +1,6 @@
 from sqlalchemy import (
     Column, Integer, String, Float, Boolean, DateTime, Date, ForeignKey, Text, JSON,
-    UniqueConstraint,
+    UniqueConstraint, LargeBinary,
 )
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
@@ -684,3 +684,22 @@ class Referral(Base):
     created_at = Column(DateTime, default=_utcnow)
     resolved_at = Column(DateTime, nullable=True)
 
+
+
+class StoredFile(Base):
+    """Durable storage for uploaded images/documents when Cloudinary is not
+    configured. CloudinaryClient.upload_base64 falls back to writing a row
+    here and returning a /files/{token} URL, so license scans, profile
+    photos, batch-recall notices and OCR sources actually persist on a
+    deployment with no third-party storage credentials instead of being
+    accepted and silently discarded.
+    """
+    __tablename__ = "stored_files"
+
+    id = Column(Integer, primary_key=True, index=True)
+    token = Column(String, unique=True, index=True)
+    folder = Column(String, index=True)
+    content_type = Column(String)
+    size_bytes = Column(Integer)
+    data = Column(LargeBinary)
+    created_at = Column(DateTime, default=_utcnow)

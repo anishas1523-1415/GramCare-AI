@@ -140,7 +140,7 @@ async def upload_my_photo(
     directory alongside specialty/experience/fee (planning doc booking flow)."""
     profile = _ensure_profile(current_user, db)
     uploaded = cloudinary_client.upload_base64(
-        body.image_base64, folder=f"gramcare/doctor_photos/{current_user.id}"
+        body.image_base64, folder=f"gramcare/doctor_photos/{current_user.id}", db=db
     )
     if not uploaded:
         raise HTTPException(status_code=503, detail="Photo upload is temporarily unavailable.")
@@ -166,6 +166,7 @@ async def upload_my_license_document(
         body.image_base64,
         folder=f"gramcare/doctor_license_documents/{current_user.id}",
         resource_type="auto",  # image or PDF scan
+        db=db,
     )
     if not uploaded:
         raise HTTPException(status_code=503, detail="Document upload is temporarily unavailable.")
