@@ -12,7 +12,7 @@ import api from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLocale } from '../../contexts/LocaleContext';
 import type { NearbyPharmacyResult } from '../../types';
-import { APIProvider, Map, Marker } from '@vis.gl/react-google-maps';
+import LocationMap from '../../components/LocationMap';
 import { SkeletonList } from '../../components/Skeleton';
 
 export default function PharmacySearch() {
@@ -128,34 +128,19 @@ export default function PharmacySearch() {
               </div>
             ) : (
               <div className="space-y-4">
-                <div className="mb-6 rounded-2xl overflow-hidden border border-emerald-500/30 h-[300px] w-full">
-                  <APIProvider apiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || ""}>
-                    <Map
-                      defaultZoom={12}
-                      defaultCenter={
-                        results.length > 0 && results[0].lat != null
-                        ? { lat: results[0].lat, lng: results[0].lng! }
-                        : { lat: 12.9716, lng: 77.5946 }
-                      }
-                      mapId="pharmacy_map"
-                      gestureHandling={'greedy'}
-                      disableDefaultUI={true}
-                    >
-                      {results.map(r => (
-                        r.lat != null && r.lng != null ? (
-                          <Marker
-                            key={`marker-${r.pharmacy_id}`}
-                            position={{ lat: r.lat, lng: r.lng }}
-                            title={r.pharmacy_name}
-                            icon={r.available
-                                ? 'http://maps.google.com/mapfiles/ms/icons/green-dot.png'
-                                : 'http://maps.google.com/mapfiles/ms/icons/red-dot.png'}
-                          />
-                        ) : null
-                      ))}
-                    </Map>
-                  </APIProvider>
-                </div>
+                <LocationMap
+                  mapId="pharmacy_map"
+                  borderClass="border-emerald-500/30"
+                  points={results
+                    .filter((r) => r.lat != null && r.lng != null)
+                    .map((r) => ({
+                      id: r.pharmacy_id,
+                      lat: r.lat!,
+                      lng: r.lng!,
+                      label: r.pharmacy_name,
+                      highlight: !r.available,
+                    }))}
+                />
                 {results.map((r) => (
                   <motion.div
                     key={r.pharmacy_id}

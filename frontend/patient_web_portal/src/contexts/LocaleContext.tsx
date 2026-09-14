@@ -670,6 +670,9 @@ const en: Record<string, string> = {
   case_plural: 'cases',
   avg_severity_label: 'avg severity',
   cluster_alert_badge: 'CLUSTER ALERT',
+  // LocationMap
+  map_unavailable_note: 'Tap a location to open it in Google Maps',
+  open_in_maps: 'Open in Maps',
 };
 
 const ta: Record<string, string> = {
@@ -1290,6 +1293,9 @@ const ta: Record<string, string> = {
   case_plural: 'வழக்குகள்',
   avg_severity_label: 'சராசரி தீவிரம்',
   cluster_alert_badge: 'கொத்து எச்சரிக்கை',
+  // LocationMap
+  map_unavailable_note: 'Google Maps இல் திறக்க ஒரு இருப்பிடத்தைத் தட்டவும்',
+  open_in_maps: 'Maps இல் திற',
 };
 
 const TABLES: Record<LocaleCode, Record<string, string>> = { en, ta };

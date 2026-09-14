@@ -9,7 +9,7 @@ import { useRouter } from 'next/navigation';
 import api from '../../../lib/api';
 import { io } from 'socket.io-client';
 import type { Slot, Appointment, EmergencySOS, Referral } from '../../../types';
-import { APIProvider, Map, Marker } from '@vis.gl/react-google-maps';
+import LocationMap from '../../../components/LocationMap';
 import { SkeletonList } from '../../../components/Skeleton';
 
 interface AssistSummary {
@@ -543,30 +543,19 @@ export default function DoctorDashboard() {
             <ShieldAlert className="animate-pulse" /> {t('active_emergencies_title')}
           </h2>
 
-          <div className="mb-6 rounded-2xl overflow-hidden border border-red-500/30 h-[300px] w-full">
-            <APIProvider apiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || ""}>
-              <Map
-                defaultZoom={12}
-                defaultCenter={
-                  activeSOS.length > 0 && activeSOS[0].location_lat != null && activeSOS[0].location_lng != null
-                  ? { lat: activeSOS[0].location_lat, lng: activeSOS[0].location_lng }
-                  : { lat: 12.9716, lng: 77.5946 }
-                }
-                mapId="sos_map"
-                gestureHandling={'greedy'}
-                disableDefaultUI={true}
-              >
-                {activeSOS.map(sos => (
-                  sos.location_lat != null && sos.location_lng != null ? (
-                    <Marker
-                      key={`marker-${sos.id}`}
-                      position={{ lat: sos.location_lat, lng: sos.location_lng }}
-                    />
-                  ) : null
-                ))}
-              </Map>
-            </APIProvider>
-          </div>
+          <LocationMap
+            mapId="sos_map"
+            borderClass="border-red-500/30"
+            points={activeSOS
+              .filter((sos) => sos.location_lat != null && sos.location_lng != null)
+              .map((sos) => ({
+                id: sos.id,
+                lat: sos.location_lat!,
+                lng: sos.location_lng!,
+                label: `${t('sos_from_patient_prefix')} #${sos.patient_id}`,
+                highlight: true,
+              }))}
+          />
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {activeSOS.map(sos => (
