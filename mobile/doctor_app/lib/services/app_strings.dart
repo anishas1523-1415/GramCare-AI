@@ -46,6 +46,11 @@ const Map<String, String> _en = {
   'dashboard': 'Dashboard',
   // Referral network
   'referrals': 'Referrals',
+  'patient_directory': 'Patient Directory',
+  'directory_search_hint': 'Search by patient number or record',
+  'directory_empty': 'No patient records yet.',
+  'directory_records': 'records',
+  'directory_load_failed': 'Could not load the patient directory.',
   'referrals_incoming': 'Incoming',
   'referrals_sent': 'Sent',
   'referrals_none_incoming': 'No referrals waiting on you.',
@@ -209,6 +214,11 @@ const Map<String, String> _ta = {
   'dashboard': 'டாஷ்போர்டு',
   // Referral network
   'referrals': 'பரிந்துரைகள்',
+  'patient_directory': 'நோயாளர் அடைவு',
+  'directory_search_hint': 'நோயாளி எண் அல்லது பதிவு மூலம் தேடவும்',
+  'directory_empty': 'இதுவரை நோயாளர் பதிவுகள் இல்லை.',
+  'directory_records': 'பதிவுகள்',
+  'directory_load_failed': 'நோயாளர் அடைவை ஏற்ற முடியவில்லை.',
   'referrals_incoming': 'வருகின்ற',
   'referrals_sent': 'அனுப்பியவை',
   'referrals_none_incoming': 'உங்களுக்காக காத்திருக்கும் பரிந்துரைகள் இல்லை.',

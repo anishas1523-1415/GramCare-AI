@@ -11,6 +11,7 @@ import 'screens/patient_detail_screen.dart';
 import 'screens/prescription_writer_screen.dart';
 import 'screens/profile_screen.dart';
 import 'screens/register_screen.dart';
+import 'screens/patient_directory_screen.dart';
 import 'screens/referrals_screen.dart';
 import 'screens/schedule_screen.dart';
 import 'screens/video_consultation_screen.dart';
@@ -103,6 +104,10 @@ final GoRouter appRouter = GoRouter(
         final appointmentId = int.parse(state.pathParameters['appointmentId']!);
         return _appPage(VideoConsultationScreen(appointmentId: appointmentId), state);
       },
+    ),
+    GoRoute(
+      path: '/directory',
+      pageBuilder: (context, state) => _appPage(const PatientDirectoryScreen(), state),
     ),
     GoRoute(
       path: '/referrals',

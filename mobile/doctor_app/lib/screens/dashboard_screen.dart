@@ -314,6 +314,14 @@ class _AppDrawer extends StatelessWidget {
               },
             ),
             ListTile(
+              leading: const Icon(Icons.people_outline),
+              title: Text(locale.t('patient_directory')),
+              onTap: () {
+                Navigator.pop(context);
+                context.push('/directory');
+              },
+            ),
+            ListTile(
               leading: const Icon(Icons.swap_horiz),
               title: Text(locale.t('referrals')),
               onTap: () {
