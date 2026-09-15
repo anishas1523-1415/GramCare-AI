@@ -120,7 +120,9 @@ export default function PrescriptionWriter({ params }: { params: Promise<{ appoi
         setIsParsingDictation(true);
         try {
           // Send the entire notes field (which contains the dictation) to the AI parser
-          const res = await api.post('/ai-assist/parse-prescription', {
+          // Mounted at /assist, not /ai-assist (main.py's include_router
+          // prefix) — the old path 404'd, so dictation always failed.
+          const res = await api.post('/assist/parse-prescription', {
             dictation_text: notes
           });
           const parsed = res.data;
