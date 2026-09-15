@@ -113,6 +113,26 @@ def classify_exception(exc: BaseException, *, provider: str) -> AIProviderError:
         return NetworkError(str(exc), provider=provider, cause=exc)
     if "rate" in text and "limit" in text:
         return RateLimitError(str(exc), provider=provider, cause=exc)
+    # A PER-MINUTE cap is a burst limit, not an exhausted allowance, even
+    # though Google words it as a quota: Gemini's free tier answers a burst
+    # with "429 RESOURCE_EXHAUSTED ... Quota exceeded for quota metric ...
+    # per minute". Classifying that as QuotaExceededError made AIManager
+    # open the circuit breaker, which skips the provider for the whole
+    # health-cache window (180s) — so two users triaging within the same
+    # minute knocked AI out for *everyone* for three minutes and served
+    # MockProvider's "Unknown (AI Engines Unavailable)" instead. Confirmed
+    # in production: calls fast-failed in ~1.6s for ~3 minutes, then a real
+    # answer came back in ~15s once the window lapsed. RateLimitError is
+    # retryable and does NOT open the breaker, which is the correct
+    # behaviour for a burst cap.
+    if (
+        "429" in text
+        or "resource_exhausted" in text
+        or "per minute" in text
+        or "per-minute" in text
+        or "requests per" in text
+    ):
+        return RateLimitError(str(exc), provider=provider, cause=exc)
     if "quota" in text or "billing" in text or "insufficient_quota" in text:
         return QuotaExceededError(str(exc), provider=provider, cause=exc)
     if "auth" in text or "api key" in text or "apikey" in text or "401" in text or "403" in text:

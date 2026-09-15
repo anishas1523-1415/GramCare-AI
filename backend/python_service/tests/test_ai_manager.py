@@ -374,3 +374,40 @@ class TestConfigDrivenPriority:
         manager = AIManager(providers={"mock": MockProvider()})
         candidates = manager._candidates_for(AITask.TRIAGE)
         assert any(c.name == "mock" for c in candidates)
+
+
+# ---------------------------------------------------------------------------
+# Burst rate limits must not open the circuit breaker
+# ---------------------------------------------------------------------------
+# Regression cover for a confirmed production outage: Gemini's free tier
+# answers a burst with "429 RESOURCE_EXHAUSTED ... Quota exceeded for quota
+# metric ... per minute". That was classified as QuotaExceededError, which
+# AIManager treats as a disqualifying failure and marks the provider
+# unhealthy for the whole health-cache window — so a couple of users
+# triaging in the same minute degraded every app to MockProvider's
+# "Unknown (AI Engines Unavailable)" for three minutes.
+
+from ai.errors import classify_exception
+
+
+@pytest.mark.parametrize("message", [
+    "429 RESOURCE_EXHAUSTED: Quota exceeded for quota metric 'Generate requests per minute'",
+    "Quota exceeded for quota metric 'Requests' and limit 'Requests per minute'",
+    "429 Too Many Requests",
+    "RESOURCE_EXHAUSTED",
+])
+def test_per_minute_limits_classify_as_retryable_rate_limit(message):
+    err = classify_exception(Exception(message), provider="gemini")
+    assert isinstance(err, RateLimitError), f"{message!r} -> {type(err).__name__}"
+    assert err.retryable is True
+    # The breaker only opens for these categories (see AIManager._call_with_retry).
+    assert err.category not in ("AuthenticationError", "QuotaExceededError", "ProviderUnavailableError")
+
+
+@pytest.mark.parametrize("message", [
+    "You have exceeded your billing quota for this project",
+    "insufficient_quota: please add credits",
+])
+def test_real_exhausted_allowance_still_classifies_as_quota(message):
+    err = classify_exception(Exception(message), provider="openai")
+    assert isinstance(err, QuotaExceededError), f"{message!r} -> {type(err).__name__}"
