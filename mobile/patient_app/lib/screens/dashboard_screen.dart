@@ -396,6 +396,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           ),
                         ),
                         GestureDetector(
+                          onTap: () => context.push('/lab-tests'),
+                          child: GlassmorphicCard(
+                            icon: Icons.science,
+                            title: s.t('lab_tests'),
+                            iconColor: const Color(0xFF8B5CF6),
+                          ),
+                        ),
+                        GestureDetector(
                           onTap: () => context.push('/passport'),
                           child: GlassmorphicCard(
                             icon: Icons.qr_code_2,
