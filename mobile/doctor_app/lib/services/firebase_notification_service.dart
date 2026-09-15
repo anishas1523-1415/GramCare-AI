@@ -41,6 +41,7 @@ AndroidNotificationChannel _channelForType(String? type) {
   switch (type) {
     case 'sos_alert':
       return _criticalChannel;
+    case 'referral':
     case 'appointment_reminder':
     case 'appointment_booked':
     default:
@@ -235,6 +236,13 @@ class FirebaseNotificationService {
     switch (type) {
       case 'sos_alert':
         appRouter.go('/alerts');
+        break;
+      // modules/referrals/router.py pushes this to the referred-to doctor
+      // when a colleague hands a patient over. Without a case here it fell
+      // through to the dashboard, so "New Patient Referral" opened a screen
+      // that does not mention referrals at all.
+      case 'referral':
+        appRouter.go('/referrals');
         break;
       case 'appointment_reminder':
       case 'appointment_booked':

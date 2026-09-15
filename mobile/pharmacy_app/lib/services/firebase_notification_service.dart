@@ -259,6 +259,12 @@ class FirebaseNotificationService {
       case 'order_queue_update':
         appRouter.go('/queue');
         break;
+      // 'pharmacy_update' is what the backend actually sends for a low-stock
+      // crossing (NotificationService.notify_low_stock). Without it these
+      // alerts fell through to the default and opened the Dashboard, so
+      // tapping "X is running low" showed everything except the shortage.
+      // 'low_stock' is kept as an alias in case the payload is renamed.
+      case 'pharmacy_update':
       case 'low_stock':
         appRouter.go('/shortages');
         break;
