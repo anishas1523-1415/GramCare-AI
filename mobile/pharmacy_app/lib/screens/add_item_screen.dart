@@ -1,9 +1,11 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
+import '../services/api_service.dart';
 import '../services/app_strings.dart';
 import '../services/pharmacy_service.dart';
 import '../theme.dart';
@@ -11,16 +13,17 @@ import '../theme.dart';
 /// Add-new-item flow: POST /pharmacy/items. Includes an invoice-photo
 /// capture option (image_picker) per the planning doc's restocking flow.
 ///
-/// SCOPING NOTE: this does NOT run on-device OCR on the captured photo. The
-/// patient app's prescription scanner sends its photo to a backend OCR
-/// endpoint (/prescriptions/scan or similar) that is specific to
-/// prescription documents, not pharmacy invoices — there is no equivalent
-/// invoice-OCR endpoint in apps/backend_service today, and adding one would
-/// be well beyond a "minimal endpoint" (it needs an invoice-layout parser,
-/// not just a route). So this screen lets the pharmacist snap the invoice
-/// photo for their own reference while on this form, then key in the
-/// medicine name/price/count/expiry/batch themselves — still much faster
-/// than writing it into a paper ledger first.
+/// The captured photo is read by POST /triage/ocr, the same endpoint the
+/// web pharmacist portal's invoice scanner uses (and the patient app's
+/// prescription scanner — see OCRResponse's own docstring, which names both
+/// callers). Recognised medicine names are offered as a one-tap fill for the
+/// name field; everything else is still keyed in, since an invoice's price,
+/// count, expiry and batch vary too much in layout to trust to OCR.
+///
+/// This previously only stored the photo for the pharmacist's own reference
+/// on the assumption that no invoice-OCR endpoint existed. It did — the web
+/// portal was already using it — so the phone was making pharmacists type
+/// what the browser filled in for them.
 class AddItemScreen extends StatefulWidget {
   const AddItemScreen({super.key});
 
@@ -41,12 +44,47 @@ class _AddItemScreenState extends State<AddItemScreen> {
   bool _requiresPrescription = false;
   bool _saving = false;
   XFile? _invoicePhoto;
+  bool _scanning = false;
+  List<String> _parsedMedicines = [];
+  String? _ocrError;
 
   Future<void> _captureInvoicePhoto() async {
     final picker = ImagePicker();
     final photo = await picker.pickImage(source: ImageSource.camera, imageQuality: 80);
-    if (photo != null) {
-      setState(() => _invoicePhoto = photo);
+    if (photo == null) return;
+    setState(() {
+      _invoicePhoto = photo;
+      _parsedMedicines = [];
+      _ocrError = null;
+      _scanning = true;
+    });
+
+    try {
+      final bytes = await File(photo.path).readAsBytes();
+      final res = await ApiService().client.post('/triage/ocr', data: {
+        'image_base64': base64Encode(bytes),
+      });
+      final parsed = ((res.data as Map)['medicines_parsed'] as List? ?? [])
+          .map((e) => e.toString())
+          .where((e) => e.trim().isNotEmpty)
+          .toList();
+      if (!mounted) return;
+      setState(() {
+        _parsedMedicines = parsed;
+        _scanning = false;
+        // Sole match: fill it straight in. Several: let the pharmacist pick,
+        // since one invoice legitimately lists many medicines.
+        if (parsed.length == 1 && _nameController.text.trim().isEmpty) {
+          _nameController.text = parsed.first;
+        }
+      });
+    } catch (_) {
+      if (!mounted) return;
+      // Never blocks the form — the pharmacist can always type it in.
+      setState(() {
+        _scanning = false;
+        _ocrError = context.read<LocaleService>().t('invoice_scan_failed');
+      });
     }
   }
 
@@ -109,7 +147,33 @@ class _AddItemScreenState extends State<AddItemScreen> {
                 child: Image.file(File(_invoicePhoto!.path), height: 160, fit: BoxFit.cover),
               ),
               const SizedBox(height: 6),
-              Text(locale.t('invoice_photo_note'), style: const TextStyle(fontSize: 12, color: Colors.black54)),
+              if (_scanning)
+                Row(children: [
+                  const SizedBox(
+                      height: 14, width: 14, child: CircularProgressIndicator(strokeWidth: 2)),
+                  const SizedBox(width: 8),
+                  Text(locale.t('invoice_scanning'),
+                      style: const TextStyle(fontSize: 12, color: Colors.black54)),
+                ])
+              else if (_ocrError != null)
+                Text(_ocrError!, style: const TextStyle(fontSize: 12, color: Colors.red))
+              else if (_parsedMedicines.isNotEmpty) ...[
+                Text(locale.t('invoice_medicines_found'),
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  children: _parsedMedicines
+                      .map((m) => ActionChip(
+                            label: Text(m, style: const TextStyle(fontSize: 12)),
+                            onPressed: () => setState(() => _nameController.text = m),
+                          ))
+                      .toList(),
+                ),
+              ] else
+                Text(locale.t('invoice_photo_note'),
+                    style: const TextStyle(fontSize: 12, color: Colors.black54)),
             ],
             const SizedBox(height: 20),
             TextFormField(
