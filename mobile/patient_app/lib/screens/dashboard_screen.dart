@@ -395,6 +395,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             iconColor: const Color(0xFFEF4444),
                           ),
                         ),
+                        GestureDetector(
+                          onTap: () => context.push('/passport'),
+                          child: GlassmorphicCard(
+                            icon: Icons.qr_code_2,
+                            title: s.t('health_passport'),
+                            iconColor: const Color(0xFFEF4444),
+                          ),
+                        ),
                       ],
                     ),
                   ),
