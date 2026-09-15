@@ -396,6 +396,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           ),
                         ),
                         GestureDetector(
+                          onTap: () => context.push('/my-care'),
+                          child: GlassmorphicCard(
+                            icon: Icons.assistant_navigation,
+                            title: s.t('my_care'),
+                            iconColor: const Color(0xFF6366F1),
+                          ),
+                        ),
+                        GestureDetector(
                           onTap: () => context.push('/preventive-care'),
                           child: GlassmorphicCard(
                             icon: Icons.health_and_safety,

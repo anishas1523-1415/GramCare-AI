@@ -141,6 +141,16 @@ const Map<String, String> _en = {
   'lab_tests': 'Lab Tests',
   // Preventive care & referrals
   'preventive_care': 'Preventive Care',
+  // My Care (AI Care Navigator)
+  'my_care': 'My Care',
+  'my_care_subtitle': 'What to do next, in order of importance — with the reason for each.',
+  'my_care_none': 'Nothing needs your attention right now.',
+  'my_care_load_failed': 'Could not load your care plan.',
+  'open': 'Open',
+  'priority_critical': 'CRITICAL',
+  'priority_high': 'HIGH',
+  'priority_medium': 'MEDIUM',
+  'priority_low': 'LOW',
   'preventive_due_tab': 'Due now',
   'referrals_tab': 'Referrals',
   'preventive_none': 'No preventive checks suggested yet.',
@@ -381,6 +391,16 @@ const Map<String, String> _ta = {
   'lab_tests': 'ஆய்வக பரிசோதனைகள்',
   // Preventive care & referrals
   'preventive_care': 'தடுப்பு பராமரிப்பு',
+  // My Care (AI Care Navigator)
+  'my_care': 'என் பராமரிப்பு',
+  'my_care_subtitle': 'அடுத்து என்ன செய்ய வேண்டும், முக்கியத்துவ வரிசையில் — ஒவ்வொன்றுக்கும் காரணத்துடன்.',
+  'my_care_none': 'இப்போது உங்கள் கவனம் தேவைப்படுவது எதுவும் இல்லை.',
+  'my_care_load_failed': 'உங்கள் பராமரிப்புத் திட்டத்தை ஏற்ற முடியவில்லை.',
+  'open': 'திற',
+  'priority_critical': 'மிக அவசரம்',
+  'priority_high': 'அதிகம்',
+  'priority_medium': 'நடுத்தரம்',
+  'priority_low': 'குறைவு',
   'preventive_due_tab': 'இப்போது தேவை',
   'referrals_tab': 'பரிந்துரைகள்',
   'preventive_none': 'இதுவரை தடுப்பு பரிசோதனைகள் பரிந்துரைக்கப்படவில்லை.',

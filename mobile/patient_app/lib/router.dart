@@ -15,6 +15,7 @@ import 'screens/scan_prescription_screen.dart';
 import 'screens/triage_screen.dart';
 import 'screens/health_passport_screen.dart';
 import 'screens/lab_tests_screen.dart';
+import 'screens/my_care_screen.dart';
 import 'screens/preventive_care_screen.dart';
 import 'screens/health_wallet_screen.dart';
 import 'screens/video_consultation_screen.dart';
@@ -120,6 +121,10 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: '/vitals',
       pageBuilder: (context, state) => _appPage(const VitalsScreen(), state),
+    ),
+    GoRoute(
+      path: '/my-care',
+      pageBuilder: (context, state) => _appPage(const MyCareScreen(), state),
     ),
     GoRoute(
       path: '/preventive-care',
