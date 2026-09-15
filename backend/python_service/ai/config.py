@@ -89,7 +89,22 @@ def get_health_cache_seconds() -> float:
 
 
 def get_request_timeout_seconds() -> float:
+    """Per-attempt provider timeout.
+
+    Measured against production (2026-09-15): a warm Gemini triage
+    generation takes 11-12s, so the previous 20s left almost no margin —
+    a slow instance or a longer answer blew the budget, and because a
+    timeout is retryable the request then walked the whole fallback chain
+    down to MockProvider and answered "Unknown (AI Engines Unavailable)".
+    That is what an AI outage looked like to users even while Gemini was
+    healthy.
+
+    30s is ~2.5x the observed generation time, and keeps the worst case
+    (2 attempts) at 60s — just inside the mobile clients' own 65s receive
+    timeout, so a slow call still returns a real answer instead of the
+    client hanging up first.
+    """
     try:
-        return float(os.getenv("AI_REQUEST_TIMEOUT_SECONDS", "20"))
+        return float(os.getenv("AI_REQUEST_TIMEOUT_SECONDS", "30"))
     except ValueError:
-        return 20.0
+        return 30.0
