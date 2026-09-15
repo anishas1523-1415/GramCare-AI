@@ -134,7 +134,35 @@ app = FastAPI(
 )
 
 # Configure CORS
-origins = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://localhost:3000,http://localhost:3001,http://localhost:80,https://gram-care-ai.vercel.app").split(",")
+#
+# These are the deployed first-party front-ends. They are unioned in
+# unconditionally rather than left to CORS_ORIGINS, because that variable is
+# set by hand in the Render dashboard and silently omitting one takes a whole
+# role offline: the pharmacist portal was live and linked from the main
+# portal's login redirect while production returned no
+# Access-Control-Allow-Origin for it at all, so every API call it made was
+# blocked by the browser. Nothing server-side errors in that state — the
+# portal just renders and then fails on first request.
+FIRST_PARTY_ORIGINS = [
+    "https://gram-care-ai.vercel.app",
+    "https://gramcare-pharmacy.onrender.com",
+    "https://gramcare-lab.onrender.com",
+]
+
+_LOCAL_DEV_ORIGINS = [
+    "http://localhost:5173",
+    "http://localhost:3000",
+    "http://localhost:3001",
+    "http://localhost:80",
+]
+
+_configured = os.getenv("CORS_ORIGINS")
+origins = [o.strip() for o in _configured.split(",") if o.strip()] if _configured else list(_LOCAL_DEV_ORIGINS)
+# Deliberately a union, not a fallback: an operator narrowing CORS_ORIGINS
+# must not be able to knock a shipped front-end offline by omission.
+for _origin in FIRST_PARTY_ORIGINS:
+    if _origin not in origins:
+        origins.append(_origin)
 
 app.add_middleware(
     CORSMiddleware,
