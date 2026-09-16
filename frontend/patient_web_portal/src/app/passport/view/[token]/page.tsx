@@ -11,6 +11,7 @@ import React, { useEffect, useState } from 'react';
 import { use } from 'react';
 import { Droplet, TriangleAlert, HeartPulse, Phone, Pill, ShieldAlert } from 'lucide-react';
 import api from '../../../../lib/api';
+import { useLocale } from '../../../../contexts/LocaleContext';
 
 interface PassportMedicine {
   name: string;
@@ -35,6 +36,7 @@ interface PassportPublic {
 
 export default function PublicPassportView({ params }: { params: Promise<{ token: string }> }) {
   const { token } = use(params);
+  const { t } = useLocale();
   const [passport, setPassport] = useState<PassportPublic | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -45,15 +47,15 @@ export default function PublicPassportView({ params }: { params: Promise<{ token
         const res = await api.get<PassportPublic>(`/passport/${token}`);
         setPassport(res.data);
       } catch {
-        setError('This health passport link is invalid or no longer active.');
+        setError(t('passport_link_invalid'));
       } finally {
         setLoading(false);
       }
     })();
-  }, [token]);
+  }, [token, t]);
 
   if (loading) {
-    return <div className="min-h-screen flex items-center justify-center text-gray-500">Loading…</div>;
+    return <div className="min-h-screen flex items-center justify-center text-gray-500">{t('loading')}</div>;
   }
 
   if (error || !passport) {
@@ -71,36 +73,36 @@ export default function PublicPassportView({ params }: { params: Promise<{ token
     <div className="min-h-screen p-6 flex items-center justify-center">
       <div className="glass-panel max-w-lg w-full p-6 border-2 border-red-500/30">
         <div className="text-center mb-6">
-          <p className="text-xs font-bold uppercase tracking-wider text-red-500">GramCare AI · Emergency Health Passport</p>
+          <p className="text-xs font-bold uppercase tracking-wider text-red-500">{t('passport_emergency_header')}</p>
           <h1 className="text-2xl font-extrabold mt-1">{passport.full_name}</h1>
         </div>
 
         <div className="grid grid-cols-2 gap-4 mb-6">
           <div className="glass-panel p-4 bg-red-500/10 border border-red-500/30 text-center">
             <Droplet size={22} className="text-red-500 mx-auto mb-1" />
-            <p className="text-xs text-gray-500 font-semibold">Blood Group</p>
+            <p className="text-xs text-gray-500 font-semibold">{t('blood_group')}</p>
             <p className="text-xl font-extrabold">{passport.blood_group || '—'}</p>
           </div>
           <div className="glass-panel p-4 bg-amber-500/10 border border-amber-500/30 text-center">
             <TriangleAlert size={22} className="text-amber-500 mx-auto mb-1" />
-            <p className="text-xs text-gray-500 font-semibold">Allergies</p>
-            <p className="text-sm font-bold">{passport.allergies || 'None known'}</p>
+            <p className="text-xs text-gray-500 font-semibold">{t('allergies')}</p>
+            <p className="text-sm font-bold">{passport.allergies || t('none_known')}</p>
           </div>
         </div>
 
         <div className="glass-panel p-4 mb-4">
           <p className="text-sm font-bold flex items-center gap-2 mb-2">
-            <HeartPulse size={16} className="text-indigo-500" /> Chronic Conditions
+            <HeartPulse size={16} className="text-indigo-500" /> {t('chronic_conditions')}
           </p>
           <p className="text-sm text-gray-600 dark:text-gray-300">
-            {passport.chronic_conditions || 'None recorded'}
+            {passport.chronic_conditions || t('none_recorded')}
           </p>
         </div>
 
         {passport.recent_medicines.length > 0 && (
           <div className="glass-panel p-4 mb-4">
             <p className="text-sm font-bold flex items-center gap-2 mb-2">
-              <Pill size={16} className="text-teal-500" /> Recently Prescribed Medicines
+              <Pill size={16} className="text-teal-500" /> {t('recent_medicines')}
             </p>
             <ul className="text-sm text-gray-600 dark:text-gray-300 space-y-1">
               {passport.recent_medicines.map((m, i) => (
@@ -115,7 +117,7 @@ export default function PublicPassportView({ params }: { params: Promise<{ token
         {passport.emergency_contacts.length > 0 && (
           <div className="glass-panel p-4">
             <p className="text-sm font-bold flex items-center gap-2 mb-2">
-              <Phone size={16} className="text-emerald-500" /> Emergency Contacts
+              <Phone size={16} className="text-emerald-500" /> {t('emergency_contacts')}
             </p>
             <ul className="text-sm space-y-2">
               {passport.emergency_contacts.map((c, i) => (
