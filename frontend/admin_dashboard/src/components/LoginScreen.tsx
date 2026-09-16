@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import axios from 'axios';
+import { useLocale } from '../contexts/LocaleContext';
 
 interface LoginScreenProps {
   onLoginSuccess: () => void;
@@ -29,6 +30,7 @@ type Mode = 'login' | 'register' | 'forgot';
  * register and forgot-password endpoints are ordinary JSON.
  */
 export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
+  const { t, code, setCode } = useLocale();
   const [mode, setMode] = useState<Mode>('login');
 
   const [username, setUsername] = useState('');
@@ -64,7 +66,7 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
     const { access_token, refresh_token, role } = res.data;
 
     if (role !== 'PHARMACIST' && role !== 'ADMIN') {
-      setError('This account is not a pharmacist account.');
+      setError(t('not_a_pharmacist_account'));
       return false;
     }
 
@@ -99,22 +101,22 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
         // safeguard.
         const signedIn = await doLogin(username, password);
         if (!signedIn) {
-          setInfo('Account created. You can sign in once a pharmacist role is assigned.');
+          setInfo(t('account_created_pending_role'));
           switchTo('login');
         }
       } else {
         await axios.post(`${API_BASE_URL}/auth/forgot-password`, { email });
-        setInfo('If that email has an account, a password reset link is on its way.');
+        setInfo(t('reset_link_sent'));
       }
     } catch (err) {
       setError(
         readError(
           err,
           mode === 'login'
-            ? 'Login failed'
+            ? t('login_failed')
             : mode === 'register'
-              ? 'Registration failed'
-              : 'Could not send the reset link',
+              ? t('registration_failed')
+              : t('reset_link_failed'),
         ),
       );
     } finally {
@@ -147,19 +149,19 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
   } as const;
 
   const heading =
-    mode === 'login' ? 'GramCare Pharmacy Portal'
-    : mode === 'register' ? 'Create a Pharmacist Account'
-    : 'Reset Your Password';
+    mode === 'login' ? t('portal_title')
+    : mode === 'register' ? t('create_pharmacist_account')
+    : t('reset_your_password');
 
   const subheading =
-    mode === 'login' ? 'Sign in with your pharmacist account.'
-    : mode === 'register' ? 'Register your pharmacy to manage stock and prescriptions.'
-    : "Enter your account email and we'll send a reset link.";
+    mode === 'login' ? t('sign_in_subtitle')
+    : mode === 'register' ? t('register_subtitle')
+    : t('forgot_subtitle');
 
   const submitLabel =
     submitting
-      ? (mode === 'login' ? 'Signing in...' : mode === 'register' ? 'Creating account...' : 'Sending...')
-      : (mode === 'login' ? 'Sign In' : mode === 'register' ? 'Create Account' : 'Send Reset Link');
+      ? (mode === 'login' ? t('signing_in') : mode === 'register' ? t('creating_account') : t('sending'))
+      : (mode === 'login' ? t('sign_in') : mode === 'register' ? t('create_account') : t('send_reset_link'));
 
   return (
     <div
@@ -167,12 +169,22 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
       style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}
     >
       <form onSubmit={handleSubmit} className="glass-panel" style={{ width: '360px', padding: '2rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '0.5rem' }}>
+          <button
+            type="button"
+            onClick={() => setCode(code === 'en' ? 'ta' : 'en')}
+            aria-label={t('language')}
+            style={linkStyle}
+          >
+            {code === 'en' ? 'தமிழ்' : 'English'}
+          </button>
+        </div>
         <h1 style={{ marginTop: 0, fontSize: '1.75rem', color: '#10b981' }}>{heading}</h1>
         <p style={{ color: '#718096', marginBottom: '1.5rem' }}>{subheading}</p>
 
         {mode === 'register' && (
           <>
-            <label style={labelStyle} htmlFor="pharm-fullname">Full name</label>
+            <label style={labelStyle} htmlFor="pharm-fullname">{t('full_name')}</label>
             <input
               id="pharm-fullname"
               type="text"
@@ -188,7 +200,7 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
         {mode !== 'forgot' && (
           <>
             <label style={labelStyle} htmlFor="pharm-username">
-              {mode === 'login' ? 'Username or Email' : 'Username'}
+              {mode === 'login' ? t('username_or_email') : t('username')}
             </label>
             <input
               id="pharm-username"
@@ -205,7 +217,7 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
 
         {(mode === 'register' || mode === 'forgot') && (
           <>
-            <label style={labelStyle} htmlFor="pharm-email">Email</label>
+            <label style={labelStyle} htmlFor="pharm-email">{t('email')}</label>
             <input
               id="pharm-email"
               type="email"
@@ -220,7 +232,7 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
 
         {mode === 'register' && (
           <>
-            <label style={labelStyle} htmlFor="pharm-phone">Phone (optional)</label>
+            <label style={labelStyle} htmlFor="pharm-phone">{t('phone_optional')}</label>
             <input
               id="pharm-phone"
               type="tel"
@@ -234,7 +246,7 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
 
         {mode !== 'forgot' && (
           <>
-            <label style={labelStyle} htmlFor="pharm-password">Password</label>
+            <label style={labelStyle} htmlFor="pharm-password">{t('password')}</label>
             <input
               id="pharm-password"
               type="password"
@@ -247,7 +259,7 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
             />
             {mode === 'register' && (
               <p style={{ color: '#718096', fontSize: '0.75rem', marginTop: '-0.75rem', marginBottom: '1rem' }}>
-                At least 8 characters.
+                {t('min_8_chars')}
               </p>
             )}
           </>
@@ -277,15 +289,15 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
           {mode === 'login' ? (
             <>
               <button type="button" style={linkStyle} onClick={() => switchTo('register')}>
-                Create an account
+                {t('create_an_account')}
               </button>
               <button type="button" style={linkStyle} onClick={() => switchTo('forgot')}>
-                Forgot password?
+                {t('forgot_password')}
               </button>
             </>
           ) : (
             <button type="button" style={linkStyle} onClick={() => switchTo('login')}>
-              &larr; Back to sign in
+              {t('back_to_sign_in')}
             </button>
           )}
         </div>

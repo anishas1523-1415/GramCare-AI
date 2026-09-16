@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Activity, MapPin, TrendingUp, Truck, PackageSearch } from 'lucide-react';
 import api from '../lib/api';
+import { useLocale } from '../contexts/LocaleContext';
 
 interface HealthCluster {
   condition: string;
@@ -30,10 +31,14 @@ interface OverviewStats {
 }
 
 export default function AdminAnalytics() {
+  const { t } = useLocale();
   const [stats, setStats] = useState<OverviewStats | null>(null);
   const [clusters, setClusters] = useState<HealthCluster[]>([]);
   const [forecasts, setForecasts] = useState<ResourceForecast[]>([]);
   const [loading, setLoading] = useState(true);
+  // Holds a locale key, not a sentence: translating at render time means
+  // a language switch updates the visible error, and the fetch effect
+  // does not need `t` in its dependency list.
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -49,7 +54,7 @@ export default function AdminAnalytics() {
         setForecasts(forecastsRes.data);
       } catch (err) {
         console.error('Failed to load analytics', err);
-        setError('Failed to load community health intelligence data.');
+        setError('analytics_failed');
       } finally {
         setLoading(false);
       }
@@ -59,36 +64,36 @@ export default function AdminAnalytics() {
   }, []);
 
   if (loading) {
-    return <div style={{ padding: '2rem', textAlign: 'center' }}>Loading Community Intelligence...</div>;
+    return <div style={{ padding: '2rem', textAlign: 'center' }}>{t('loading_community_intelligence')}</div>;
   }
 
   if (error) {
-    return <div style={{ padding: '2rem', color: 'red' }}>{error}</div>;
+    return <div style={{ padding: '2rem', color: 'red' }}>{t(error)}</div>;
   }
 
   return (
     <div style={{ maxWidth: 1200, margin: '0 auto', padding: '2rem' }}>
       <h1 style={{ color: '#4f46e5', display: 'flex', alignItems: 'center', gap: 10 }}>
-        <Activity size={32} /> Community Health Intelligence
+        <Activity size={32} /> {t('community_health_intelligence')}
       </h1>
       
       {/* Overview Stats */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
         <div className="glass-panel" style={{ padding: '1.5rem', textAlign: 'center' }}>
           <div style={{ fontSize: '2rem', fontWeight: 'bold', color: '#3b82f6' }}>{stats?.total_assessments}</div>
-          <div style={{ color: '#6b7280', fontSize: '0.9rem' }}>Triage Assessments (7d)</div>
+          <div style={{ color: '#6b7280', fontSize: '0.9rem' }}>{t('triage_assessments_7d')}</div>
         </div>
         <div className="glass-panel" style={{ padding: '1.5rem', textAlign: 'center' }}>
           <div style={{ fontSize: '2rem', fontWeight: 'bold', color: '#ef4444' }}>{stats?.active_sos}</div>
-          <div style={{ color: '#6b7280', fontSize: '0.9rem' }}>Active SOS Alerts</div>
+          <div style={{ color: '#6b7280', fontSize: '0.9rem' }}>{t('active_sos_alerts')}</div>
         </div>
         <div className="glass-panel" style={{ padding: '1.5rem', textAlign: 'center' }}>
           <div style={{ fontSize: '2rem', fontWeight: 'bold', color: '#f59e0b' }}>{stats?.unfulfilled_prescriptions}</div>
-          <div style={{ color: '#6b7280', fontSize: '0.9rem' }}>Pending Prescriptions</div>
+          <div style={{ color: '#6b7280', fontSize: '0.9rem' }}>{t('pending_prescriptions_stat')}</div>
         </div>
         <div className="glass-panel" style={{ padding: '1.5rem', textAlign: 'center' }}>
           <div style={{ fontSize: '2rem', fontWeight: 'bold', color: '#10b981' }}>{stats?.registered_pharmacies}</div>
-          <div style={{ color: '#6b7280', fontSize: '0.9rem' }}>Registered Pharmacies</div>
+          <div style={{ color: '#6b7280', fontSize: '0.9rem' }}>{t('registered_pharmacies')}</div>
         </div>
       </div>
 
@@ -96,14 +101,14 @@ export default function AdminAnalytics() {
         {/* Heatmaps / Clusters */}
         <div className="glass-panel" style={{ padding: '1.5rem' }}>
           <h2 style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#b91c1c', marginTop: 0 }}>
-            <MapPin size={24} /> Localized Outbreak Heatmap
+            <MapPin size={24} /> {t('outbreak_heatmap')}
           </h2>
           <p style={{ color: '#4b5563', marginBottom: '1rem', fontSize: '0.9rem' }}>
-            AI-detected symptom clusters mapping potential outbreaks.
+            {t('outbreak_heatmap_blurb')}
           </p>
           
           {clusters.length === 0 ? (
-            <div style={{ color: '#9ca3af' }}>No outbreak clusters detected recently.</div>
+            <div style={{ color: '#9ca3af' }}>{t('no_outbreak_clusters')}</div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               {clusters.map((c, i) => (
@@ -118,7 +123,7 @@ export default function AdminAnalytics() {
                     <MapPin size={14} /> {c.location}
                   </div>
                   <div style={{ color: '#6b7280', fontSize: '0.85rem', marginTop: '0.5rem' }}>
-                    Avg Severity: <span style={{ color: c.avg_severity > 60 ? '#ef4444' : 'inherit' }}>{c.avg_severity}</span> 
+                    {t('avg_severity')} <span style={{ color: c.avg_severity > 60 ? '#ef4444' : 'inherit' }}>{c.avg_severity}</span> 
                     {' '} | First seen: {new Date(c.first_seen).toLocaleDateString()}
                   </div>
                 </div>
@@ -127,17 +132,17 @@ export default function AdminAnalytics() {
           )}
         </div>
 
-        {/* Resource Allocation Forecast */}
+        {/* {t('resource_forecast')} */}
         <div className="glass-panel" style={{ padding: '1.5rem' }}>
           <h2 style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#0369a1', marginTop: 0 }}>
-            <TrendingUp size={24} /> Resource Allocation Forecast
+            <TrendingUp size={24} /> {t('resource_forecast')}
           </h2>
           <p style={{ color: '#4b5563', marginBottom: '1rem', fontSize: '0.9rem' }}>
-            Predictive analytics for medicines and emergency services.
+            {t('resource_forecast_blurb')}
           </p>
           
           {forecasts.length === 0 ? (
-            <div style={{ color: '#9ca3af' }}>No resource shortages predicted at this time.</div>
+            <div style={{ color: '#9ca3af' }}>{t('no_resource_shortages')}</div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               {forecasts.map((f, i) => (
