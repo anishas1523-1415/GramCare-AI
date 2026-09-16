@@ -8,6 +8,7 @@ import 'package:workmanager/workmanager.dart';
 
 import 'models/health_record.dart';
 import 'router.dart';
+import 'services/ai_key_service.dart';
 import 'services/app_strings.dart';
 import 'services/firebase_notification_service.dart';
 import 'services/profile_service.dart';
@@ -60,6 +61,11 @@ void main() async {
       'health_wallet',
       encryptionCipher: HiveAesCipher(hiveKey),
     );
+
+    // The user's own AI key, if they supplied one after the shared quota
+    // ran out. Read from the keystore before any screen can make an AI
+    // request, so the first one already carries it.
+    await AiKeyService().load();
 
     // Tamil-first localization (planning doc) — persisted user choice.
     final locale = LocaleService();

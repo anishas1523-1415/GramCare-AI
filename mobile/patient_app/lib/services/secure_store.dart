@@ -25,6 +25,17 @@ class SecureStore {
   static const _deviceIdKey = 'gramcare_device_id';
   static const _lastFcmTokenKey = 'gramcare_last_registered_fcm_token';
 
+  /// Direct keystore access for secrets owned by another service (e.g. the
+  /// user's own AI provider key in AiKeyService). Kept here so there is
+  /// still exactly one FlutterSecureStorage configuration in the app rather
+  /// than each caller inventing its own AndroidOptions.
+  static Future<String?> readRaw(String key) => _storage.read(key: key);
+
+  static Future<void> writeRaw(String key, String value) =>
+      _storage.write(key: key, value: value);
+
+  static Future<void> deleteRaw(String key) => _storage.delete(key: key);
+
   Future<String?> getToken() => _storage.read(key: _tokenKey);
 
   Future<void> setToken(String token) => _storage.write(key: _tokenKey, value: token);

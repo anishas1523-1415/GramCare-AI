@@ -10,11 +10,13 @@ import 'package:provider/provider.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 
 import '../services/api_service.dart';
+import '../services/ai_key_service.dart';
 import '../services/app_strings.dart';
 import '../services/offline_triage_service.dart';
 import '../services/profile_service.dart';
 import '../services/sos_service.dart';
 import '../services/sync_service.dart';
+import '../widgets/ai_quota_prompt.dart';
 import '../theme/neumorphic_colors.dart';
 
 /// AI Symptom Checker — voice-first per the planning doc ("ஆப் ஓபன் ஆனதும்
@@ -37,6 +39,10 @@ class _TriageScreenState extends State<TriageScreen> {
 
   bool _isLoading = false;
   bool _listening = false;
+  // Mirrors the server's ai_quota_exhausted flag for the last analysis, so
+  // the "bring your own key" prompt appears only when the shared free-tier
+  // quota is genuinely spent — never for an ordinary failure.
+  bool _quotaExhausted = false;
   Map<String, dynamic>? _result;
   String _error = '';
   // True when `_result` came from the offline keyword-matching fallback
@@ -162,6 +168,7 @@ class _TriageScreenState extends State<TriageScreen> {
       _error = '';
       _result = null;
       _isOfflineEstimate = false;
+      _quotaExhausted = false;
     });
 
     final active = context.read<ProfileService>().active;
@@ -180,11 +187,19 @@ class _TriageScreenState extends State<TriageScreen> {
           'age': active?.age ?? 30,
           'family_profile_id': active?.id,
           'image_base64': imageBase64,
+          // Only present when the user chose to supply their own key after
+          // the shared quota ran out. Stored on this phone, not our server.
+          if (AiKeyService().hasKey) 'user_ai_key': AiKeyService().key,
         },
       );
 
       final data = response.data as Map<String, dynamic>;
-      setState(() => _result = data);
+      final exhausted = data['ai_quota_exhausted'] == true;
+      AiKeyService().noteQuotaExhausted(exhausted);
+      setState(() {
+        _result = data;
+        _quotaExhausted = exhausted;
+      });
 
       final severityScore = (data['severity_score'] as num?)?.toInt() ?? 0;
 
@@ -430,6 +445,15 @@ class _TriageScreenState extends State<TriageScreen> {
               if (_error.isNotEmpty) ...[
                 const SizedBox(height: 24),
                 Text(_error, style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+              ],
+
+              // The shared free-tier quota is spent, so the card below is a
+              // placeholder rather than a real assessment. Say so, and offer
+              // the way through it, instead of letting an empty result pass
+              // for a confident one.
+              if (_quotaExhausted && !AiKeyService().hasKey) ...[
+                const SizedBox(height: 24),
+                AiQuotaPrompt(onKeySaved: _analyze),
               ],
 
               // Unmissable — this must never look like a real online result.
