@@ -39,6 +39,7 @@ from typing import Optional
 from .base import AIRequest, AITask, BaseAIProvider
 from .config import get_health_cache_seconds, get_priority, get_request_timeout_seconds
 from .errors import AIProviderError
+from .keypool import KeyPool
 from .metrics import ai_metrics
 from .providers import PROVIDER_CLASSES
 
@@ -54,6 +55,17 @@ _ENV_KEY_BY_PROVIDER = {
     "mock": None,
 }
 
+#: Plural counterparts, holding a comma-separated list. Several free keys
+#: for the same provider multiply the daily cap, which is the difference
+#: between the assistant working all day and working once.
+_ENV_KEYS_BY_PROVIDER = {
+    "gemini": "GEMINI_API_KEYS",
+    "openai": "OPENAI_API_KEYS",
+    "groq": "GROQ_API_KEYS",
+    "anthropic": "ANTHROPIC_API_KEYS",
+    "mock": None,
+}
+
 
 @dataclass
 class AIOutcome:
@@ -65,6 +77,12 @@ class AIOutcome:
     attempted_providers: list = field(default_factory=list)
     fallback_occurred: bool = False
     used_mock: bool = False
+    #: True when the answer came from MockProvider *because* every real
+    #: provider was out of quota or rate limited, rather than because none
+    #: is configured or one is broken. The apps show a "limit reached — do
+    #: you have your own key?" prompt on this and nothing else, so a
+    #: misconfigured server never asks the user to fix it with a key.
+    quota_exhausted: bool = False
 
 
 class AllProvidersFailedError(RuntimeError):
@@ -84,8 +102,17 @@ class AIManager:
             self._providers = {}
             for name, cls in PROVIDER_CLASSES.items():
                 env_var = _ENV_KEY_BY_PROVIDER.get(name)
-                api_key = os.getenv(env_var) if env_var else None
-                self._providers[name] = cls(api_key=api_key, health_cache_seconds=health_cache)
+                plural_var = _ENV_KEYS_BY_PROVIDER.get(name)
+                pool = (
+                    KeyPool.from_env(name, plural_var, env_var)
+                    if env_var and plural_var
+                    else None
+                )
+                self._providers[name] = cls(
+                    api_key=None if pool else (os.getenv(env_var) if env_var else None),
+                    health_cache_seconds=health_cache,
+                    key_pool=pool,
+                )
 
         self._default_timeout = get_request_timeout_seconds()
 
@@ -126,6 +153,7 @@ class AIManager:
         prompt: str,
         image_base64: Optional[str] = None,
         timeout_seconds: Optional[float] = None,
+        user_api_key: Optional[str] = None,
     ) -> AIOutcome:
         request_id = uuid.uuid4().hex[:12]
         candidates = self._candidates_for(task, requires_vision=image_base64 is not None)
@@ -133,8 +161,21 @@ class AIManager:
         total_retries = 0
         overall_start = time.monotonic()
 
+        # Tracks whether the real providers were skipped or refused purely
+        # because their quota ran out, as opposed to being unconfigured or
+        # broken. Only that case earns the "paste your own key" prompt.
+        quota_blocked = False
+        saw_real_provider = False
+
         for provider in candidates:
-            if not provider.is_available() and provider.name != "mock":
+            if provider.name != "mock":
+                saw_real_provider = True
+                if provider.quota_exhausted():
+                    quota_blocked = True
+            # A user who supplied their own key must not be held back by the
+            # circuit breaker: the breaker describes the *server's* keys, and
+            # skipping the provider would make their key do nothing.
+            if not provider.is_available() and provider.name != "mock" and not user_api_key:
                 logger.info(
                     "ai_request request_id=%s task=%s provider=%s skipped reason=unhealthy",
                     request_id, task.value, provider.name,
@@ -142,8 +183,14 @@ class AIManager:
                 continue
 
             attempted.append(provider.name)
-            outcome = await self._call_with_retry(provider, task, prompt, image_base64, timeout_seconds, request_id)
+            outcome = await self._call_with_retry(
+                provider, task, prompt, image_base64, timeout_seconds, request_id,
+                user_api_key=user_api_key,
+            )
             total_retries += outcome["retries"]
+            error = outcome.get("error")
+            if error is not None and error.category in ("QuotaExceededError", "RateLimitError"):
+                quota_blocked = True
 
             if outcome["success"]:
                 total_latency_ms = round((time.monotonic() - overall_start) * 1000, 1)
@@ -165,6 +212,7 @@ class AIManager:
                     attempted_providers=attempted,
                     fallback_occurred=fallback_occurred,
                     used_mock=(provider.name == "mock"),
+                    quota_exhausted=(provider.name == "mock" and quota_blocked and saw_real_provider),
                 )
             # else: fall through to the next candidate.
 
@@ -185,12 +233,14 @@ class AIManager:
         image_base64: Optional[str],
         timeout_seconds: Optional[float],
         request_id: str,
+        user_api_key: Optional[str] = None,
     ) -> dict:
         request = AIRequest(
             task=task,
             prompt=prompt,
             image_base64=image_base64,
             timeout_seconds=timeout_seconds or self._default_timeout,
+            user_api_key=user_api_key,
         )
 
         retries = 0

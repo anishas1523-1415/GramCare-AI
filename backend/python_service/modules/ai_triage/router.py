@@ -40,6 +40,18 @@ class TriageRequest(BaseModel):
     # visible wound) that the AI factors into the same severity assessment
     # — distinct from /ocr, which reads a prescription's printed text.
     image_base64: Optional[str] = Field(None, description="Optional base64 photo of a visible symptom")
+    # When the shared free-tier quota runs out, the apps offer the user the
+    # option of supplying their own provider key rather than showing them a
+    # dead assistant. It is used for this one request and never stored: it
+    # is the user's credential, not ours.
+    # No min_length on purpose: a Pydantic length failure echoes the
+    # offending value back in the 422 body, which would put a real API key
+    # into an error response and the logs. A short key simply fails at the
+    # provider instead. max_length stays as a size guard.
+    user_ai_key: Optional[str] = Field(
+        None, max_length=400,
+        description="Caller's own AI provider API key, used for this request only",
+    )
 
 
 class TriageResponse(BaseModel):
@@ -65,6 +77,11 @@ class TriageResponse(BaseModel):
     # Cloudinary URL of the submitted symptom photo, if one was provided and
     # storage is configured — None otherwise (never blocks the analysis).
     image_url: Optional[str] = None
+    # True only when this answer is the offline fallback *because* every
+    # configured provider is out of quota. The apps show the "AI limit
+    # reached — do you have your own key?" prompt on exactly this, so a
+    # server that is merely misconfigured never asks the user to fix it.
+    ai_quota_exhausted: bool = False
 
 
 # ============================================================
@@ -149,6 +166,7 @@ async def run_triage_analysis(
     age: int,
     family_profile_id: Optional[int] = None,
     image_base64: Optional[str] = None,
+    user_ai_key: Optional[str] = None,
 ) -> TriageResponse:
     """Core AI triage logic, shared by the public POST /triage/analyze
     endpoint below and the CHW proxy endpoint
@@ -193,7 +211,9 @@ async def run_triage_analysis(
     # Passing image_base64 only when actually provided keeps plain
     # text/voice triage routable to every configured provider, including
     # non-vision ones (Groq) — see AIManager._candidates_for.
-    outcome = await ai_manager.run(AITask.TRIAGE, prompt=prompt, image_base64=image_b64)
+    outcome = await ai_manager.run(
+        AITask.TRIAGE, prompt=prompt, image_base64=image_b64, user_api_key=user_ai_key
+    )
     data = dict(outcome.data)
 
     try:
@@ -231,6 +251,7 @@ async def run_triage_analysis(
         )
 
     result.image_url = image_url
+    result.ai_quota_exhausted = outcome.quota_exhausted
     _persist_triage_log(
         db,
         TriageRequest(
@@ -277,6 +298,7 @@ async def analyze_symptoms(
         request.age,
         family_profile_id=request.family_profile_id,
         image_base64=request.image_base64,
+        user_ai_key=request.user_ai_key,
     )
 
 

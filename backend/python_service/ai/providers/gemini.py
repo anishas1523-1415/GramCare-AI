@@ -35,18 +35,29 @@ class GeminiProvider(BaseAIProvider):
     # response on every single request, for every user, on every app.
     # Confirmed the replacement Google's own error message points to
     # (gemini-3.6-flash) actually works against this same key.
-    def __init__(self, api_key: Optional[str], model: str = "gemini-3.6-flash", **kwargs):
+    def __init__(self, api_key: Optional[str] = None, model: str = "gemini-3.6-flash", **kwargs):
         super().__init__(api_key, **kwargs)
         self._model = model
-        self._client = None
-        if api_key:
-            try:
-                from google import genai  # SDK import isolated to this file
+        # One SDK client per key, built on first use and kept. Building a
+        # client is cheap but not free, and a request that rotates through
+        # several keys would otherwise pay for it repeatedly.
+        self._clients: dict[str, object] = {}
 
-                self._client = genai.Client(api_key=api_key)
-            except Exception as e:  # pragma: no cover - import/init failure
-                logger.warning("Gemini client failed to initialize: %s", e)
-                self._client = None
+    def _client_for(self, api_key: str):
+        client = self._clients.get(api_key)
+        if client is not None:
+            return client
+        try:
+            from google import genai  # SDK import isolated to this file
+
+            client = genai.Client(api_key=api_key)
+        except Exception as e:  # pragma: no cover - import/init failure
+            logger.warning("Gemini client failed to initialize: %s", e)
+            raise ProviderUnavailableError(
+                "Gemini client could not be initialized", provider=self.name, cause=e
+            ) from e
+        self._clients[api_key] = client
+        return client
 
     def supported_tasks(self) -> set[AITask]:
         return {AITask.TRIAGE, AITask.OCR, AITask.DOCTOR_SUMMARY, AITask.MEDICINE_INFO, AITask.PARSE_PRESCRIPTION}
@@ -64,31 +75,35 @@ class GeminiProvider(BaseAIProvider):
     def supports_streaming(self) -> bool:
         return True
 
-    def is_configured(self) -> bool:
-        return bool(self._api_key) and self._client is not None
-
     async def generate(self, request: AIRequest) -> dict:
-        if not self._client:
-            raise ProviderUnavailableError("Gemini client not initialized", provider=self.name)
-
         contents: list = [request.prompt]
         if request.image_base64 and self.supports_vision():
             contents.append({"inline_data": {"mime_type": "image/jpeg", "data": request.image_base64}})
 
-        def _call():
-            return self._client.models.generate_content(model=self._model, contents=contents)
+        async def _attempt(api_key: str) -> dict:
+            client = self._client_for(api_key)
 
-        try:
-            response = await asyncio.wait_for(
-                asyncio.to_thread(_call), timeout=request.timeout_seconds
-            )
-        except asyncio.TimeoutError as e:
-            raise TimeoutError_(f"Gemini request exceeded {request.timeout_seconds}s", provider=self.name, cause=e) from e
-        except Exception as e:
-            raise _classify_gemini_error(e, self.name) from e
+            def _call():
+                return client.models.generate_content(model=self._model, contents=contents)
 
-        text = getattr(response, "text", None) or ""
-        return extract_json(text, provider=self.name)
+            try:
+                response = await asyncio.wait_for(
+                    asyncio.to_thread(_call), timeout=request.timeout_seconds
+                )
+            except asyncio.TimeoutError as e:
+                raise TimeoutError_(
+                    f"Gemini request exceeded {request.timeout_seconds}s", provider=self.name, cause=e
+                ) from e
+            except Exception as e:
+                raise _classify_gemini_error(e, self.name) from e
+
+            text = getattr(response, "text", None) or ""
+            return extract_json(text, provider=self.name)
+
+        # run_with_rotation moves to the next key on a quota, rate-limit or
+        # auth refusal, so one spent free tier no longer takes the whole
+        # feature down for the rest of the day.
+        return await self.run_with_rotation(request, _attempt)
 
 
 def _classify_gemini_error(exc: Exception, provider: str) -> AIProviderError:

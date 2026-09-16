@@ -26,18 +26,27 @@ logger = logging.getLogger("gramcare.ai.groq")
 class GroqProvider(BaseAIProvider):
     name = "groq"
 
-    def __init__(self, api_key: Optional[str], model: str = "llama-3.3-70b-versatile", **kwargs):
+    def __init__(self, api_key: Optional[str] = None, model: str = "llama-3.3-70b-versatile", **kwargs):
         super().__init__(api_key, **kwargs)
         self._model = model
-        self._client = None
-        if api_key:
-            try:
-                from groq import Groq  # SDK import isolated to this file
+        # One client per key, built on first use.
+        self._clients: dict[str, object] = {}
 
-                self._client = Groq(api_key=api_key)
-            except Exception as e:  # pragma: no cover
-                logger.warning("Groq client failed to initialize: %s", e)
-                self._client = None
+    def _client_for(self, api_key: str):
+        client = self._clients.get(api_key)
+        if client is not None:
+            return client
+        try:
+            from groq import Groq  # SDK import isolated to this file
+
+            client = Groq(api_key=api_key)
+        except Exception as e:  # pragma: no cover
+            logger.warning("Groq client failed to initialize: %s", e)
+            raise ProviderUnavailableError(
+                "Groq client could not be initialized", provider=self.name, cause=e
+            ) from e
+        self._clients[api_key] = client
+        return client
 
     def supported_tasks(self) -> set[AITask]:
         return {AITask.TRIAGE, AITask.DOCTOR_SUMMARY, AITask.MEDICINE_INFO, AITask.PARSE_PRESCRIPTION}  # deliberately no OCR — see supports_vision()
@@ -57,13 +66,7 @@ class GroqProvider(BaseAIProvider):
     def supports_streaming(self) -> bool:
         return True
 
-    def is_configured(self) -> bool:
-        return bool(self._api_key) and self._client is not None
-
     async def generate(self, request: AIRequest) -> dict:
-        if not self._client:
-            raise ProviderUnavailableError("Groq client not initialized", provider=self.name)
-
         if request.task == AITask.OCR and not self.supports_vision():
             # Should never be reached if AIManager's capability filtering is
             # working correctly — this is a defensive second gate, not the
@@ -73,31 +76,38 @@ class GroqProvider(BaseAIProvider):
                 provider=self.name,
             )
 
-        def _call():
-            return self._client.chat.completions.create(
-                model=self._model,
-                response_format={"type": "json_object"},
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "You return strict JSON matching exactly the format requested in the user prompt. No markdown, no commentary.",
-                    },
-                    {"role": "user", "content": request.prompt},
-                ],
-                timeout=request.timeout_seconds,
-            )
+        async def _attempt(api_key: str) -> dict:
+            client = self._client_for(api_key)
 
-        try:
-            response = await asyncio.wait_for(
-                asyncio.to_thread(_call), timeout=request.timeout_seconds + 2
-            )
-        except asyncio.TimeoutError as e:
-            raise TimeoutError_(f"Groq request exceeded {request.timeout_seconds}s", provider=self.name, cause=e) from e
-        except Exception as e:
-            raise _classify_groq_error(e, self.name) from e
+            def _call():
+                return client.chat.completions.create(
+                    model=self._model,
+                    response_format={"type": "json_object"},
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": "You return strict JSON matching exactly the format requested in the user prompt. No markdown, no commentary.",
+                        },
+                        {"role": "user", "content": request.prompt},
+                    ],
+                    timeout=request.timeout_seconds,
+                )
 
-        text = response.choices[0].message.content if response.choices else ""
-        return extract_json(text or "", provider=self.name)
+            try:
+                response = await asyncio.wait_for(
+                    asyncio.to_thread(_call), timeout=request.timeout_seconds + 2
+                )
+            except asyncio.TimeoutError as e:
+                raise TimeoutError_(
+                    f"Groq request exceeded {request.timeout_seconds}s", provider=self.name, cause=e
+                ) from e
+            except Exception as e:
+                raise _classify_groq_error(e, self.name) from e
+
+            text = response.choices[0].message.content if response.choices else ""
+            return extract_json(text or "", provider=self.name)
+
+        return await self.run_with_rotation(request, _attempt)
 
 
 def _classify_groq_error(exc: Exception, provider: str) -> AIProviderError:

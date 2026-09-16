@@ -8,11 +8,22 @@ normalized dict — never a raw SDK response object. A caller holding a
 """
 from __future__ import annotations
 
+import logging
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional
+from typing import Awaitable, Callable, Iterator, Optional
+
+from .errors import (
+    AuthenticationError,
+    ProviderUnavailableError,
+    QuotaExceededError,
+    RateLimitError,
+)
+from .keypool import KeyPool
+
+logger = logging.getLogger("gramcare.ai.base")
 
 
 class AITask(str, Enum):
@@ -49,6 +60,11 @@ class AIRequest:
     prompt: str
     image_base64: Optional[str] = None
     timeout_seconds: float = 20.0
+    #: A key the end user supplied themselves, used ahead of the server's
+    #: own pool so that someone who brings a key is never blocked by the
+    #: shared quota. Never logged and never persisted — it lives only for
+    #: the duration of the request that carried it.
+    user_api_key: Optional[str] = None
 
 
 class BaseAIProvider(ABC):
@@ -60,8 +76,18 @@ class BaseAIProvider(ABC):
     #: logs, and metrics. Must be unique across providers.
     name: str = "base"
 
-    def __init__(self, api_key: Optional[str], health_cache_seconds: float = 180.0):
-        self._api_key = api_key
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        health_cache_seconds: float = 180.0,
+        key_pool: Optional[KeyPool] = None,
+    ):
+        # A provider owns a pool of interchangeable keys, not one key. The
+        # single-key form still works and simply produces a pool of one, so
+        # an existing deployment behaves identically until it sets the
+        # plural environment variable.
+        self._pool = key_pool or KeyPool.from_keys(self.name, [api_key] if api_key else [])
+        self._api_key = self._pool.first_usable()
         self._health_cache_seconds = health_cache_seconds
         self._cached_health: Optional[HealthStatus] = None
         # Timestamp of the last classified failure that implies the
@@ -74,9 +100,76 @@ class BaseAIProvider(ABC):
     # Configuration / capability — pure, synchronous, no I/O.
     # ------------------------------------------------------------------
     def is_configured(self) -> bool:
-        """True if an API key is present. Does not imply the key is valid —
-        that's what is_available()/health_status() are for."""
-        return bool(self._api_key)
+        """True if at least one API key is present. Does not imply any key
+        is valid — that's what is_available()/health_status() are for."""
+        return self._pool.configured
+
+    @property
+    def key_pool(self) -> KeyPool:
+        return self._pool
+
+    def quota_exhausted(self) -> bool:
+        """Every configured key is cooling off after a quota or rate-limit
+        refusal. Distinct from being unconfigured: this is the state the
+        apps offer the user their own key for."""
+        return self._pool.all_exhausted()
+
+    def candidate_keys(self, request: "AIRequest") -> Iterator[str]:
+        """A user-supplied key goes first and alone: someone who pasted
+        their own key is asking to use it, and silently spending the shared
+        pool instead would make a wrong key look like it worked."""
+        if request.user_api_key:
+            yield request.user_api_key
+            return
+        yield from self._pool.usable_keys()
+
+    async def run_with_rotation(
+        self,
+        request: "AIRequest",
+        call: Callable[[str], Awaitable[dict]],
+    ) -> dict:
+        """Runs `call` against each usable key until one answers.
+
+        A key that reports quota exhaustion or a rate limit is put on
+        cooldown and the next key is tried within the same request, so a
+        spent free tier costs the user a little latency rather than the
+        whole feature. Errors that are not about the key (timeouts, bad
+        responses, the provider being down) propagate immediately — trying
+        a second key would just fail the same way and waste its quota.
+        """
+        if not self.is_configured() and not request.user_api_key:
+            raise ProviderUnavailableError(f"{self.name} has no API key configured", provider=self.name)
+
+        last_error: Optional[Exception] = None
+        tried = 0
+        for key in self.candidate_keys(request):
+            tried += 1
+            try:
+                result = await call(key)
+            except QuotaExceededError as e:
+                last_error = e
+                self._pool.mark_exhausted(key)
+                continue
+            except RateLimitError as e:
+                last_error = e
+                self._pool.mark_rate_limited(key)
+                continue
+            except AuthenticationError as e:
+                last_error = e
+                # A rejected key is not going to start working; park it for
+                # the full cooldown rather than retrying it all day.
+                self._pool.mark_exhausted(key)
+                continue
+            else:
+                self._pool.mark_ok(key)
+                return result
+
+        if last_error is not None:
+            raise last_error
+        raise ProviderUnavailableError(
+            f"{self.name} has no usable API key (all {len(self._pool)} are rate limited or out of quota)",
+            provider=self.name,
+        )
 
     @abstractmethod
     def supported_tasks(self) -> set[AITask]:

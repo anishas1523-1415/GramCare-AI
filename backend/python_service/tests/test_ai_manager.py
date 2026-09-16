@@ -26,6 +26,7 @@ from ai.errors import (
     RateLimitError,
     TimeoutError_,
 )
+from ai.keypool import KeyPool
 from ai.manager import AIManager, AllProvidersFailedError
 from ai.metrics import ai_metrics
 from ai.providers.mock_provider import MockProvider
@@ -105,7 +106,10 @@ class TestProviderIndependence:
 
     def test_unconfigured_provider_reports_not_available(self):
         p = FakeProvider("gemini", fail_with=None)
-        p._api_key = None  # simulate missing key without needing the real subclasses
+        # A provider holds a pool of keys rather than a single one, so
+        # "no key configured" means an empty pool.
+        p._pool = KeyPool.from_keys("gemini", [])
+        p._api_key = None
         status = p.health_status()
         assert status.configured is False
         assert status.available is False

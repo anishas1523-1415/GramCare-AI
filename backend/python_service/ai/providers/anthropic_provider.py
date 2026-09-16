@@ -25,18 +25,27 @@ logger = logging.getLogger("gramcare.ai.anthropic")
 class AnthropicProvider(BaseAIProvider):
     name = "anthropic"
 
-    def __init__(self, api_key: Optional[str], model: str = "claude-3-5-sonnet-20241022", **kwargs):
+    def __init__(self, api_key: Optional[str] = None, model: str = "claude-3-5-sonnet-20241022", **kwargs):
         super().__init__(api_key, **kwargs)
         self._model = model
-        self._client = None
-        if api_key:
-            try:
-                import anthropic  # SDK import isolated to this file
+        # One client per key, built on first use.
+        self._clients: dict[str, object] = {}
 
-                self._client = anthropic.Anthropic(api_key=api_key)
-            except Exception as e:  # pragma: no cover
-                logger.warning("Anthropic client failed to initialize: %s", e)
-                self._client = None
+    def _client_for(self, api_key: str):
+        client = self._clients.get(api_key)
+        if client is not None:
+            return client
+        try:
+            import anthropic  # SDK import isolated to this file
+
+            client = anthropic.Anthropic(api_key=api_key)
+        except Exception as e:  # pragma: no cover
+            logger.warning("Anthropic client failed to initialize: %s", e)
+            raise ProviderUnavailableError(
+                "Anthropic client could not be initialized", provider=self.name, cause=e
+            ) from e
+        self._clients[api_key] = client
+        return client
 
     def supported_tasks(self) -> set[AITask]:
         # Included in the TRIAGE and DOCTOR_SUMMARY priority chains per
@@ -57,13 +66,7 @@ class AnthropicProvider(BaseAIProvider):
     def supports_streaming(self) -> bool:
         return True
 
-    def is_configured(self) -> bool:
-        return bool(self._api_key) and self._client is not None
-
     async def generate(self, request: AIRequest) -> dict:
-        if not self._client:
-            raise ProviderUnavailableError("Anthropic client not initialized", provider=self.name)
-
         content: list = [{"type": "text", "text": request.prompt}]
         if request.image_base64 and self.supports_vision():
             content.append(
@@ -73,29 +76,38 @@ class AnthropicProvider(BaseAIProvider):
                 }
             )
 
-        def _call():
-            return self._client.messages.create(
-                model=self._model,
-                max_tokens=1500,
-                messages=[{"role": "user", "content": content}],
-            )
+        async def _attempt(api_key: str) -> dict:
+            client = self._client_for(api_key)
 
-        try:
-            response = await asyncio.wait_for(
-                asyncio.to_thread(_call), timeout=request.timeout_seconds
-            )
-        except asyncio.TimeoutError as e:
-            raise TimeoutError_(f"Anthropic request exceeded {request.timeout_seconds}s", provider=self.name, cause=e) from e
-        except Exception as e:
-            raise _classify_anthropic_error(e, self.name) from e
+            def _call():
+                return client.messages.create(
+                    model=self._model,
+                    max_tokens=1500,
+                    messages=[{"role": "user", "content": content}],
+                )
 
-        text = ""
-        if response.content:
-            # response.content is a list of content blocks; concatenate any
-            # text blocks (there is normally exactly one for our prompts).
-            text = "".join(block.text for block in response.content if getattr(block, "type", None) == "text")
+            try:
+                response = await asyncio.wait_for(
+                    asyncio.to_thread(_call), timeout=request.timeout_seconds
+                )
+            except asyncio.TimeoutError as e:
+                raise TimeoutError_(
+                    f"Anthropic request exceeded {request.timeout_seconds}s", provider=self.name, cause=e
+                ) from e
+            except Exception as e:
+                raise _classify_anthropic_error(e, self.name) from e
 
-        return extract_json(text, provider=self.name)
+            text = ""
+            if response.content:
+                # response.content is a list of content blocks; concatenate
+                # any text blocks (normally exactly one for our prompts).
+                text = "".join(
+                    block.text for block in response.content if getattr(block, "type", None) == "text"
+                )
+
+            return extract_json(text, provider=self.name)
+
+        return await self.run_with_rotation(request, _attempt)
 
 
 def _classify_anthropic_error(exc: Exception, provider: str) -> AIProviderError:
