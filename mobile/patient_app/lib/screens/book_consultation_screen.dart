@@ -39,7 +39,14 @@ enum _Step { doctor, slot, done }
 
 // Same test-mode publishable key the web portal bundles as
 // NEXT_PUBLIC_RAZORPAY_KEY_ID (frontend/patient_web_portal/.env.production).
-const String _razorpayKeyId = 'rzp_test_T981BiZ3S5Jcof';
+// A publishable key is safe to ship in the APK, but going live should not
+// mean editing Dart and hoping nobody forgets, so a build can override it:
+//   flutter build apk --release --dart-define=RAZORPAY_KEY_ID=rzp_live_xxxx
+// The test key stays the default so a plain build still works out of the box.
+const String _razorpayKeyId = String.fromEnvironment(
+  'RAZORPAY_KEY_ID',
+  defaultValue: 'rzp_test_T981BiZ3S5Jcof',
+);
 
 class _BookConsultationScreenState extends State<BookConsultationScreen> {
   _Step _step = _Step.doctor;
