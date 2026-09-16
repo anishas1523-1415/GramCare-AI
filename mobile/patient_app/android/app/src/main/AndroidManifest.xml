@@ -4,14 +4,25 @@
          should degrade rather than block install on a camera-less device. -->
     <uses-feature android:name="android.hardware.camera" android:required="false"/>
     <uses-feature android:name="android.hardware.camera.autofocus" android:required="false"/>
+    <!-- Vitals can still be entered by hand without Bluetooth LE. -->
+    <uses-feature android:name="android.hardware.bluetooth_le" android:required="false"/>
     <!-- Required for API/sync/SOS network calls. Debug builds inherit this
          from the debug manifest, but RELEASE builds previously had no
          INTERNET permission at all — the app would ship unable to reach the
          backend. -->
     <uses-permission android:name="android.permission.INTERNET"/>
-    <!-- Emergency SOS: real GPS coordinates ride with the alert -->
+    <!-- Emergency SOS: real GPS coordinates ride with the alert. Left without
+         maxSdkVersion (unlike flutter_blue_plus's README suggests) because SOS
+         needs location on every Android version; it also covers BLE scanning
+         on Android 11 and older. -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+    <!-- Vitals: standard Bluetooth health devices (heart rate strap, pulse
+         oximeter, thermometer). -->
+    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation"/>
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT"/>
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30"/>
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30"/>
     <!-- Voice-first symptom input (speech_to_text), also reused by
          flutter_webrtc for video consultation audio. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>

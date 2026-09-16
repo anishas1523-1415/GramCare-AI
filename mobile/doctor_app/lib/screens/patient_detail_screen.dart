@@ -285,16 +285,26 @@ class _PatientDetailScreenState extends State<PatientDetailScreen> {
           const SizedBox(height: 6),
           Text(s.recentConditions.join(', ')),
         ],
-        if (s.latestVitals != null) ...[
+        if (_vitalsLine(s.latestVitals) case final line?) ...[
           const SizedBox(height: 12),
           Text(locale.t('latest_vitals'), style: const TextStyle(fontWeight: FontWeight.w600)),
           const SizedBox(height: 6),
-          Text(
-            'HR ${s.latestVitals!['heart_rate']} bpm • SpO2 ${s.latestVitals!['spo2']}% • ${s.latestVitals!['temperature']}°C',
-          ),
+          Text(line),
         ],
       ],
     );
+  }
+
+  /// Readings are individually optional (a heart-rate strap sends no
+  /// temperature), so only the ones actually measured are shown.
+  String? _vitalsLine(Map<String, dynamic>? v) {
+    if (v == null) return null;
+    final readings = [
+      if (v['heart_rate'] != null) 'HR ${v['heart_rate']} bpm',
+      if (v['spo2'] != null) 'SpO2 ${v['spo2']}%',
+      if (v['temperature'] != null) '${v['temperature']}°C',
+    ];
+    return readings.isEmpty ? null : readings.join(' • ');
   }
 
   Widget _buildHistoryCard(LocaleService locale) {

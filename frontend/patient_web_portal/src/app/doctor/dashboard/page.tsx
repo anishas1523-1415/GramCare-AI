@@ -18,8 +18,18 @@ interface AssistSummary {
   summary_text: string;
   active_medicines: { name: string; dosage: string; days_remaining: number }[];
   recent_conditions: string[];
-  latest_vitals?: { heart_rate: number; spo2: number; temperature: number } | null;
+  latest_vitals?: { heart_rate: number | null; spo2: number | null; temperature: number | null } | null;
   generated_by: string;
+}
+
+function formatVitals(v: AssistSummary['latest_vitals']): string | null {
+  if (!v) return null;
+  const readings = [
+    v.heart_rate != null ? `HR ${v.heart_rate}` : null,
+    v.spo2 != null ? `SpO2 ${v.spo2}%` : null,
+    v.temperature != null ? `${v.temperature}°C` : null,
+  ].filter((r): r is string => r !== null);
+  return readings.length > 0 ? readings.join(', ') : null;
 }
 
 /** AI Doctor Assistant panel — the planning doc's pre-consultation summary
@@ -46,6 +56,8 @@ function AssistPanel({ patientId, familyProfileId }: { patientId: number; family
       setLoading(false);
     }
   };
+
+  const vitalsText = formatVitals(summary?.latest_vitals);
 
   return (
     <div className="w-full">
@@ -74,9 +86,9 @@ function AssistPanel({ patientId, familyProfileId }: { patientId: number; family
                   {summary.active_medicines.map((m) => `${m.name} (${m.days_remaining}d left)`).join(', ')}
                 </p>
               )}
-              {summary.latest_vitals && (
+              {vitalsText && (
                 <p className="text-xs text-gray-600">
-                  <strong>{t('latest_vitals_label')}:</strong> HR {summary.latest_vitals.heart_rate}, SpO2 {summary.latest_vitals.spo2}%, {summary.latest_vitals.temperature}°C
+                  <strong>{t('latest_vitals_label')}:</strong> {vitalsText}
                 </p>
               )}
             </>

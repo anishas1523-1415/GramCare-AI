@@ -20,7 +20,7 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from sqlalchemy.orm import Session
 
 from datetime import datetime, timedelta
@@ -349,26 +349,36 @@ async def sync_offline_records(
 
 
 class VitalsPayload(BaseModel):
-    device_id: str
+    device_id: str = Field(..., min_length=1, max_length=120)
     family_profile_id: Optional[int] = None
-    heart_rate: int = Field(..., gt=0, lt=300)
-    spo2: int = Field(..., ge=0, le=100)
-    temperature: float = Field(..., gt=25.0, lt=45.0)
-    # Health Vitals Tracker (planning doc): Steps Tracker + Sleep Analysis
-    # (deep/light breakdown) alongside HR/SpO2 — all optional since manual
-    # entry (no wearable yet) may only fill some fields at a time.
+    # Each measurement is optional but at least one is required. A Bluetooth
+    # heart-rate strap reports only heart rate and a thermometer only
+    # temperature; requiring all three forced clients to invent the rest, and
+    # the app used to save a fixed 36.8°C with every reading.
+    heart_rate: Optional[int] = Field(None, gt=0, lt=300)
+    spo2: Optional[int] = Field(None, ge=0, le=100)
+    temperature: Optional[float] = Field(None, gt=25.0, lt=45.0)
     steps: Optional[int] = Field(None, ge=0, le=200000)
     sleep_deep_hours: Optional[float] = Field(None, ge=0, le=24)
     sleep_light_hours: Optional[float] = Field(None, ge=0, le=24)
+
+    @model_validator(mode="after")
+    def _require_a_measurement(self):
+        if all(v is None for v in (
+            self.heart_rate, self.spo2, self.temperature,
+            self.steps, self.sleep_deep_hours, self.sleep_light_hours,
+        )):
+            raise ValueError("A vitals reading needs at least one measurement.")
+        return self
 
 
 class VitalsResponse(BaseModel):
     id: int
     family_profile_id: Optional[int] = None
     device_id: str
-    heart_rate: int
-    spo2: int
-    temperature: float
+    heart_rate: Optional[int] = None
+    spo2: Optional[int] = None
+    temperature: Optional[float] = None
     steps: Optional[int] = None
     sleep_deep_hours: Optional[float] = None
     sleep_light_hours: Optional[float] = None

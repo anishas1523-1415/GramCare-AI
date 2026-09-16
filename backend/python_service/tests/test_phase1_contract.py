@@ -190,3 +190,32 @@ def test_vitals_steps_sleep_and_history(client, patient_token):
     assert history.status_code == 200, history.text
     entries = history.json()
     assert any(e["steps"] == 5400 for e in entries)
+
+
+def test_vitals_accepts_a_single_measurement(client, patient_token):
+    """A Bluetooth heart-rate strap reports only heart rate and a thermometer
+    only temperature; neither should have to invent the other readings."""
+    hr_only = client.post("/api/v1/ehr/vitals", headers=auth(patient_token), json={
+        "device_id": "ble:hrm-strap", "heart_rate": 71,
+    })
+    assert hr_only.status_code == 200, hr_only.text
+    assert hr_only.json()["temperature"] is None
+    assert hr_only.json()["spo2"] is None
+
+    temp_only = client.post("/api/v1/ehr/vitals", headers=auth(patient_token), json={
+        "device_id": "ble:thermometer", "temperature": 37.4,
+    })
+    assert temp_only.status_code == 200, temp_only.text
+    assert temp_only.json()["heart_rate"] is None
+
+    # History must serialise rows with missing measurements.
+    history = client.get("/api/v1/ehr/vitals/history", headers=auth(patient_token))
+    assert history.status_code == 200, history.text
+    assert any(e["device_id"] == "ble:thermometer" and e["temperature"] == 37.4 for e in history.json())
+
+
+def test_vitals_rejects_a_reading_with_no_measurements(client, patient_token):
+    empty = client.post("/api/v1/ehr/vitals", headers=auth(patient_token), json={
+        "device_id": "manual-entry",
+    })
+    assert empty.status_code == 422

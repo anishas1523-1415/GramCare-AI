@@ -134,9 +134,16 @@ async def patient_summary(
     max_severity = max((t.ai_severity_score or 0 for t in triages), default=0)
 
     # --- Latest vitals ------------------------------------------------------
+    # Latest reading that carries a vital sign — a steps-only entry logged
+    # after it must not hide the heart rate or temperature from the doctor.
     vitals = (
         db.query(models.IoTVitals)
         .filter(models.IoTVitals.patient_id == patient_id)
+        .filter(
+            models.IoTVitals.heart_rate.isnot(None)
+            | models.IoTVitals.spo2.isnot(None)
+            | models.IoTVitals.temperature.isnot(None)
+        )
         .order_by(models.IoTVitals.timestamp.desc())
         .first()
     )
@@ -165,7 +172,14 @@ async def patient_summary(
     if active:
         parts.append(f"currently on: {', '.join(m.name for m in active[:5])}")
     if latest_vitals:
-        parts.append(f"latest vitals HR {latest_vitals['heart_rate']}, SpO2 {latest_vitals['spo2']}%")
+        readings = []
+        if latest_vitals["heart_rate"] is not None:
+            readings.append(f"HR {latest_vitals['heart_rate']}")
+        if latest_vitals["spo2"] is not None:
+            readings.append(f"SpO2 {latest_vitals['spo2']}%")
+        if latest_vitals["temperature"] is not None:
+            readings.append(f"{latest_vitals['temperature']}°C")
+        parts.append("latest vitals " + ", ".join(readings))
     summary_text = " | ".join(parts)
     generated_by = "rules"
 

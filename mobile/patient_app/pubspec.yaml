@@ -86,6 +86,10 @@ dependencies:
   # RazorpayCheckout.tsx drives (POST /payments/create-order + /verify).
   razorpay_flutter: ^1.4.0
   qr_flutter: ^4.1.0
+  # Standard Bluetooth health devices for vitals. Licensed free for personal,
+  # educational and nonprofit use only; a for-profit deployment needs a
+  # commercial licence (see the call to connect() in ble_vitals_service.dart).
+  flutter_blue_plus: ^2.3.12
 
 dev_dependencies:
   flutter_test:
