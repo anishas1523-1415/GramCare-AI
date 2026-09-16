@@ -51,7 +51,20 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
-        manifestPlaceholders["MAPS_API_KEY"] = localProperties.getProperty("MAPS_API_KEY") ?: ""
+        // local.properties is gitignored, so a fresh clone or a CI runner has
+        // no key at all and the SOS map silently ships as a blank grey tile.
+        // Fall back to the environment so a build machine can supply it, and
+        // say so out loud rather than producing a quietly broken APK.
+        val mapsApiKey = localProperties.getProperty("MAPS_API_KEY")
+            ?: System.getenv("MAPS_API_KEY")
+            ?: ""
+        if (mapsApiKey.isEmpty()) {
+            logger.warn(
+                "MAPS_API_KEY is not set (android/local.properties or the environment). " +
+                "The SOS map will render blank; the screen falls back to an Open in Maps link."
+            )
+        }
+        manifestPlaceholders["MAPS_API_KEY"] = mapsApiKey
     }
 
     signingConfigs {

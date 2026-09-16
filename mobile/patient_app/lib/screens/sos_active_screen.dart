@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../services/app_strings.dart';
 import '../services/api_service.dart';
 
@@ -114,6 +115,23 @@ class _SosActiveScreenState extends State<SosActiveScreen> {
     }
   }
 
+  /// Hands the alert's coordinates to whatever map app the phone has. geo:
+  /// is the Android intent every map app registers; the https URL is the
+  /// fallback for a phone with none.
+  Future<void> _openInMaps() async {
+    final lat = widget.patientLat;
+    final lng = widget.patientLng;
+    final geo = Uri.parse('geo:$lat,$lng?q=$lat,$lng');
+    if (await canLaunchUrl(geo)) {
+      await launchUrl(geo);
+      return;
+    }
+    await launchUrl(
+      Uri.parse('https://maps.google.com/?q=$lat,$lng'),
+      mode: LaunchMode.externalApplication,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final s = context.watch<LocaleService>();
@@ -153,6 +171,42 @@ class _SosActiveScreenState extends State<SosActiveScreen> {
                   ),
                 ),
               ],
+            ),
+          ),
+          // The embedded map needs a billed Google Maps key, which a build
+          // without MAPS_API_KEY does not have — it renders as a blank grey
+          // tile. During an emergency that is worse than useless, so the
+          // coordinates and a handoff to the phone's own Maps app sit above
+          // the map and work whether or not the tile ever loads.
+          InkWell(
+            onTap: _openInMaps,
+            child: Container(
+              width: double.infinity,
+              color: Colors.red.shade50,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              child: Row(
+                children: [
+                  const Icon(Icons.place, size: 18, color: Colors.red),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      '${widget.patientLat.toStringAsFixed(5)}, ${widget.patientLng.toStringAsFixed(5)}',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontFeatures: [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                  ),
+                  Text(
+                    s.t('open_in_maps'),
+                    style: const TextStyle(
+                      color: Colors.red,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const Icon(Icons.open_in_new, size: 16, color: Colors.red),
+                ],
+              ),
             ),
           ),
           Expanded(
