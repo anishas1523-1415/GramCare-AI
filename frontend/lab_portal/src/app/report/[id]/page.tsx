@@ -11,12 +11,14 @@ import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { Plus, Trash2, CheckCircle2, FlaskConical } from 'lucide-react';
 import api from '../../../lib/api';
 import type { LabResultValue } from '../../../types';
+import { useLocale } from '../../../contexts/LocaleContext';
 
 const FLAGS = ['NORMAL', 'LOW', 'HIGH'] as const;
 
 const emptyRow = (): LabResultValue => ({ parameter: '', value: '', unit: '', reference_range: '', flag: 'NORMAL' });
 
 export default function ReportEntryPage() {
+  const { t } = useLocale();
   const params = useParams<{ id: string }>();
   const search = useSearchParams();
   const router = useRouter();
@@ -49,7 +51,7 @@ export default function ReportEntryPage() {
       });
       setDone(true);
     } catch {
-      setError('Could not submit the report. Please try again.');
+      setError(t('report_submit_failed'));
     } finally {
       setSubmitting(false);
     }
@@ -64,16 +66,15 @@ export default function ReportEntryPage() {
           className="glass-panel p-10 max-w-md text-center"
         >
           <CheckCircle2 size={56} className="text-emerald-500 mx-auto mb-4" />
-          <h2 className="text-2xl font-bold mb-2">Report Submitted</h2>
+          <h2 className="text-2xl font-bold mb-2">{t('report_submitted')}</h2>
           <p className="text-gray-500 mb-6">
-            The {testName} result has synced automatically into the patient&apos;s
-            Family Health Wallet, and they&apos;ve been notified.
+            {testName} {t('report_synced_note')}
           </p>
           <button
             onClick={() => router.push('/dashboard')}
             className="neu-button w-full py-3 bg-[var(--primary)] text-white font-bold rounded-xl"
           >
-            Back to Queue
+            {t('back_to_queue')}
           </button>
         </motion.div>
       </div>
@@ -84,9 +85,9 @@ export default function ReportEntryPage() {
     <div className="max-w-3xl mx-auto p-6 lg:p-10">
       <header className="mb-6">
         <h1 className="text-2xl font-extrabold flex items-center gap-3">
-          <FlaskConical className="text-[var(--primary)]" size={28} /> Enter Report — {testName}
+          <FlaskConical className="text-[var(--primary)]" size={28} /> {t('enter_report_for')} {testName}
         </h1>
-        {patientId && <p className="text-gray-500 text-sm mt-1">Patient #{patientId} · Booking #{bookingId}</p>}
+        {patientId && <p className="text-gray-500 text-sm mt-1">{t('patient_hash')} #{patientId} · {t('booking_hash')} #{bookingId}</p>}
       </header>
 
       <form onSubmit={handleSubmit} className="glass-panel p-6 space-y-5">
@@ -95,28 +96,28 @@ export default function ReportEntryPage() {
             <div key={idx} className="grid grid-cols-12 gap-2 items-center">
               <input
                 aria-label={`Result parameter ${idx + 1}`}
-                placeholder="Parameter (e.g. Hemoglobin)"
+                placeholder={t('parameter_placeholder')}
                 value={row.parameter}
                 onChange={(e) => updateRow(idx, 'parameter', e.target.value)}
                 className="col-span-4 p-2.5 rounded-lg bg-white/50 dark:bg-black/20 border border-white/20 text-sm focus:ring-2 focus:ring-[var(--primary)] focus:outline-none"
               />
               <input
                 aria-label={`Result value ${idx + 1}`}
-                placeholder="Value"
+                placeholder={t('value')}
                 value={row.value}
                 onChange={(e) => updateRow(idx, 'value', e.target.value)}
                 className="col-span-2 p-2.5 rounded-lg bg-white/50 dark:bg-black/20 border border-white/20 text-sm focus:ring-2 focus:ring-[var(--primary)] focus:outline-none"
               />
               <input
                 aria-label={`Result unit ${idx + 1}`}
-                placeholder="Unit"
+                placeholder={t('unit')}
                 value={row.unit ?? ''}
                 onChange={(e) => updateRow(idx, 'unit', e.target.value)}
                 className="col-span-2 p-2.5 rounded-lg bg-white/50 dark:bg-black/20 border border-white/20 text-sm focus:ring-2 focus:ring-[var(--primary)] focus:outline-none"
               />
               <input
                 aria-label={`Reference range ${idx + 1}`}
-                placeholder="Reference range"
+                placeholder={t('reference_range')}
                 value={row.reference_range ?? ''}
                 onChange={(e) => updateRow(idx, 'reference_range', e.target.value)}
                 className="col-span-2 p-2.5 rounded-lg bg-white/50 dark:bg-black/20 border border-white/20 text-sm focus:ring-2 focus:ring-[var(--primary)] focus:outline-none"
@@ -145,17 +146,17 @@ export default function ReportEntryPage() {
             onClick={addRow}
             className="text-sm font-semibold text-[var(--primary)] flex items-center gap-1"
           >
-            <Plus size={16} /> Add parameter
+            <Plus size={16} /> {t('add_parameter')}
           </button>
         </div>
 
         <div>
-          <label className="block text-sm font-semibold mb-2">Summary (optional)</label>
+          <label className="block text-sm font-semibold mb-2">{t('summary_optional')}</label>
           <textarea
             value={summary}
             onChange={(e) => setSummary(e.target.value)}
             rows={3}
-            placeholder="e.g. All values within normal range."
+            placeholder={t('summary_placeholder')}
             className="w-full p-3 rounded-xl bg-white/50 dark:bg-black/20 border border-white/20 focus:ring-2 focus:ring-[var(--primary)] focus:outline-none"
           />
         </div>
@@ -167,7 +168,7 @@ export default function ReportEntryPage() {
           disabled={submitting}
           className="neu-button w-full py-3 bg-[var(--primary)] text-white font-bold rounded-xl disabled:opacity-50"
         >
-          {submitting ? 'Submitting…' : 'Submit Report'}
+          {submitting ? t('submitting') : t('submit_report')}
         </button>
       </form>
     </div>

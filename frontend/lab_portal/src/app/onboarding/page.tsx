@@ -5,9 +5,11 @@ import { motion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import { MapPin, Building2 } from 'lucide-react';
 import api from '../../lib/api';
+import { useLocale } from '../../contexts/LocaleContext';
 import { useAuth } from '../../contexts/AuthContext';
 
 export default function OnboardingPage() {
+  const { t } = useLocale();
   const router = useRouter();
   const { user, loading } = useAuth();
 
@@ -31,7 +33,7 @@ export default function OnboardingPage() {
         setLat(pos.coords.latitude.toFixed(6));
         setLng(pos.coords.longitude.toFixed(6));
       },
-      () => setError('Could not access location — enter it manually or skip.'),
+      () => setError(t('location_failed')),
     );
   };
 
@@ -66,15 +68,13 @@ export default function OnboardingPage() {
       >
         <div className="flex items-center gap-3 mb-2">
           <Building2 size={32} className="text-[var(--primary)]" />
-          <h1 className="text-2xl font-bold">Set Up Your Lab</h1>
+          <h1 className="text-2xl font-bold">{t('set_up_your_lab')}</h1>
         </div>
-        <p className="text-gray-500 mb-6">
-          One-time setup so patients can find and book tests at your center.
-        </p>
+        <p className="text-gray-500 mb-6">{t('onboarding_blurb')}</p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-semibold mb-2">Lab Name</label>
+            <label className="block text-sm font-semibold mb-2">{t('lab_name')}</label>
             <input
               required
               value={name}
@@ -83,7 +83,7 @@ export default function OnboardingPage() {
             />
           </div>
           <div>
-            <label className="block text-sm font-semibold mb-2">Address</label>
+            <label className="block text-sm font-semibold mb-2">{t('address')}</label>
             <input
               value={address}
               onChange={(e) => setAddress(e.target.value)}
@@ -91,7 +91,7 @@ export default function OnboardingPage() {
             />
           </div>
           <div>
-            <label className="block text-sm font-semibold mb-2">Phone</label>
+            <label className="block text-sm font-semibold mb-2">{t('phone')}</label>
             <input
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
@@ -100,7 +100,7 @@ export default function OnboardingPage() {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm font-semibold mb-2">Latitude</label>
+              <label className="block text-sm font-semibold mb-2">{t('latitude')}</label>
               <input
                 value={lat}
                 onChange={(e) => setLat(e.target.value)}
@@ -109,7 +109,7 @@ export default function OnboardingPage() {
               />
             </div>
             <div>
-              <label className="block text-sm font-semibold mb-2">Longitude</label>
+              <label className="block text-sm font-semibold mb-2">{t('longitude')}</label>
               <input
                 value={lng}
                 onChange={(e) => setLng(e.target.value)}
@@ -123,7 +123,7 @@ export default function OnboardingPage() {
             onClick={useMyLocation}
             className="text-sm font-semibold text-[var(--primary)] flex items-center gap-1"
           >
-            <MapPin size={14} /> Use my current location
+            <MapPin size={14} /> {t('use_my_location')}
           </button>
 
           <label className="flex items-center gap-3 p-3 rounded-xl bg-white/40 dark:bg-black/20 cursor-pointer">
@@ -133,7 +133,7 @@ export default function OnboardingPage() {
               onChange={(e) => setHomeCollection(e.target.checked)}
               className="w-5 h-5 accent-[var(--primary)]"
             />
-            <span className="font-semibold text-sm">We offer home sample collection</span>
+            <span className="font-semibold text-sm">{t('offers_home_collection')}</span>
           </label>
 
           {error && <p role="alert" className="text-red-500 text-sm font-semibold text-center">{error}</p>}
@@ -143,7 +143,7 @@ export default function OnboardingPage() {
             disabled={submitting}
             className="neu-button w-full py-3 bg-[var(--primary)] text-white font-bold rounded-xl disabled:opacity-50"
           >
-            {submitting ? 'Saving…' : 'Save & Continue'}
+            {submitting ? t('saving') : t('save_and_continue')}
           </button>
         </form>
       </motion.div>

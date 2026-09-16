@@ -12,24 +12,29 @@ import {
 } from 'lucide-react';
 import api from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
+import { useLocale } from '../../contexts/LocaleContext';
 import type { LabBooking, BookingStatus } from '../../types';
 
-const STATUS_STYLE: Record<BookingStatus, { label: string; className: string }> = {
-  BOOKED: { label: 'Booked', className: 'bg-sky-500/15 text-sky-600 border-sky-500/30' },
-  SAMPLE_COLLECTED: { label: 'Sample Collected', className: 'bg-amber-500/15 text-amber-600 border-amber-500/30' },
-  PROCESSING: { label: 'Processing', className: 'bg-[var(--primary)]/15 text-[var(--primary)] border-[var(--primary)]/30 animate-pulse' },
-  REPORT_READY: { label: 'Report Ready', className: 'bg-emerald-500/15 text-emerald-600 border-emerald-500/30' },
-  COMPLETED: { label: 'Completed', className: 'bg-gray-400/15 text-gray-500 border-gray-400/30' },
-  CANCELLED: { label: 'Cancelled', className: 'bg-red-500/10 text-red-500 border-red-500/30' },
+// These tables are module-level, so they hold locale keys rather than
+// finished strings — the label is resolved at render and follows a language
+// switch without the module being re-evaluated.
+const STATUS_STYLE: Record<BookingStatus, { labelKey: string; className: string }> = {
+  BOOKED: { labelKey: 'status_booked', className: 'bg-sky-500/15 text-sky-600 border-sky-500/30' },
+  SAMPLE_COLLECTED: { labelKey: 'status_sample_collected', className: 'bg-amber-500/15 text-amber-600 border-amber-500/30' },
+  PROCESSING: { labelKey: 'status_processing', className: 'bg-[var(--primary)]/15 text-[var(--primary)] border-[var(--primary)]/30 animate-pulse' },
+  REPORT_READY: { labelKey: 'status_report_ready', className: 'bg-emerald-500/15 text-emerald-600 border-emerald-500/30' },
+  COMPLETED: { labelKey: 'status_completed', className: 'bg-gray-400/15 text-gray-500 border-gray-400/30' },
+  CANCELLED: { labelKey: 'status_cancelled', className: 'bg-red-500/10 text-red-500 border-red-500/30' },
 };
 
-const NEXT_ACTION: Partial<Record<BookingStatus, { label: string; next: BookingStatus }>> = {
-  BOOKED: { label: 'Mark Sample Collected', next: 'SAMPLE_COLLECTED' },
-  SAMPLE_COLLECTED: { label: 'Start Processing', next: 'PROCESSING' },
+const NEXT_ACTION: Partial<Record<BookingStatus, { labelKey: string; next: BookingStatus }>> = {
+  BOOKED: { labelKey: 'action_mark_collected', next: 'SAMPLE_COLLECTED' },
+  SAMPLE_COLLECTED: { labelKey: 'action_start_processing', next: 'PROCESSING' },
 };
 
 export default function LabDashboard() {
   const { user, loading: authLoading } = useAuth();
+  const { t } = useLocale();
   const router = useRouter();
 
   const [bookings, setBookings] = useState<LabBooking[]>([]);
@@ -50,7 +55,7 @@ export default function LabDashboard() {
         router.replace('/onboarding');
         return;
       }
-      setError('Could not load the booking queue.');
+      setError(t('queue_load_failed'));
     } finally {
       setLoading(false);
     }
@@ -89,7 +94,7 @@ export default function LabDashboard() {
   };
 
   if (authLoading || loading) {
-    return <div className="min-h-screen flex items-center justify-center text-gray-500">Loading booking queue…</div>;
+    return <div className="min-h-screen flex items-center justify-center text-gray-500">{t('loading_queue')}</div>;
   }
 
   return (
@@ -97,14 +102,14 @@ export default function LabDashboard() {
       <header className="flex flex-wrap justify-between items-center gap-4 mb-8">
         <div>
           <h1 className="text-3xl font-extrabold flex items-center gap-3">
-            <FlaskConical className="text-[var(--primary)]" size={34} /> Booking Queue
+            <FlaskConical className="text-[var(--primary)]" size={34} /> {t('booking_queue')}
           </h1>
           {lastUpdated && (
-            <p className="text-sm text-gray-500 mt-1">Updated {lastUpdated.toLocaleTimeString()}</p>
+            <p className="text-sm text-gray-500 mt-1">{t('updated_at')} {lastUpdated.toLocaleTimeString()}</p>
           )}
         </div>
         <button onClick={fetchQueue} className="neu-button px-4 py-2 font-bold rounded-xl flex items-center gap-2 text-sm">
-          <RefreshCw size={15} /> Refresh
+          <RefreshCw size={15} /> {t('refresh')}
         </button>
       </header>
 
@@ -113,7 +118,7 @@ export default function LabDashboard() {
       {bookings.length === 0 ? (
         <div className="glass-panel p-12 text-center text-gray-500">
           <ClipboardList size={40} className="mx-auto mb-3 opacity-50" />
-          No bookings need action right now.
+          {t('no_bookings')}
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
@@ -132,7 +137,7 @@ export default function LabDashboard() {
                 >
                   <div className="flex justify-between items-start mb-3">
                     <span className={`text-xs font-bold px-3 py-1 rounded-full border ${style.className}`}>
-                      {style.label}
+                      {t(style.labelKey)}
                     </span>
                     <span className="flex items-center gap-1 text-xs text-gray-500">
                       <Clock size={12} /> {new Date(b.created_at).toLocaleString()}
@@ -140,11 +145,11 @@ export default function LabDashboard() {
                   </div>
 
                   <h3 className="text-lg font-bold mb-1">{b.test_name}</h3>
-                  <p className="text-sm text-gray-500 mb-1">Patient #{b.patient_id}</p>
+                  <p className="text-sm text-gray-500 mb-1">{t('patient_hash')} #{b.patient_id}</p>
 
                   <p className="text-sm flex items-center gap-1 mb-1 text-gray-600 dark:text-gray-300">
                     {b.home_collection ? <Home size={14} /> : <MapPin size={14} />}
-                    {b.home_collection ? 'Home sample collection' : 'In-center visit'}
+                    {b.home_collection ? t('home_sample_collection') : t('in_center_visit')}
                   </p>
                   {b.notes && <p className="text-sm italic text-gray-500 mb-2">&ldquo;{b.notes}&rdquo;</p>}
 
@@ -156,7 +161,7 @@ export default function LabDashboard() {
                         )}
                         className="flex-1 py-2.5 bg-[var(--primary)] hover:opacity-90 text-white font-bold rounded-xl transition-opacity flex items-center justify-center gap-2 text-sm"
                       >
-                        Enter Report <ArrowRight size={16} />
+                        {t('enter_report')} <ArrowRight size={16} />
                       </button>
                     ) : action ? (
                       <button
@@ -164,7 +169,7 @@ export default function LabDashboard() {
                         onClick={() => advance(b, action.next)}
                         className="flex-1 py-2.5 bg-[var(--primary)] hover:opacity-90 text-white font-bold rounded-xl transition-opacity disabled:opacity-50 text-sm"
                       >
-                        {actingOn === b.id ? 'Updating…' : action.label}
+                        {actingOn === b.id ? t('updating') : t(action.labelKey)}
                       </button>
                     ) : null}
                     {(b.status === 'BOOKED' || b.status === 'SAMPLE_COLLECTED') && (
@@ -172,7 +177,7 @@ export default function LabDashboard() {
                         disabled={actingOn === b.id}
                         onClick={() => cancel(b)}
                         className="px-3 py-2.5 border border-red-500/40 text-red-500 rounded-xl hover:bg-red-500/10 transition-colors"
-                        title="Cancel booking"
+                        title={t('cancel_booking')}
                         aria-label={`Cancel ${b.test_name} booking for patient #${b.patient_id}`}
                       >
                         <XCircle size={18} />
