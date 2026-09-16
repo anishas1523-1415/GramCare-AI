@@ -48,6 +48,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
       // syncTokenWithBackend() is a no-op network-wise if the token hasn't
       // changed since the last successful registration.
       unawaited(FirebaseNotificationService().syncTokenWithBackend());
+      // Recall alerts depend on nothing in the sync chain below, and on a
+      // rural connection each round trip is most of a second — waiting for
+      // /auth/me and a full sync first just delayed them for no reason.
+      final recallAlerts = _loadRecallAlerts();
       try {
         final me = await ApiService().client.get('/auth/me');
         final myId = me.data['id'] as int?;
@@ -57,7 +61,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       } catch (_) {
         await SyncService().pushUnsynced();
       }
-      _loadRecallAlerts();
+      await recallAlerts;
     });
   }
 

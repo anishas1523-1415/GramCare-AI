@@ -88,8 +88,13 @@ class _LabTestsScreenState extends State<LabTestsScreen> with SingleTickerProvid
   Future<void> _loadBookings() async {
     setState(() => _loadingBookings = true);
     try {
+      // The centre list and the bookings do not depend on each other, and
+      // on a rural connection each round trip is most of a second. Start
+      // the bookings request before awaiting the centres so the two travel
+      // together rather than one after the other.
+      final bookingsRequest = ApiService().client.get('/lab/bookings/mine');
       await _loadCenters();
-      final res = await ApiService().client.get('/lab/bookings/mine');
+      final res = await bookingsRequest;
       if (!mounted) return;
       setState(() {
         _bookings = (res.data as List).map((e) => Map<String, dynamic>.from(e as Map)).toList();

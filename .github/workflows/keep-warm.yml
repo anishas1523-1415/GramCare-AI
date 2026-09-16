@@ -1,0 +1,55 @@
+name: Keep the API warm
+
+# Render's free tier spins a service down after roughly 15 minutes without
+# traffic, and the next request then pays a cold start. Measured against
+# this account's own services, that cold start is 20+ seconds — on a rural
+# 2G connection, on top of the request itself, that is the difference
+# between an app that works and an app someone gives up on. The mobile
+# client's 65-second timeouts exist precisely because of this.
+#
+# Pinging /health on a schedule keeps the instance up. The catch is that
+# Render's free plan grants a fixed pool of instance-hours per month across
+# the whole account, so keeping a service awake 24/7 would spend nearly all
+# of them on one service and starve the others.
+#
+# So this runs through the Indian day only — 05:30 to 22:30 IST, which is
+# when patients, pharmacists and lab staff are actually awake — and lets
+# the service sleep overnight. That is about 17 hours a day rather than 24,
+# which leaves real headroom in the monthly pool while covering essentially
+# every request a real user makes. Someone opening the app at 3am still
+# gets an answer; they just wait for the cold start once.
+
+on:
+  schedule:
+    # Every 10 minutes between 00:00 and 17:00 UTC (05:30-22:30 IST).
+    # Ten minutes is inside Render's ~15-minute idle window with enough
+    # margin for GitHub's scheduler, which is best-effort and can run late.
+    - cron: "*/10 0-16 * * *"
+  # So the service can be woken by hand before a demo without waiting for
+  # the next scheduled run.
+  workflow_dispatch:
+
+# A queued run that fires late is worth nothing once a newer one exists.
+concurrency:
+  group: keep-warm
+  cancel-in-progress: true
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wake the API and the signaling server
+        run: |
+          # --max-time is generous on purpose: a cold start is the case
+          # this job exists to absorb, so timing out on one would defeat
+          # the point. Failures are reported but never fail the workflow —
+          # a missed ping is not worth a red build, and the next run is ten
+          # minutes away.
+          for url in \
+            "https://gramcare-fastapi.onrender.com/health" \
+            "https://gramcare-signaling.onrender.com/health"
+          do
+            code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 90 "$url" || echo "000")
+            printf "%-55s %s\n" "$url" "$code"
+          done
+        continue-on-error: true
