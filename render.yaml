@@ -62,6 +62,18 @@ services:
   # deliberately NOT declared here — those are already deployed and
   # configured outside this blueprint; adding them would fight their
   # existing setup.
+  #
+  # The pharmacist dashboard (Render static site "gramcare-pharmacy")
+  # silently froze at its 2026-07-08 build because its settings still
+  # pointed at apps/react_dashboard/, a path this repo no longer has:
+  # Render only auto-deploys changes inside the root directory, so every
+  # later commit was ignored. Its settings are now, and must stay:
+  #   Root Directory:    (empty — npm workspaces resolve from the repo root)
+  #   Build Command:     npm install && npm -w react_dashboard run build
+  #   Publish Directory: frontend/admin_dashboard/dist
+  # No env vars: src/lib/api.ts already defaults to the production API.
+  # Use `npm install`, not `npm ci`: package-lock.json is gitignored on
+  # purpose (see .gitignore), so there is no lockfile to install from.
   - type: web
     name: gramcare-lab
     env: node

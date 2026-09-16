@@ -70,8 +70,8 @@ class PharmacyService {
       'name': name,
       if (address != null && address.isNotEmpty) 'address': address,
       if (phone != null && phone.isNotEmpty) 'phone': phone,
-      if (lat != null) 'lat': lat,
-      if (lng != null) 'lng': lng,
+      'lat': ?lat,
+      'lng': ?lng,
     });
     return Map<String, dynamic>.from(res.data as Map);
   }
