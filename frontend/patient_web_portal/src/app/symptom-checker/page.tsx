@@ -16,6 +16,8 @@ import api from "../../lib/api";
 import { useProfile } from "../../contexts/ProfileContext";
 import { useLocale } from "../../contexts/LocaleContext";
 import { offlineTriageEstimate } from "../../lib/offlineTriage";
+import { getUserAiKey, hasUserAiKey } from "../../lib/aiKey";
+import AiQuotaPrompt from "../../components/AiQuotaPrompt";
 
 interface TriageResult {
   severity: 'CRITICAL' | 'HIGH' | 'MODERATE' | 'LOW';
@@ -46,6 +48,10 @@ export default function SymptomCheckerPage() {
   // True when `triageResult` came from the offline keyword-matching
   // fallback (no network reached /triage/analyze) rather than the real AI.
   const [isOfflineEstimate, setIsOfflineEstimate] = useState(false);
+  // Mirrors the server's ai_quota_exhausted flag for the last analysis, so
+  // the "bring your own key" prompt appears only when the shared free-tier
+  // quota is genuinely spent — never for an ordinary failure.
+  const [quotaExhausted, setQuotaExhausted] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [speechError, setSpeechError] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -125,6 +131,7 @@ export default function SymptomCheckerPage() {
     setTriageResult(null);
     setShowExplanation(false);
     setIsOfflineEstimate(false);
+    setQuotaExhausted(false);
 
     try {
       const res = await api.post("/triage/analyze", {
@@ -133,9 +140,13 @@ export default function SymptomCheckerPage() {
         age: activeProfile?.age ?? 30,
         family_profile_id: activeProfile?.id ?? null,
         image_base64: symptomImage?.base64 ?? null,
+        // Only present once the user chose to supply their own key after
+        // the shared quota ran out. Kept in this browser, not on our server.
+        ...(getUserAiKey() ? { user_ai_key: getUserAiKey() } : {}),
       });
 
       const data = res.data;
+      setQuotaExhausted(data.ai_quota_exhausted === true);
 
       const severityLabel = data.severity_score >= 75 ? "CRITICAL"
         : data.severity_score >= 50 ? "HIGH"
@@ -313,6 +324,16 @@ export default function SymptomCheckerPage() {
           </button>
 
           {error && <p className="text-red-500 mt-4 text-sm font-semibold">{error}</p>}
+
+          {/* The shared free-tier quota is spent, so the card below is a
+              placeholder rather than a real assessment. Say so, and offer
+              the way through it. */}
+          {quotaExhausted && !hasUserAiKey() && (
+            <AiQuotaPrompt
+              onKeySaved={analyzeSymptoms}
+              onDismiss={() => setQuotaExhausted(false)}
+            />
+          )}
 
           {isOfflineEstimate && triageResult && (
             <div className="mt-6 p-3.5 rounded-xl bg-amber-500/15 border-2 border-amber-500/70 text-left flex items-start gap-2.5">

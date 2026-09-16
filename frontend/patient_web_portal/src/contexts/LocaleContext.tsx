@@ -687,6 +687,16 @@ const en: Record<string, string> = {
   chronic_conditions: 'Chronic Conditions',
   none_recorded: 'None recorded',
   recent_medicines: 'Recently Prescribed Medicines',
+  // Shown only when the shared AI quota is spent, offering the user their
+  // own provider key rather than a dead assistant.
+  ai_limit_exhausted: 'AI limit reached',
+  have_own_api_key: 'Do you have your own API key?',
+  yes: 'Yes',
+  no: 'No',
+  paste_api_key: 'Paste your API key',
+  api_key_stays_in_browser: 'Stored only in this browser. Never sent to GramCare.',
+  get_a_free_key: 'Get a free key',
+  save_and_retry: 'Save & retry',
   // LocationMap
   map_unavailable_note: 'Tap a location to open it in Google Maps',
   open_in_maps: 'Open in Maps',
@@ -1326,6 +1336,14 @@ const ta: Record<string, string> = {
   chronic_conditions: 'நாட்பட்ட நிலைகள்',
   none_recorded: 'எதுவும் பதிவு செய்யப்படவில்லை',
   recent_medicines: 'சமீபத்தில் பரிந்துரைக்கப்பட்ட மருந்துகள்',
+  ai_limit_exhausted: 'AI வரம்பு முடிந்தது',
+  have_own_api_key: 'உங்களிடம் சொந்த API விசை உள்ளதா?',
+  yes: 'ஆம்',
+  no: 'இல்லை',
+  paste_api_key: 'உங்கள் API விசையை ஒட்டவும்',
+  api_key_stays_in_browser: 'இந்த உலாவியில் மட்டுமே சேமிக்கப்படும். GramCare-க்கு அனுப்பப்படாது.',
+  get_a_free_key: 'இலவச விசையைப் பெறுங்கள்',
+  save_and_retry: 'சேமித்து மீண்டும் முயற்சி',
   // LocationMap
   map_unavailable_note: 'Google Maps இல் திறக்க ஒரு இருப்பிடத்தைத் தட்டவும்',
   open_in_maps: 'Maps இல் திற',
