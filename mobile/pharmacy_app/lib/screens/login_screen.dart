@@ -139,7 +139,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 Align(
                   alignment: Alignment.centerRight,
                   child: TextButton(
-                    onPressed: _isLoading ? null : () => context.go('/forgot-password'),
+                    onPressed: _isLoading ? null : () => context.push('/forgot-password'),
                     child: Text(locale.t('forgot_password')),
                   ),
                 ),
@@ -148,7 +148,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 // previously the only account-creation path was the web
                 // portal, which has no pharmacist-facing section at all.
                 TextButton(
-                  onPressed: _isLoading ? null : () => context.go('/register'),
+                  onPressed: _isLoading ? null : () => context.push('/register'),
                   child: Text(locale.t('new_pharmacy_register')),
                 ),
               ],

@@ -485,7 +485,7 @@ class _BookConsultationScreenState extends State<BookConsultationScreen> {
             ),
             const SizedBox(height: 28),
             GestureDetector(
-              onTap: () => context.go('/appointments'),
+              onTap: () => context.pushReplacement('/appointments'),
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
                 decoration: BoxDecoration(color: const Color(0xFF4F46E5), borderRadius: BorderRadius.circular(14)),
