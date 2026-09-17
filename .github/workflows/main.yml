@@ -142,9 +142,16 @@ jobs:
         distribution: 'zulu'
         java-version: '17'
         
+    # Pinned, not 'latest stable'. An unpinned stable channel means CI
+    # silently tracks whatever Flutter shipped this week while the APKs
+    # that actually reach users are built on the developer's machine — so
+    # CI either fails on an API that local does not have yet, or passes on
+    # one local cannot compile. This is the version the release builds use;
+    # bump both together.
     - name: Setup Flutter
       uses: subosito/flutter-action@v2
       with:
+        flutter-version: '3.38.5'
         channel: 'stable'
         cache: true
         
