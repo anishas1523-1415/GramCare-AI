@@ -93,7 +93,7 @@ dependencies:
   qr_flutter: ^4.1.0
   # The patient's actual SOS recording. speech_to_text holds the microphone
   # through the press, so recording happens after the alert has fired.
-  record: ^5.1.2
+  record: ^6.2.1
   # Somewhere to write the clip before it is read back and uploaded.
   path_provider: ^2.1.4
   # Standard Bluetooth health devices for vitals. Licensed free for personal,
