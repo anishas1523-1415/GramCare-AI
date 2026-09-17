@@ -11,12 +11,16 @@ from ..base import AIRequest, AITask, BaseAIProvider
 from ..errors import (
     AIProviderError,
     AuthenticationError,
+    BillingError,
+    ModelNotFoundError,
     NetworkError,
     ProviderUnavailableError,
     QuotaExceededError,
     RateLimitError,
     TimeoutError_,
     classify_exception,
+    is_billing_failure,
+    is_missing_model,
 )
 from ._util import extract_json
 
@@ -26,9 +30,16 @@ logger = logging.getLogger("gramcare.ai.groq")
 class GroqProvider(BaseAIProvider):
     name = "groq"
 
-    def __init__(self, api_key: Optional[str] = None, model: str = "llama-3.3-70b-versatile", **kwargs):
+    def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None, **kwargs):
         super().__init__(api_key, **kwargs)
-        self._model = model
+        # Overridable from the environment because provider model names are
+        # retired on the provider's schedule, not ours: gemini-2.0-flash and
+        # Groq's llama-3.3-70b-versatile both went dead in place, and each
+        # one took every AI feature down with a valid key until a code
+        # change shipped. An env var is a dashboard edit instead.
+        # llama-3.3-70b-versatile now 404s with model_not_found on Groq;
+        # gpt-oss-120b is the strongest general model it still serves.
+        self._model = model or os.getenv("GROQ_MODEL") or "openai/gpt-oss-120b"
         # One client per key, built on first use.
         self._clients: dict[str, object] = {}
 
@@ -118,6 +129,10 @@ def _classify_groq_error(exc: Exception, provider: str) -> AIProviderError:
 
     if type_name == "AuthenticationError" or "invalid api key" in text:
         return AuthenticationError(str(exc), provider=provider, cause=exc)
+    if is_billing_failure(text):
+        return BillingError(str(exc), provider=provider, cause=exc)
+    if type_name == "NotFoundError" or is_missing_model(text):
+        return ModelNotFoundError(str(exc), provider=provider, cause=exc)
     if type_name == "RateLimitError" or "rate limit" in text:
         if "quota" in text:
             return QuotaExceededError(str(exc), provider=provider, cause=exc)

@@ -274,6 +274,20 @@ class Prescription(Base):
     appointment = relationship("Appointment", back_populates="prescriptions")
 
 
+def is_placeholder_triage():
+    """SQL filter matching TriageLog rows that are NOT real AI assessments.
+
+    MockProvider answers "Unknown (AI Engines Unavailable)" and the parse
+    fallback answers "Unknown (invalid AI response)". Both were written to
+    triage_logs as if they were diagnoses: 13 such rows reached production,
+    where outbreak detection grouped them into a "13-case cluster" of a
+    condition that does not exist, and doctor summaries read them as the
+    patient's recent history. New placeholders are no longer saved; this
+    keeps the ones already stored out of every reader.
+    """
+    return TriageLog.ai_predicted_condition.ilike("unknown (%")
+
+
 class EmergencySOS(Base):
     __tablename__ = "emergency_sos"
 

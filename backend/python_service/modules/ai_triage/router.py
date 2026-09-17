@@ -87,6 +87,15 @@ class TriageResponse(BaseModel):
     # ai_quota_exhausted above is the narrower "specifically out of quota"
     # signal, kept so older installed apps keep behaving as they did.
     ai_user_key_may_help: bool = False
+    # Set when the caller supplied their own key and it did not work: the
+    # error category (AuthenticationError = rejected, QuotaExceededError /
+    # RateLimitError = that key is spent). Without it a bad pasted key just
+    # produced the fallback answer again, which looked like the AI itself
+    # was still broken.
+    ai_user_key_error: Optional[str] = None
+    # Which engine produced this answer ("gemini", "groq", ... or "mock").
+    # "mock" is the offline fallback, not an AI answer.
+    ai_engine: str = ""
 
 
 # ============================================================
@@ -220,6 +229,7 @@ async def run_triage_analysis(
         AITask.TRIAGE, prompt=prompt, image_base64=image_b64, user_api_key=user_ai_key
     )
     data = dict(outcome.data)
+    parse_failed = False
 
     try:
         data["disclaimer"] = MEDICAL_DISCLAIMER
@@ -236,6 +246,7 @@ async def run_triage_analysis(
             "request_id=%s Failed to parse AI response into TriageResponse: %s",
             outcome.request_id, str(e),
         )
+        parse_failed = True
         result = TriageResponse(
             severity_score=50,
             predicted_condition="Unknown (invalid AI response)",
@@ -258,6 +269,17 @@ async def run_triage_analysis(
     result.image_url = image_url
     result.ai_quota_exhausted = outcome.quota_exhausted
     result.ai_user_key_may_help = outcome.user_key_may_help
+    result.ai_user_key_error = outcome.user_key_error
+    result.ai_engine = outcome.provider_used
+    if outcome.used_mock or parse_failed:
+        # Not an assessment. Saving it made the offline placeholder part of
+        # the patient's history, fed it to doctor summaries, and counted it
+        # as a case in outbreak detection.
+        logger.warning(
+            "request_id=%s triage not persisted: used_mock=%s parse_failed=%s failures=%s",
+            outcome.request_id, outcome.used_mock, parse_failed, outcome.failures,
+        )
+        return result
     _persist_triage_log(
         db,
         TriageRequest(

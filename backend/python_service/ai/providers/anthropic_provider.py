@@ -1,6 +1,7 @@
 """Anthropic provider. This is the ONLY file allowed to `import anthropic`
 (requirement #1)."""
 from __future__ import annotations
+import os
 
 import asyncio
 import logging
@@ -25,9 +26,16 @@ logger = logging.getLogger("gramcare.ai.anthropic")
 class AnthropicProvider(BaseAIProvider):
     name = "anthropic"
 
-    def __init__(self, api_key: Optional[str] = None, model: str = "claude-3-5-sonnet-20241022", **kwargs):
+    def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None, **kwargs):
         super().__init__(api_key, **kwargs)
-        self._model = model
+        # Overridable from the environment because provider model names are
+        # retired on the provider's schedule, not ours: gemini-2.0-flash and
+        # Groq's llama-3.3-70b-versatile both went dead in place, and each
+        # one took every AI feature down with a valid key until a code
+        # change shipped. An env var is a dashboard edit instead.
+        # claude-3-5-sonnet-20241022 is long retired; this provider is not
+        # configured in production, so the default has not been exercised.
+        self._model = model or os.getenv("ANTHROPIC_MODEL") or "claude-haiku-4-5-20251001"
         # One client per key, built on first use.
         self._clients: dict[str, object] = {}
 

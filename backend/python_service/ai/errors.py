@@ -93,6 +93,27 @@ class JSONParseError(AIProviderError):
     retryable = False
 
 
+class BillingError(QuotaExceededError):
+    """The provider account cannot pay for requests at all — OpenAI's
+    "You have no credits remaining" (insufficient_quota /
+    credit_balance_exhausted). A subclass of QuotaExceededError so key
+    rotation still moves past the key, but a distinct category because it is
+    not a limit that resets: nothing changes until someone adds credits.
+    Treating it as quota made an unfunded OpenAI account set the "AI limit
+    reached" flag on answers where Gemini had merely hiccuped."""
+
+    retryable = False
+
+
+class ModelNotFoundError(ProviderUnavailableError):
+    """The configured model name no longer exists on the provider. Groq
+    retired llama-3.3-70b-versatile and every call came back 404
+    model_not_found — with a perfectly valid key — which read as the
+    provider being "unavailable" rather than as a one-line config fix."""
+
+    retryable = False
+
+
 def classify_exception(exc: BaseException, *, provider: str) -> AIProviderError:
     """Best-effort classification for exceptions that a provider
     implementation didn't already wrap in one of the types above (e.g. an
@@ -106,6 +127,14 @@ def classify_exception(exc: BaseException, *, provider: str) -> AIProviderError:
 
     text = str(exc).lower()
     name = exc.__class__.__name__.lower()
+
+    # Checked before the generic 429 rule below: OpenAI's out-of-credits
+    # error is a 429, and a missing model is a 404 that would otherwise fall
+    # through to ProviderUnavailableError.
+    if is_billing_failure(text):
+        return BillingError(str(exc), provider=provider, cause=exc)
+    if is_missing_model(text):
+        return ModelNotFoundError(str(exc), provider=provider, cause=exc)
 
     if "timeout" in name or "timeout" in text:
         return TimeoutError_(str(exc), provider=provider, cause=exc)
@@ -141,3 +170,27 @@ def classify_exception(exc: BaseException, *, provider: str) -> AIProviderError:
         return JSONParseError(str(exc), provider=provider, cause=exc)
 
     return ProviderUnavailableError(str(exc), provider=provider, cause=exc)
+
+
+def is_billing_failure(text: str) -> bool:
+    """An account with no credits or no billing, as opposed to a limit that
+    resets. Matched on the providers' own error codes, not on the word
+    "quota", which Google also uses for per-minute burst caps."""
+    text = text.lower()
+    return any(marker in text for marker in (
+        "insufficient_quota",
+        "credit_balance_exhausted",
+        "no credits remaining",
+        "billing_hard_limit_reached",
+    ))
+
+
+def is_missing_model(text: str) -> bool:
+    text = text.lower()
+    return (
+        "model_not_found" in text
+        or "model_decommissioned" in text
+        or ("model" in text and ("does not exist" in text or "is not found" in text
+                                 or "has been decommissioned" in text
+                                 or "no longer available" in text))
+    )

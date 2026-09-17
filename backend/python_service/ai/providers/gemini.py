@@ -4,6 +4,7 @@ here, not by a runtime guard, matching how core/ratelimit.py etc. rely on
 module boundaries rather than import hooks.
 """
 from __future__ import annotations
+import os
 
 import asyncio
 import logging
@@ -35,9 +36,14 @@ class GeminiProvider(BaseAIProvider):
     # response on every single request, for every user, on every app.
     # Confirmed the replacement Google's own error message points to
     # (gemini-3.6-flash) actually works against this same key.
-    def __init__(self, api_key: Optional[str] = None, model: str = "gemini-3.6-flash", **kwargs):
+    def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None, **kwargs):
         super().__init__(api_key, **kwargs)
-        self._model = model
+        # Overridable from the environment because provider model names are
+        # retired on the provider's schedule, not ours: gemini-2.0-flash and
+        # Groq's llama-3.3-70b-versatile both went dead in place, and each
+        # one took every AI feature down with a valid key until a code
+        # change shipped. An env var is a dashboard edit instead.
+        self._model = model or os.getenv("GEMINI_MODEL") or "gemini-3.6-flash"
         # One SDK client per key, built on first use and kept. Building a
         # client is cheap but not free, and a request that rotates through
         # several keys would otherwise pay for it repeatedly.

@@ -1,6 +1,7 @@
 """OpenAI provider. This is the ONLY file allowed to `import openai`
 (requirement #1)."""
 from __future__ import annotations
+import os
 
 import asyncio
 import logging
@@ -10,12 +11,16 @@ from ..base import AIRequest, AITask, BaseAIProvider
 from ..errors import (
     AIProviderError,
     AuthenticationError,
+    BillingError,
+    ModelNotFoundError,
     NetworkError,
     ProviderUnavailableError,
     QuotaExceededError,
     RateLimitError,
     TimeoutError_,
     classify_exception,
+    is_billing_failure,
+    is_missing_model,
 )
 from ._util import extract_json
 
@@ -25,9 +30,14 @@ logger = logging.getLogger("gramcare.ai.openai")
 class OpenAIProvider(BaseAIProvider):
     name = "openai"
 
-    def __init__(self, api_key: Optional[str] = None, model: str = "gpt-4o-mini", **kwargs):
+    def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None, **kwargs):
         super().__init__(api_key, **kwargs)
-        self._model = model
+        # Overridable from the environment because provider model names are
+        # retired on the provider's schedule, not ours: gemini-2.0-flash and
+        # Groq's llama-3.3-70b-versatile both went dead in place, and each
+        # one took every AI feature down with a valid key until a code
+        # change shipped. An env var is a dashboard edit instead.
+        self._model = model or os.getenv("OPENAI_MODEL") or "gpt-4o-mini"
         # One client per key, built on first use. A request that rotates
         # through several keys should not rebuild a client each time.
         self._clients: dict[str, object] = {}
@@ -114,9 +124,15 @@ def _classify_openai_error(exc: Exception, provider: str) -> AIProviderError:
 
     if type_name == "AuthenticationError":
         return AuthenticationError(str(exc), provider=provider, cause=exc)
+    if type_name == "NotFoundError" or is_missing_model(str(exc)):
+        return ModelNotFoundError(str(exc), provider=provider, cause=exc)
     if type_name == "RateLimitError":
-        # openai's RateLimitError also fires for quota exhaustion; disambiguate by message.
-        if "quota" in str(exc).lower() or "insufficient_quota" in str(exc).lower():
+        # openai's RateLimitError fires for three different things. An account
+        # with no credits is not a limit at all and must not be reported as
+        # one — see BillingError.
+        if is_billing_failure(str(exc)):
+            return BillingError(str(exc), provider=provider, cause=exc)
+        if "quota" in str(exc).lower():
             return QuotaExceededError(str(exc), provider=provider, cause=exc)
         return RateLimitError(str(exc), provider=provider, cause=exc)
     if type_name in ("APITimeoutError", "Timeout"):

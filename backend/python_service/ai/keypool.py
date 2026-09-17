@@ -37,6 +37,11 @@ DEFAULT_COOLDOWN_SECONDS = 3600.0
 #: A short cooldown for per-minute rate limits, which recover in seconds.
 RATE_LIMIT_COOLDOWN_SECONDS = 75.0
 
+#: An unfunded account does not recover by waiting. Six hours keeps it from
+#: being retried on every request while still picking up credits added later
+#: without a redeploy.
+BILLING_COOLDOWN_SECONDS = 6 * 3600.0
+
 
 def _mask(key: str) -> str:
     """Keys must never reach a log intact. Enough tail to tell two keys
@@ -50,6 +55,10 @@ class _KeyState:
     cooling_until: float = 0.0
     #: Number of times this key has been marked exhausted, for /ai/health.
     exhaustions: int = 0
+    #: The account behind this key cannot pay (no credits / no billing).
+    #: Distinct from cooling: waiting does not fix it, so it must not make
+    #: the pool look "out of quota, try later".
+    dead: bool = False
 
     def is_cooling(self, now: float) -> bool:
         return now < self.cooling_until
@@ -107,11 +116,22 @@ class KeyPool:
         return sum(1 for s in self._states if not s.is_cooling(now))
 
     def all_exhausted(self) -> bool:
-        """True when every key is cooling off. Distinct from "no keys
-        configured" — the apps show a different message for each, because
-        one is something the user can fix with their own key and the other
-        is an operator misconfiguration."""
-        return self.configured and self.available_count() == 0
+        """True when every *working* key is cooling off. Distinct from "no
+        keys configured" — the apps show a different message for each,
+        because one is something the user can fix with their own key and the
+        other is an operator misconfiguration.
+
+        Dead keys (unfunded accounts) are left out on purpose. A pool whose
+        only key belongs to an account with no credits is not "out of quota,
+        try later" — it is effectively unconfigured — and counting it made
+        the apps show "AI limit reached" on answers where the working
+        provider had merely hiccuped."""
+        live = [st for st in self._states if not st.dead]
+        now = time.monotonic()
+        return bool(live) and all(st.is_cooling(now) for st in live)
+
+    def dead_count(self) -> int:
+        return sum(1 for st in self._states if st.dead)
 
     def seconds_until_recovery(self) -> Optional[float]:
         """When the soonest key comes back, for surfacing a real wait time
@@ -169,10 +189,24 @@ class KeyPool:
     def mark_rate_limited(self, key: str) -> None:
         self.mark_exhausted(key, RATE_LIMIT_COOLDOWN_SECONDS)
 
+    def mark_dead(self, key: str) -> None:
+        """The account behind `key` cannot pay. Parked for a long time
+        rather than forever, so adding credits recovers it without a
+        restart."""
+        for state in self._states:
+            if state.key == key:
+                state.dead = True
+                state.cooling_until = time.monotonic() + BILLING_COOLDOWN_SECONDS
+                logger.warning(
+                    "ai_keypool provider=%s key=%s has no credits or billing; parked for %.0fs",
+                    self.provider, _mask(key), BILLING_COOLDOWN_SECONDS,
+                )
+
     def mark_ok(self, key: str) -> None:
         """A key that answers is healthy again — clear any cooldown early so
         a key that was only briefly rate limited returns to full use."""
         for state in self._states:
             if state.key == key:
                 state.cooling_until = 0.0
+                state.dead = False  # credits were added after all
                 return

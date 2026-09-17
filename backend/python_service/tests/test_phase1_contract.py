@@ -127,7 +127,9 @@ def test_doctor_records_feed_requires_doctor(client, patient_token, doctor_token
 
 # ------------------------------------------------------ triage persistence ----
 
-def test_triage_mock_persists_log(client, patient_token):
+def test_triage_real_answer_persists_log(client, patient_token, real_ai_answer):
+    """A real assessment is written to TriageLog. (The offline placeholder is
+    deliberately not — see test_ai_failure_reporting.py.)"""
     res = client.post("/api/v1/triage/analyze",
                       headers=auth(patient_token),
                       json={"symptoms_text": "fever and headache",

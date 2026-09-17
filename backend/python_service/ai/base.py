@@ -17,6 +17,7 @@ from typing import Awaitable, Callable, Iterator, Optional
 
 from .errors import (
     AuthenticationError,
+    BillingError,
     ProviderUnavailableError,
     QuotaExceededError,
     RateLimitError,
@@ -146,6 +147,12 @@ class BaseAIProvider(ABC):
             tried += 1
             try:
                 result = await call(key)
+            except BillingError as e:
+                # Before QuotaExceededError, which it subclasses: an unfunded
+                # account is parked as dead, not as a limit that resets.
+                last_error = e
+                self._pool.mark_dead(key)
+                continue
             except QuotaExceededError as e:
                 last_error = e
                 self._pool.mark_exhausted(key)

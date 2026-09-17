@@ -3,11 +3,14 @@ import logging
 import os
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Response
+import time
+
+from fastapi import Depends, FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from dotenv import load_dotenv
 
+from core.ratelimit import rate_limit
 from core.security_middleware import SecurityHeadersMiddleware
 from core.timezone_json import UtcJSONResponse
 
@@ -308,30 +311,34 @@ def integrations_health():
 
 @app.get("/health/ai", tags=["System"])
 def ai_health():
-    """Why the AI is or is not answering.
+    """Why the AI is or is not answering, from the server's point of view.
 
-    "AI engines unavailable" was unexplainable from outside the server: an
-    absent key, a revoked key and a spent quota all produced the same
-    sentence, and the only way to tell them apart was to read the logs on
-    Render. This reports which of the three it is.
+    Reads the live AIManager the routers use. It used to build a fresh
+    AIManager per call, which has no history, so it could never show a key
+    parked for being unfunded or a provider the circuit breaker had shut
+    off; it reported "ok" while two of three providers were failing.
 
-    Deliberately leaks nothing: counts and states only, never key material
-    or even a fragment of it.
+    This still cannot tell whether a key *works*: nothing here calls a
+    provider. GET /health/ai/live does that.
+
+    Deliberately leaks nothing: counts and states only, never key material.
     """
-    from ai.manager import AIManager
+    from ai import get_ai_manager
 
     providers = {}
-    for name, provider in AIManager().all_providers().items():
+    for name, provider in get_ai_manager().all_providers().items():
         if name == "mock":
             continue
         pool = getattr(provider, "key_pool", None)
         status = provider.health_status()
         providers[name] = {
             "configured": provider.is_configured(),
+            "model": getattr(provider, "_model", None),
             "available": status.available,
             "reason": status.reason,
             "keys_configured": len(pool) if pool is not None else 0,
             "keys_usable_now": pool.available_count() if pool is not None else 0,
+            "keys_unfunded": pool.dead_count() if pool is not None else 0,
             "all_keys_exhausted": provider.quota_exhausted(),
         }
 
@@ -350,5 +357,71 @@ def ai_health():
         "verdict": verdict,
         "keys_configured_total": configured,
         "keys_usable_now": usable,
+        "providers": providers,
+        "note": "configuration only; GET /health/ai/live calls each provider",
+    }
+
+
+_KEY_LIKE = __import__("re").compile(r"(sk-ant-|sk-|gsk_|AIza|AQ\.)[A-Za-z0-9_\-.*]+")
+
+
+@app.get(
+    "/health/ai/live",
+    tags=["System"],
+    # Each call spends a little real quota on every configured provider, so
+    # it must not be something a stranger can loop.
+    dependencies=[Depends(rate_limit("ai_health_live", 3, 600))],
+)
+async def ai_health_live():
+    """Send one real triage request to each configured provider, separately.
+
+    The only check that answers "does this key actually work". A retired
+    model and an unfunded account both look perfectly configured until a
+    request is made; this makes the request and reports the exact failure.
+
+    Error text is passed through with anything key-shaped redacted.
+    """
+    import asyncio
+
+    from ai import AITask, get_ai_manager
+    from ai.base import AIRequest
+    from modules.ai_triage.router import TRIAGE_PROMPT_TEMPLATE
+
+    prompt = TRIAGE_PROMPT_TEMPLATE.format(
+        age=30, symptoms="mild fever and headache since this morning", image_note="",
+    )
+
+    async def probe(name, provider):
+        if not provider.is_configured():
+            return name, {"ok": False, "category": "NotConfigured"}
+        start = time.monotonic()
+        try:
+            data = await provider.generate(
+                AIRequest(task=AITask.TRIAGE, prompt=prompt, timeout_seconds=30)
+            )
+            return name, {
+                "ok": True,
+                "latency_ms": round((time.monotonic() - start) * 1000),
+                "answer_has_condition": bool(data.get("predicted_condition")),
+            }
+        except Exception as e:  # report every failure, never raise
+            return name, {
+                "ok": False,
+                "category": getattr(e, "category", type(e).__name__),
+                "detail": _KEY_LIKE.sub("[redacted]", str(e))[:200],
+                "latency_ms": round((time.monotonic() - start) * 1000),
+            }
+
+    manager = get_ai_manager()
+    results = await asyncio.gather(*(
+        probe(name, provider)
+        for name, provider in manager.all_providers().items()
+        if name != "mock"
+    ))
+    providers = dict(results)
+    working = [n for n, r in providers.items() if r.get("ok")]
+    return {
+        "working_providers": working,
+        "verdict": "ok" if working else "no_working_provider",
         "providers": providers,
     }

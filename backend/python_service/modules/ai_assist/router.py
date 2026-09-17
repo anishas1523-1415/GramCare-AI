@@ -126,7 +126,10 @@ async def patient_summary(
                 ))
 
     # --- Recent triage history (timestamp-ordered) -------------------------
-    triage_q = db.query(models.TriageLog).filter(models.TriageLog.patient_id == patient_id)
+    triage_q = db.query(models.TriageLog).filter(
+        models.TriageLog.patient_id == patient_id,
+        ~models.is_placeholder_triage(),
+    )
     if family_profile_id is not None:
         triage_q = triage_q.filter(models.TriageLog.family_profile_id == family_profile_id)
     triages = triage_q.order_by(models.TriageLog.created_at.desc()).limit(5).all()

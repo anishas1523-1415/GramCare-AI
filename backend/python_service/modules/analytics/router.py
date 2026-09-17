@@ -100,6 +100,7 @@ async def health_clusters(
             models.TriageLog.created_at >= cutoff,
             models.TriageLog.ai_predicted_condition != None,  # noqa: E711
             models.TriageLog.ai_predicted_condition != "",
+            ~models.is_placeholder_triage(),
         )
         .group_by(
             func.lower(models.TriageLog.ai_predicted_condition),
@@ -135,7 +136,11 @@ async def overview(
     _authorize(current_user, db)
     cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
 
-    total = db.query(models.TriageLog).filter(models.TriageLog.created_at >= cutoff).count()
+    total = (
+        db.query(models.TriageLog)
+        .filter(models.TriageLog.created_at >= cutoff, ~models.is_placeholder_triage())
+        .count()
+    )
     critical = (
         db.query(models.TriageLog)
         .filter(models.TriageLog.created_at >= cutoff,
@@ -197,7 +202,7 @@ async def resource_forecasting(
             func.coalesce(models.TriageLog.location_text, "Unknown Region").label("loc"),
             func.count(models.TriageLog.id).label("n")
         )
-        .filter(models.TriageLog.ai_severity_score >= 60)
+        .filter(models.TriageLog.ai_severity_score >= 60, ~models.is_placeholder_triage())
         .group_by(
             func.lower(models.TriageLog.ai_predicted_condition),
             func.coalesce(models.TriageLog.location_text, "Unknown Region"),

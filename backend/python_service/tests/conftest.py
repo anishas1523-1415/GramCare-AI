@@ -21,6 +21,13 @@ os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-not-for-production")
 # re-populate popped keys from apps/backend_service/.env. An existing (even
 # empty) env var wins over .env, forcing the mock AI/payment paths.
 os.environ["GEMINI_API_KEY"] = ""
+# Every provider, not just Gemini, and the plural pool variables too. Only
+# GEMINI_API_KEY was blanked, so once Groq and OpenAI keys were added to .env
+# the suite began making live calls to both — spending quota, depending on
+# the network, and answering "AI unavailable" tests with real Groq output.
+for _var in ("GEMINI_API_KEYS", "OPENAI_API_KEY", "OPENAI_API_KEYS",
+             "GROQ_API_KEY", "GROQ_API_KEYS", "ANTHROPIC_API_KEY", "ANTHROPIC_API_KEYS"):
+    os.environ[_var] = ""
 os.environ["RAZORPAY_KEY_ID"] = ""
 os.environ["RAZORPAY_KEY_SECRET"] = ""
 # Same reason, and the suite was genuinely calling both services: uploads
@@ -212,3 +219,34 @@ def pharmacist_token(client):
 
 def auth(token):
     return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.fixture
+def real_ai_answer(monkeypatch):
+    """Make triage return a genuine-looking AI assessment instead of the
+    offline placeholder.
+
+    The suite blanks every provider key, so without this every triage is
+    MockProvider's "Unknown (AI Engines Unavailable)" — which is deliberately
+    no longer saved to triage_logs. Tests about what happens to a real
+    assessment (persistence, attribution) need a real one to exist.
+    """
+    from ai.manager import AIOutcome
+    import modules.ai_triage.router as triage_router
+
+    async def fake_run(task, **kwargs):
+        return AIOutcome(
+            data={
+                "severity_score": 40, "predicted_condition": "Tension Headache",
+                "home_remedies": "Rest and fluids.", "doctor_recommendation": "See a GP if it persists.",
+                "recovery_time": "2-3 days", "status": "Normal", "confidence_score": 0.8,
+                "explanation": "Consistent with tension-type headache.",
+                "language_detected": "en",
+            },
+            provider_used="gemini",
+            request_id="test",
+            latency_ms=1.0,
+            retry_count=0,
+        )
+
+    monkeypatch.setattr(triage_router.ai_manager, "run", fake_run)

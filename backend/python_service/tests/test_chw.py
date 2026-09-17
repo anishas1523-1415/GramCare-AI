@@ -88,7 +88,7 @@ def test_chw_cannot_triage_patient_registered_by_another_chw(client):
     assert res.status_code == 403
 
 
-def test_chw_triage_is_attributed_to_the_patient_not_the_chw(client, db):
+def test_chw_triage_is_attributed_to_the_patient_not_the_chw(client, db, real_ai_answer):
     import models
 
     chw_token = _setup_chw(client, "chw_triage_attr")
