@@ -178,7 +178,15 @@ async def register_user(
     if db_user:
         raise HTTPException(status_code=400, detail="Username already registered")
 
-    existing_email = db.query(models.User).filter(models.User.email == user.email).first()
+    # Case-insensitive, to match login: login finds an account by
+    # lower(email), so letting Anish@x.com and anish@x.com both register
+    # would make that lookup pick one of them arbitrarily and reject the
+    # other's correct password.
+    existing_email = (
+        db.query(models.User)
+        .filter(func.lower(models.User.email) == user.email.lower())
+        .first()
+    )
     if existing_email:
         raise HTTPException(status_code=400, detail="Email already registered")
 
@@ -262,7 +270,7 @@ async def register_government_user(
 
     if db.query(models.User).filter(models.User.username == user.username).first():
         raise HTTPException(status_code=400, detail="Username already registered")
-    if db.query(models.User).filter(models.User.email == user.email).first():
+    if db.query(models.User).filter(func.lower(models.User.email) == user.email.lower()).first():
         raise HTTPException(status_code=400, detail="Email already registered")
 
     new_user = models.User(
@@ -379,7 +387,12 @@ def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db
     # client (web + all 3 mobile apps) now labels it "Username or Email" —
     # accept either. Username match stays exact (unchanged); email match is
     # case-insensitive since registration doesn't normalize email casing.
-    identifier = form_data.username
+    # Trimmed because the login field is a raw form string, unlike the JSON
+    # endpoints whose EmailStr already strips. Phone keyboards append a space
+    # after an autocompleted word and browser autofill sometimes does the
+    # same, so the most natural way to enter an email on a phone produced
+    # "Incorrect username or password" for a correct password.
+    identifier = form_data.username.strip()
     user = (
         db.query(models.User)
         .filter(

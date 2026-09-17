@@ -158,7 +158,7 @@ export default function LoginPage() {
         // PATIENT stays low-friction: register endpoint doesn't return a
         // token, so log in immediately with the credentials just created.
       }
-      const loggedInRole = await doLogin(username, password);
+      const loggedInRole = await doLogin(username.trim(), password);
 
       // Land each role on its own home (hospital desks go straight to the
       // Emergency Desk — seconds matter there).
@@ -259,7 +259,9 @@ export default function LoginPage() {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label htmlFor="login-username" className="block text-sm font-semibold mb-2">{t('username')}</label>
+            <label htmlFor="login-username" className="block text-sm font-semibold mb-2">
+              {mode === 'login' ? t('username_or_email') : t('username')}
+            </label>
             <input
               id="login-username"
               required

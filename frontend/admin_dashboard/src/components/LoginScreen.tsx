@@ -85,7 +85,7 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
 
     try {
       if (mode === 'login') {
-        await doLogin(username, password);
+        await doLogin(username.trim(), password);
       } else if (mode === 'register') {
         await axios.post(`${API_BASE_URL}/auth/register`, {
           username,
@@ -99,7 +99,7 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
         // PHARMACIST is not one of the roles the backend gates on email
         // verification, so an extra step here would be a dead end, not a
         // safeguard.
-        const signedIn = await doLogin(username, password);
+        const signedIn = await doLogin(username.trim(), password);
         if (!signedIn) {
           setInfo(t('account_created_pending_role'));
           switchTo('login');

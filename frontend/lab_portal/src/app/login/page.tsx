@@ -66,7 +66,7 @@ export default function LoginPage() {
           role: 'LAB',
         });
       }
-      await doLogin(username, password);
+      await doLogin(username.trim(), password);
       router.push('/dashboard');
     } catch (err) {
       if (err instanceof Error && err.message === 'ROLE_MISMATCH') {
