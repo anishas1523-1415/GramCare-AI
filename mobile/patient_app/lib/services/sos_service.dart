@@ -82,13 +82,18 @@ class SosService {
         'severity': 'CRITICAL',
         'family_profile_id': familyProfileId,
       });
-      return SosResult(sent: true, position: position);
+      // The server pages the hospital and SMSes the contacts, but both of
+      // those depend on push and SMS credentials that may not be live.
+      // Opening the composer here is the one channel that needs nothing
+      // configured, so family are told even when everything else is down.
+      final smsOpened = await _alertContacts(position);
+      return SosResult(sent: true, smsFallbackUsed: smsOpened, position: position);
     } on DioException catch (e) {
       final offline = e.type == DioExceptionType.connectionError ||
           e.type == DioExceptionType.connectionTimeout ||
           e.type == DioExceptionType.receiveTimeout;
       if (offline) {
-        final smsOpened = await _smsFallback(position);
+        final smsOpened = await _alertContacts(position);
         return SosResult(sent: false, smsFallbackUsed: smsOpened,
             error: smsOpened ? null : 'Offline and SMS unavailable', position: position);
       }
@@ -98,11 +103,13 @@ class SosService {
     }
   }
 
-  /// Offline path: open the SMS composer pre-addressed to the locally cached
-  /// emergency contacts with a location link. (True background SMS requires
-  /// carrier-level integration — an explicit user send keeps this reliable
-  /// and store-policy-safe.)
-  Future<bool> _smsFallback(Position? position) async {
+  /// Opens the SMS composer pre-addressed to the locally cached emergency
+  /// contacts with a location link. Used both when the SOS reached the
+  /// server and when it did not: a delivered SOS still only sits in a
+  /// hospital queue, and family are usually far closer than an ambulance.
+  /// (True background SMS needs carrier-level integration — an explicit
+  /// user send keeps this reliable and store-policy-safe.)
+  Future<bool> _alertContacts(Position? position) async {
     final numbers = await cachedContactNumbers();
     if (numbers.isEmpty) return false;
     final loc = position != null

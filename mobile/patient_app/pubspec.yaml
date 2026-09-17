@@ -47,7 +47,12 @@ dependencies:
   uuid: ^4.4.0
   # Real GPS coordinates for Emergency SOS (planning doc requirement)
   geolocator: ^13.0.1
-  google_maps_flutter: ^2.10.0
+  # OpenStreetMap instead of Google Maps: no API key, no billing account,
+  # no quota. The Google key shipped empty in every build (local.properties
+  # is gitignored) and the deployed one had billing disabled, so the map was
+  # blank everywhere. flutter_map needs nothing configured to draw.
+  flutter_map: ^7.0.2
+  latlong2: ^0.9.1
   geocoding: ^3.0.0
   # Offline SMS fallback for SOS + phone dialing for pharmacies
   url_launcher: ^6.3.0

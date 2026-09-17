@@ -115,6 +115,94 @@ def escalate_stale_sos(db: Session) -> int:
 # SOS lifecycle
 # ==========================================================
 
+async def _dispatch_sos(db: Session, sos: models.EmergencySOS, patient: models.User,
+                        hospital: Optional[models.Hospital]) -> None:
+    """Fan a new SOS out to the people who can actually act on it.
+
+    Until this existed, POST /sos/trigger wrote a row and returned. Nobody
+    was told: not the hospital it had just been assigned to, not the
+    patient's emergency contacts. The patient's screen said "waiting for a
+    hospital to respond" while the alert sat in a table waiting for someone
+    to happen to refresh a dashboard.
+
+    Every channel here is best-effort and individually guarded: an SOS must
+    never fail because a push token expired or an SMS gateway is down, and
+    one dead channel must not stop the next one being tried.
+    """
+    from core.notifications import NotificationService
+    from core.sms_service import SMSService
+
+    where = sos.location_text or (
+        f"{sos.location_lat:.5f}, {sos.location_lng:.5f}"
+        if sos.location_lat is not None and sos.location_lng is not None
+        else "location unknown"
+    )
+    maps_link = (
+        f"https://maps.google.com/?q={sos.location_lat},{sos.location_lng}"
+        if sos.location_lat is not None and sos.location_lng is not None
+        else None
+    )
+    who = patient.full_name or patient.username
+
+    # 1. The hospital's emergency desk, then its owner as a backstop — a
+    #    self-registered hospital may have set neither, which is worth a
+    #    warning rather than silence.
+    notified_staff = 0
+    if hospital:
+        staff_ids = {hospital.emergency_desk_user_id, hospital.owner_user_id} - {None}
+        if not staff_ids:
+            logger.warning(
+                "SOS %d assigned to hospital %d (%s) which has no emergency-desk "
+                "or owner account — nobody there can be paged.",
+                sos.id, hospital.id, hospital.name,
+            )
+        for staff_id in staff_ids:
+            try:
+                notified_staff += NotificationService(db).send_notification(
+                    user_id=staff_id,
+                    title=f"EMERGENCY SOS — {who}",
+                    body=f"{where}. Severity {sos.severity or 'unknown'}. Open to respond.",
+                    data={"type": "sos_alert", "sos_id": str(sos.id), "status": "ACTIVE"},
+                )
+            except Exception:
+                logger.exception("SOS %d: push to hospital staff %d failed.", sos.id, staff_id)
+
+    # 2. The patient's own emergency contacts, by SMS. This is the channel
+    #    that matters most in a village: family reach the patient long
+    #    before an ambulance does.
+    contacts = (
+        db.query(models.EmergencyContact)
+        .filter(models.EmergencyContact.user_id == patient.id)
+        .all()
+    )
+    text = f"EMERGENCY: {who} triggered an SOS on GramCare AI. Location: {where}."
+    if maps_link:
+        text += f" Map: {maps_link}"
+    notified_contacts = 0
+    for contact in contacts:
+        if not contact.phone:
+            continue
+        try:
+            await SMSService().send_sms(contact.phone, text)
+            notified_contacts += 1
+        except Exception as exc:
+            # HTTPException included: an unconfigured or rejecting gateway
+            # must not abort the remaining contacts.
+            logger.warning("SOS %d: SMS to contact %d failed: %s", sos.id, contact.id, exc)
+
+    logger.info(
+        "SOS %d dispatch: hospital=%s staff_pushes=%d contacts_total=%d contacts_sms=%d",
+        sos.id, hospital.name if hospital else "none",
+        notified_staff, len(contacts), notified_contacts,
+    )
+    if notified_staff == 0 and notified_contacts == 0:
+        logger.error(
+            "SOS %d reached NOBODY — no push tokens and no SMS delivery. "
+            "Check FIREBASE_SERVICE_ACCOUNT_PATH and MSG91_AUTH_KEY.",
+            sos.id,
+        )
+
+
 @router.post("/trigger", response_model=schemas.EmergencySOSResponse, dependencies=[Depends(rate_limit("sos_trigger", 3, 60))])
 async def trigger_sos(
     sos_data: schemas.EmergencySOSCreate,
@@ -150,6 +238,15 @@ async def trigger_sos(
     db.refresh(db_sos)
     logger.info("SOS %d triggered by patient %d (hospital=%s).",
                 db_sos.id, current_user.id, hospital.name if hospital else "none")
+
+    # Page the hospital and the patient's emergency contacts. Guarded as a
+    # whole as well as per channel: a patient in an emergency must still get
+    # their alert id back even if every notification route is broken.
+    try:
+        await _dispatch_sos(db, db_sos, current_user, hospital)
+    except Exception:
+        logger.exception("SOS %d: dispatch failed entirely.", db_sos.id)
+
     return db_sos
 
 

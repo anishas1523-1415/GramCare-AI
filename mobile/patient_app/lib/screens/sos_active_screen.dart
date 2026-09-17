@@ -1,7 +1,8 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../services/app_strings.dart';
@@ -29,7 +30,6 @@ class SosActiveScreen extends StatefulWidget {
 }
 
 class _SosActiveScreenState extends State<SosActiveScreen> {
-  final Set<Marker> _markers = {};
   String? _status;
   int _escalationLevel = 0;
   bool _hasError = false;
@@ -38,12 +38,6 @@ class _SosActiveScreenState extends State<SosActiveScreen> {
   @override
   void initState() {
     super.initState();
-    _markers.add(Marker(
-      markerId: const MarkerId('patient'),
-      position: LatLng(widget.patientLat, widget.patientLng),
-      infoWindow: const InfoWindow(title: 'You are here'),
-      icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
-    ));
     _fetchStatus();
     // The alert can transition ACTIVE -> RESPONDED (or escalate) at any
     // time on the hospital/doctor side — poll so this screen reflects that
@@ -210,17 +204,67 @@ class _SosActiveScreenState extends State<SosActiveScreen> {
             ),
           ),
           Expanded(
-            child: GoogleMap(
-              initialCameraPosition: CameraPosition(
-                target: LatLng(widget.patientLat, widget.patientLng),
-                zoom: 14,
+            child: FlutterMap(
+              options: MapOptions(
+                initialCenter: LatLng(widget.patientLat, widget.patientLng),
+                // Close enough to read the street the patient is on, which
+                // is the whole point of showing responders a map.
+                initialZoom: 16,
+                minZoom: 3,
+                maxZoom: 19,
               ),
-              markers: _markers,
-              myLocationEnabled: true,
+              children: [
+                TileLayer(
+                  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                  // OSM's tile usage policy requires an identifying agent.
+                  userAgentPackageName: 'com.gramcare.mobile_app',
+                  maxNativeZoom: 19,
+                ),
+                MarkerLayer(
+                  markers: [
+                    Marker(
+                      point: LatLng(widget.patientLat, widget.patientLng),
+                      width: 46,
+                      height: 46,
+                      alignment: Alignment.topCenter,
+                      child: const _PatientPin(),
+                    ),
+                  ],
+                ),
+                const RichAttributionWidget(
+                  attributions: [
+                    TextSourceAttribution('OpenStreetMap contributors'),
+                  ],
+                ),
+              ],
             ),
           ),
         ],
       ),
+    );
+  }
+}
+
+/// A pulsing pin so the patient's position is unmistakable on a small
+/// screen an ambulance crew is reading in a hurry.
+class _PatientPin extends StatelessWidget {
+  const _PatientPin();
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        Container(
+          width: 46,
+          height: 46,
+          decoration: BoxDecoration(
+            color: Colors.red.withValues(alpha: 0.22),
+            shape: BoxShape.circle,
+          ),
+        ),
+        const Icon(Icons.person_pin_circle, color: Colors.red, size: 34),
+      ],
     );
   }
 }
