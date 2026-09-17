@@ -30,6 +30,37 @@ _DEFAULT_CHANNEL = "gramcare_general_channel"
 _firebase_initialized = False
 try:
     cred_path = os.getenv("FIREBASE_SERVICE_ACCOUNT_PATH")
+    # A Render secret file keeps whatever name it was uploaded under, which
+    # is rarely the name the path was written for — the downloaded Firebase
+    # key is called gramcare-ai-firebase-adminsdk-fbsvc-<hash>.json. Rather
+    # than make an emergency notification chain depend on two strings being
+    # typed to match, fall back to the single service-account JSON sitting
+    # in the secrets directory when the exact path is not there.
+    if cred_path and not os.path.exists(cred_path):
+        secrets_dir = os.path.dirname(cred_path) or "/etc/secrets"
+        try:
+            candidates = [
+                os.path.join(secrets_dir, f)
+                for f in sorted(os.listdir(secrets_dir))
+                if f.endswith(".json") and not f.startswith(".")
+            ]
+        except OSError:
+            candidates = []
+        if len(candidates) == 1:
+            logger.warning(
+                "FIREBASE_SERVICE_ACCOUNT_PATH points at %s which does not exist; "
+                "using the only JSON in %s instead (%s). Set the variable to that "
+                "path to silence this.",
+                cred_path, secrets_dir, os.path.basename(candidates[0]),
+            )
+            cred_path = candidates[0]
+        elif len(candidates) > 1:
+            logger.error(
+                "FIREBASE_SERVICE_ACCOUNT_PATH points at %s which does not exist, and "
+                "%s holds %d JSON files — refusing to guess which is the credential.",
+                cred_path, secrets_dir, len(candidates),
+            )
+
     if cred_path and os.path.exists(cred_path):
         cred = credentials.Certificate(cred_path)
         firebase_admin.initialize_app(cred)
