@@ -227,3 +227,51 @@ def health():
         "service": "GramCare AI Backend",
         "version": "1.0.0"
     }
+
+
+@app.get("/health/ai", tags=["System"])
+def ai_health():
+    """Why the AI is or is not answering.
+
+    "AI engines unavailable" was unexplainable from outside the server: an
+    absent key, a revoked key and a spent quota all produced the same
+    sentence, and the only way to tell them apart was to read the logs on
+    Render. This reports which of the three it is.
+
+    Deliberately leaks nothing: counts and states only, never key material
+    or even a fragment of it.
+    """
+    from ai.manager import AIManager
+
+    providers = {}
+    for name, provider in AIManager().all_providers().items():
+        if name == "mock":
+            continue
+        pool = getattr(provider, "key_pool", None)
+        status = provider.health_status()
+        providers[name] = {
+            "configured": provider.is_configured(),
+            "available": status.available,
+            "reason": status.reason,
+            "keys_configured": len(pool) if pool is not None else 0,
+            "keys_usable_now": pool.available_count() if pool is not None else 0,
+            "all_keys_exhausted": provider.quota_exhausted(),
+        }
+
+    usable = sum(p["keys_usable_now"] for p in providers.values())
+    configured = sum(p["keys_configured"] for p in providers.values())
+    if configured == 0:
+        verdict = "no_keys_configured"
+    elif usable > 0:
+        verdict = "ok"
+    elif any(p["all_keys_exhausted"] for p in providers.values()):
+        verdict = "quota_exhausted"
+    else:
+        verdict = "keys_rejected"
+
+    return {
+        "verdict": verdict,
+        "keys_configured_total": configured,
+        "keys_usable_now": usable,
+        "providers": providers,
+    }
