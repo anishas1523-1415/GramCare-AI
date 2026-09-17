@@ -247,16 +247,35 @@ def integrations_health():
     from core import notifications
 
     cred_path = os.getenv("FIREBASE_SERVICE_ACCOUNT_PATH")
+    # "the path is set but the file is not there" is the whole failure mode
+    # for a Render secret file, and the only way to see it is to compare the
+    # configured path against what actually landed in the secrets directory.
+    # Paths and filenames are not secret; the contents are, and are never
+    # read here.
+    secrets_dir = os.path.dirname(cred_path) if cred_path else "/etc/secrets"
+    try:
+        present = sorted(os.listdir(secrets_dir))
+    except Exception:
+        present = []
+
+    if notifications._firebase_initialized:
+        push_detail = "FCM delivering"
+    elif not cred_path:
+        push_detail = "FIREBASE_SERVICE_ACCOUNT_PATH not set — every push is silently dropped"
+    elif not os.path.exists(cred_path):
+        push_detail = (
+            f"no file at {cred_path}. Files present in {secrets_dir}: "
+            f"{present or 'none'}. The secret file's name must match the "
+            f"path exactly."
+        )
+    else:
+        push_detail = f"file exists at {cred_path} but Firebase rejected it — check it is the full service-account JSON"
+
     return {
         "push_notifications": {
             "live": bool(notifications._firebase_initialized),
-            "detail": "FCM delivering"
-            if notifications._firebase_initialized
-            else (
-                "credential path set but Firebase did not initialise"
-                if cred_path
-                else "FIREBASE_SERVICE_ACCOUNT_PATH not set — every push is silently dropped"
-            ),
+            "configured_path": cred_path,
+            "detail": push_detail,
         },
         "sms": {
             "live": bool(os.getenv("MSG91_AUTH_KEY")),
