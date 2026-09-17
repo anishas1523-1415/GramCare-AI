@@ -82,6 +82,11 @@ class TriageResponse(BaseModel):
     # reached — do you have your own key?" prompt on exactly this, so a
     # server that is merely misconfigured never asks the user to fix it.
     ai_quota_exhausted: bool = False
+    # True whenever the answer is the offline fallback and the caller has no
+    # key of their own — whatever the reason the real providers dropped out.
+    # ai_quota_exhausted above is the narrower "specifically out of quota"
+    # signal, kept so older installed apps keep behaving as they did.
+    ai_user_key_may_help: bool = False
 
 
 # ============================================================
@@ -252,6 +257,7 @@ async def run_triage_analysis(
 
     result.image_url = image_url
     result.ai_quota_exhausted = outcome.quota_exhausted
+    result.ai_user_key_may_help = outcome.user_key_may_help
     _persist_triage_log(
         db,
         TriageRequest(

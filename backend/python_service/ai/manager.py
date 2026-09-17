@@ -84,6 +84,15 @@ class AIOutcome:
     #: misconfigured server never asks the user to fix it with a key.
     quota_exhausted: bool = False
 
+    #: True whenever the answer is a MockProvider fallback and the caller
+    #: did not already supply a key. Quota is only one of the reasons a real
+    #: provider drops out — a revoked, mistyped or entirely absent key looks
+    #: nothing like quota exhaustion, and gating the prompt on quota alone
+    #: meant the commonest failures showed "AI engines unavailable" with no
+    #: way forward. A user's own key fixes all of them, so all of them get
+    #: offered the box.
+    user_key_may_help: bool = False
+
 
 class AllProvidersFailedError(RuntimeError):
     """Raised only if even MockProvider fails — should never happen in
@@ -213,6 +222,7 @@ class AIManager:
                     fallback_occurred=fallback_occurred,
                     used_mock=(provider.name == "mock"),
                     quota_exhausted=(provider.name == "mock" and quota_blocked and saw_real_provider),
+                    user_key_may_help=(provider.name == "mock" and not user_api_key),
                 )
             # else: fall through to the next candidate.
 

@@ -194,7 +194,7 @@ class _TriageScreenState extends State<TriageScreen> {
       );
 
       final data = response.data as Map<String, dynamic>;
-      final exhausted = data['ai_quota_exhausted'] == true;
+      final exhausted = data['ai_user_key_may_help'] == true || data['ai_quota_exhausted'] == true;
       AiKeyService().noteQuotaExhausted(exhausted);
       setState(() {
         _result = data;

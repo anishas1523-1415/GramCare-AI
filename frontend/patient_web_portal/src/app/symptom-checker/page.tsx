@@ -31,6 +31,8 @@ interface TriageResult {
   untreated_outcome?: string;
   confidence?: number;
   explanation?: string;
+  ai_quota_exhausted?: boolean;
+  ai_user_key_may_help?: boolean;
 }
 
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "https://gramcare-signaling.onrender.com";
@@ -146,7 +148,10 @@ export default function SymptomCheckerPage() {
       });
 
       const data = res.data;
-      setQuotaExhausted(data.ai_quota_exhausted === true);
+      // ai_user_key_may_help covers every reason the real providers
+      // dropped out, not just quota: a revoked or absent key looks nothing
+      // like exhaustion, and the user's own key fixes all of them.
+      setQuotaExhausted(data.ai_user_key_may_help === true || data.ai_quota_exhausted === true);
 
       const severityLabel = data.severity_score >= 75 ? "CRITICAL"
         : data.severity_score >= 50 ? "HIGH"
