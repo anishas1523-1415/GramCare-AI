@@ -747,6 +747,51 @@ def update_my_phone(
     return {"message": "Phone number updated", "phone": current_user.phone}
 
 
+@router.post("/fcm-token/test", dependencies=[Depends(rate_limit("fcm_test", 5, 60))])
+def send_test_notification(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    """Send a push to the caller's own devices, and report what happened.
+
+    Push is the one part of this system with no feedback loop: FCM degrades
+    to a mock when unconfigured, a stale token is accepted and dropped, and
+    a notification that goes nowhere is indistinguishable from one that
+    arrived. The only honest test is to send a real one and say how many
+    devices it reached.
+
+    Restricted to the caller's own devices, so it cannot be used to push to
+    anyone else.
+    """
+    from core.notifications import NotificationService
+
+    tokens = (
+        db.query(models.UserPushToken)
+        .filter(models.UserPushToken.user_id == current_user.id,
+                models.UserPushToken.is_active == True)  # noqa: E712
+        .all()
+    )
+    if not tokens:
+        raise HTTPException(
+            status_code=404,
+            detail="No active device registered for this account. Sign in on the app first.",
+        )
+
+    delivered = NotificationService(db).send_notification(
+        user_id=current_user.id,
+        title="GramCare AI test",
+        body="Push notifications are working on this device.",
+        data={"type": "test"},
+    )
+    return {
+        "devices_registered": len(tokens),
+        "delivered": delivered,
+        "ok": delivered > 0,
+        "detail": "check the device" if delivered
+        else "FCM accepted nothing — token is stale or FCM is mocked",
+    }
+
+
 @router.post("/fcm-token", dependencies=[Depends(rate_limit("fcm_token", 10, 60))])
 def register_fcm_token(
     payload: schemas.FCMTokenRegistration,
