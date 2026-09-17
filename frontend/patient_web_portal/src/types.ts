@@ -141,6 +141,9 @@ export interface EmergencySOS {
   location_text?: string | null;
   /** Transcribed voice description riding with the alert (Phase 6). */
   voice_note?: string | null;
+  /** The patient's actual recording, when they made one. voice_note above
+   *  is only the transcript. */
+  voice_audio_url?: string | null;
   severity: string;
   status: 'ACTIVE' | 'RESPONDED' | 'RESOLVED';
   responded_by?: number | null;

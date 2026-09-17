@@ -1,12 +1,17 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:record/record.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../services/app_strings.dart';
 import '../services/api_service.dart';
+import '../services/sos_service.dart';
 
 /// Previously this screen called GET /sos/active — the HOSPITAL/DOCTOR-
 /// facing "every active alert" endpoint, not scoped to this patient at all
@@ -18,11 +23,15 @@ import '../services/api_service.dart';
 class SosActiveScreen extends StatefulWidget {
   final double patientLat;
   final double patientLng;
+  /// Null when the alert never reached the server (offline SMS path), in
+  /// which case there is nothing to attach a recording to.
+  final int? sosId;
 
   const SosActiveScreen({
     super.key,
     required this.patientLat,
     required this.patientLng,
+    this.sosId,
   });
 
   @override
@@ -34,6 +43,18 @@ class _SosActiveScreenState extends State<SosActiveScreen> {
   int _escalationLevel = 0;
   bool _hasError = false;
   Timer? _poll;
+
+  // Voice recording. The alert has already gone; this lets the patient say
+  // what is wrong in their own voice while help is on the way, which a
+  // speech-to-text transcript cannot carry — distress, breathlessness, or
+  // somebody else in the room speaking.
+  final AudioRecorder _recorder = AudioRecorder();
+  bool _recording = false;
+  bool _uploadingVoice = false;
+  bool _voiceSent = false;
+  Timer? _recordTimer;
+  int _recordSeconds = 0;
+  static const int _maxRecordSeconds = 30;
 
   @override
   void initState() {
@@ -47,6 +68,8 @@ class _SosActiveScreenState extends State<SosActiveScreen> {
 
   @override
   void dispose() {
+    _recordTimer?.cancel();
+    _recorder.dispose();
     _poll?.cancel();
     super.dispose();
   }
@@ -112,6 +135,105 @@ class _SosActiveScreenState extends State<SosActiveScreen> {
   /// Hands the alert's coordinates to whatever map app the phone has. geo:
   /// is the Android intent every map app registers; the https URL is the
   /// fallback for a phone with none.
+  Future<void> _toggleRecording() async {
+    if (_recording) {
+      await _stopAndUpload();
+      return;
+    }
+    if (!await _recorder.hasPermission()) return;
+
+    final dir = await getTemporaryDirectory();
+    final path = '${dir.path}/sos_${widget.sosId}.m4a';
+    // AAC in an MP4 container: what Android records natively, small enough
+    // to upload on a rural connection, and playable everywhere.
+    await _recorder.start(
+      const RecordConfig(encoder: AudioEncoder.aacLc, bitRate: 32000, sampleRate: 22050),
+      path: path,
+    );
+    if (!mounted) return;
+    setState(() {
+      _recording = true;
+      _recordSeconds = 0;
+    });
+    _recordTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+      setState(() => _recordSeconds++);
+      // Hard cap so a phone left running in a pocket cannot produce a clip
+      // too large to reach a responder over 2G.
+      if (_recordSeconds >= _maxRecordSeconds) _stopAndUpload();
+    });
+  }
+
+  Future<void> _stopAndUpload() async {
+    _recordTimer?.cancel();
+    final path = await _recorder.stop();
+    if (!mounted) return;
+    setState(() {
+      _recording = false;
+      _uploadingVoice = true;
+    });
+
+    var ok = false;
+    final sosId = widget.sosId;
+    if (path != null && sosId != null) {
+      try {
+        final bytes = await File(path).readAsBytes();
+        ok = await SosService().uploadVoiceRecording(sosId, base64Encode(bytes));
+      } catch (_) {
+        ok = false;
+      }
+    }
+    if (!mounted) return;
+    setState(() {
+      _uploadingVoice = false;
+      _voiceSent = ok;
+    });
+    final s = context.read<LocaleService>();
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(s.t(ok ? 'sos_voice_sent' : 'sos_voice_failed')),
+      backgroundColor: ok ? Colors.green.shade800 : Colors.red.shade900,
+    ));
+  }
+
+  Widget _buildVoiceRecorder(LocaleService s) {
+    if (widget.sosId == null) return const SizedBox.shrink();
+    return Container(
+      width: double.infinity,
+      color: Colors.white,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              _voiceSent
+                  ? s.t('sos_voice_sent')
+                  : _recording
+                      ? '${s.t('sos_voice_recording')}  $_recordSeconds/$_maxRecordSeconds s'
+                      : s.t('sos_voice_prompt'),
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: _recording ? Colors.red : Colors.black87,
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          if (_uploadingVoice)
+            const SizedBox(height: 22, width: 22, child: CircularProgressIndicator(strokeWidth: 2))
+          else
+            FilledButton.icon(
+              onPressed: _toggleRecording,
+              style: FilledButton.styleFrom(
+                backgroundColor: _recording ? Colors.red.shade700 : Colors.red.shade400,
+              ),
+              icon: Icon(_recording ? Icons.stop : Icons.mic, size: 18),
+              label: Text(s.t(_recording ? 'sos_voice_stop' : 'sos_voice_record')),
+            ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _openInMaps() async {
     final lat = widget.patientLat;
     final lng = widget.patientLng;
@@ -167,6 +289,7 @@ class _SosActiveScreenState extends State<SosActiveScreen> {
               ],
             ),
           ),
+          _buildVoiceRecorder(s),
           // The embedded map needs a billed Google Maps key, which a build
           // without MAPS_API_KEY does not have — it renders as a blank grey
           // tile. During an emergency that is worse than useless, so the

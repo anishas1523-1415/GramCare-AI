@@ -486,11 +486,50 @@ class EmergencySOSCreate(BaseModel):
     severity: str = "CRITICAL"
     family_profile_id: Optional[int] = None
 
+class EmergencySOSTrigger(EmergencySOSCreate):
+    # Raw recording as a data URI or bare base64. Capped well under the
+    # 15s clip the app records; a longer one is rejected rather than
+    # silently truncated, so a responder never hears half a sentence.
+    voice_audio_base64: Optional[str] = Field(None, max_length=3_000_000)
+
+
+class SosTrackingResponse(BaseModel):
+    """What a family member sees on the public tracking link.
+
+    Deliberately narrow: a name, where they are, who is coming and how far
+    off they are. No patient id, no medical history, no contact list — the
+    token travels by SMS and may be forwarded to anyone.
+    """
+    patient_name: str
+    status: str
+    severity: Optional[str] = None
+    location_lat: Optional[float] = None
+    location_lng: Optional[float] = None
+    location_text: Optional[str] = None
+    voice_note: Optional[str] = None
+    voice_audio_url: Optional[str] = None
+    hospital_name: Optional[str] = None
+    hospital_phone: Optional[str] = None
+    hospital_lat: Optional[float] = None
+    hospital_lng: Optional[float] = None
+    distance_km: Optional[float] = None
+    eta_minutes: Optional[int] = None
+    eta_is_estimate: bool = True
+    escalation_level: int = 0
+    created_at: datetime
+    resolved_at: Optional[datetime] = None
+
+
+class SosVoiceUpload(BaseModel):
+    voice_audio_base64: str = Field(..., min_length=1, max_length=3_000_000)
+
+
 class EmergencySOSUpdate(BaseModel):
     status: str = Field(..., pattern="^(ACTIVE|RESPONDED|RESOLVED)$")
 
 class EmergencySOSResponse(EmergencySOSCreate):
     id: int
+    voice_audio_url: Optional[str] = None
     patient_id: int
     status: str
     responded_by: Optional[int]

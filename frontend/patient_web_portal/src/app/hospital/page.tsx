@@ -211,6 +211,18 @@ export default function HospitalEmergencyDesk() {
                   </p>
                 )}
 
+                {/* The recording itself. A transcript drops the distress,
+                    the breathlessness and anyone else speaking in the room,
+                    which is most of what a desk listens for. */}
+                {sos.voice_audio_url && (
+                  <audio
+                    controls
+                    preload="none"
+                    src={sos.voice_audio_url}
+                    className="w-full mb-2 h-9"
+                  />
+                )}
+
                 {(sos.escalation_level ?? 0) > 0 && (
                   <p className="text-xs font-bold text-orange-600 mb-2">
                     ⚠ {t('escalated_label')} ×{sos.escalation_level} — {t('earlier_hospital_no_response')}

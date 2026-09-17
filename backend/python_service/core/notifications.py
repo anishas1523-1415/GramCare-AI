@@ -66,7 +66,9 @@ class NotificationService:
                 continue
 
             try:
-                channel_id = _CHANNEL_BY_TYPE.get((data or {}).get("type"), _DEFAULT_CHANNEL)
+                notif_type = (data or {}).get("type")
+                channel_id = _CHANNEL_BY_TYPE.get(notif_type, _DEFAULT_CHANNEL)
+                is_emergency = notif_type == "sos_alert"
                 message = messaging.Message(
                     notification=messaging.Notification(
                         title=title,
@@ -75,7 +77,32 @@ class NotificationService:
                     data=data or {},
                     token=token_record.fcm_token,
                     android=messaging.AndroidConfig(
-                        notification=messaging.AndroidNotification(channel_id=channel_id)
+                        # An SOS has to break through Doze and a silenced
+                        # phone. Normal priority lets Android hold the
+                        # message until the next maintenance window, which
+                        # for an emergency is useless — a responder can be
+                        # told about it twenty minutes late.
+                        priority="high" if is_emergency else "normal",
+                        notification=messaging.AndroidNotification(
+                            channel_id=channel_id,
+                            priority="max" if is_emergency else "default",
+                            default_sound=True,
+                            default_vibrate_timings=is_emergency,
+                            # Keeps the alert on screen until acted on
+                            # rather than sliding away unseen.
+                            sticky=is_emergency,
+                        ),
+                    ),
+                    apns=messaging.APNSConfig(
+                        headers={"apns-priority": "10" if is_emergency else "5"},
+                        payload=messaging.APNSPayload(
+                            aps=messaging.Aps(
+                                sound="default",
+                                # iOS only surfaces a notification through
+                                # Focus/Do Not Disturb at this level.
+                                content_available=True,
+                            )
+                        ),
                     ),
                 )
                 response = messaging.send(message)

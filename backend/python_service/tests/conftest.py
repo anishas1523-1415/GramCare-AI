@@ -23,6 +23,16 @@ os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-not-for-production")
 os.environ["GEMINI_API_KEY"] = ""
 os.environ["RAZORPAY_KEY_ID"] = ""
 os.environ["RAZORPAY_KEY_SECRET"] = ""
+# Same reason, and the suite was genuinely calling both services: uploads
+# went to the real Cloudinary account (which rejected test fixtures as
+# "Invalid video file") and _nearest_hospital hit the live Google Maps API
+# on every SOS test. Blanking these forces the database-backed file store
+# and the offline haversine path, so the suite is hermetic and a lapsed
+# key or a network blip cannot turn the build red.
+os.environ["CLOUDINARY_CLOUD_NAME"] = ""
+os.environ["CLOUDINARY_API_KEY"] = ""
+os.environ["CLOUDINARY_API_SECRET"] = ""
+os.environ["GOOGLE_MAPS_API_KEY"] = ""
 # Fixed test secret so tests/test_payments.py can compute valid webhook
 # signatures with plain hmac — gateway keys stay empty above (mock-mode
 # payments), but the webhook secret is a genuinely separate credential in

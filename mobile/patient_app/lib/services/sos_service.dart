@@ -16,7 +16,12 @@ class SosResult {
   final bool smsFallbackUsed; // true = offline path opened the SMS composer
   final String? error;
   final Position? position;
-  const SosResult({required this.sent, this.smsFallbackUsed = false, this.error, this.position});
+  /// Server id of the accepted alert, so the SOS screen can attach the
+  /// patient's voice recording to it afterwards. Null when nothing reached
+  /// the server.
+  final int? sosId;
+  const SosResult({required this.sent, this.smsFallbackUsed = false, this.error,
+      this.position, this.sosId});
 }
 
 class SosService {
@@ -74,7 +79,7 @@ class SosService {
     }
 
     try {
-      await ApiService().client.post('/sos/trigger', data: {
+      final res = await ApiService().client.post('/sos/trigger', data: {
         'location_lat': position?.latitude,
         'location_lng': position?.longitude,
         'location_text': locText,
@@ -87,7 +92,12 @@ class SosService {
       // Opening the composer here is the one channel that needs nothing
       // configured, so family are told even when everything else is down.
       final smsOpened = await _alertContacts(position);
-      return SosResult(sent: true, smsFallbackUsed: smsOpened, position: position);
+      return SosResult(
+        sent: true,
+        smsFallbackUsed: smsOpened,
+        position: position,
+        sosId: (res.data is Map) ? res.data['id'] as int? : null,
+      );
     } on DioException catch (e) {
       final offline = e.type == DioExceptionType.connectionError ||
           e.type == DioExceptionType.connectionTimeout ||
@@ -119,6 +129,21 @@ class SosService {
     final uri = Uri.parse('smsto:${numbers.join(',')}?body=$body');
     try {
       return await launchUrl(uri);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Attaches the patient's recording to an alert already in flight.
+  /// Returns false rather than throwing: losing the recording must never
+  /// look like losing the emergency.
+  Future<bool> uploadVoiceRecording(int sosId, String base64Audio) async {
+    try {
+      await ApiService().client.post(
+        '/sos/$sosId/voice',
+        data: {'voice_audio_base64': base64Audio},
+      );
+      return true;
     } catch (_) {
       return false;
     }

@@ -156,3 +156,112 @@ def test_health_clusters_role_gate_and_shape(client, patient_token, doctor_token
     overview = client.get("/api/v1/analytics/overview", headers=auth(doctor_token))
     assert overview.status_code == 200
     assert overview.json()["total_assessments"] >= 3
+
+
+def test_sos_voice_recording_attaches_and_is_served(client, patient_token):
+    """The patient's actual recording, not just the transcript.
+
+    A responder listens for distress, breathlessness or a third party
+    speaking — none of which survive speech-to-text. The recording is
+    uploaded after the alert fires, because the microphone is busy during
+    the press and an SOS must not wait on it.
+    """
+    import base64
+
+    res = client.post("/api/v1/sos/trigger", headers=auth(patient_token), json={
+        "location_lat": 11.05, "location_lng": 77.08,
+        "location_text": "Test village", "severity": "CRITICAL",
+    })
+    assert res.status_code == 200, res.text
+    sos = res.json()
+    assert sos["voice_audio_url"] is None
+
+    # A minimal well-formed WAV header — enough for the mime sniffing the
+    # uploader does, without embedding a real clip in the test suite.
+    wav = base64.b64encode(
+        b"RIFF$\x00\x00\x00WAVEfmt " + b"\x10\x00\x00\x00\x01\x00\x01\x00"
+        b"\x44\xac\x00\x00\x88X\x01\x00\x02\x00\x10\x00data\x00\x00\x00\x00"
+    ).decode()
+
+    attached = client.post(
+        f"/api/v1/sos/{sos['id']}/voice",
+        headers=auth(patient_token),
+        json={"voice_audio_base64": f"data:audio/wav;base64,{wav}"},
+    )
+    assert attached.status_code == 200, attached.text
+    url = attached.json()["voice_audio_url"]
+    assert url, "the recording must come back addressable"
+
+    # It must actually be retrievable, as audio — a URL that 404s would let
+    # a responder tap play and hear nothing.
+    token = url.rsplit("/", 1)[-1]
+    served = client.get(f"/api/v1/files/{token}")
+    assert served.status_code == 200
+    assert served.headers["content-type"].startswith("audio/")
+
+
+def test_sos_voice_recording_rejects_another_patients_alert(client, patient_token):
+    """One patient must never be able to put words in another's emergency."""
+    res = client.post("/api/v1/sos/trigger", headers=auth(patient_token), json={
+        "location_lat": 11.05, "location_lng": 77.08, "severity": "CRITICAL",
+    })
+    sos_id = res.json()["id"]
+
+    intruder = _register_and_login(client, "p6_voice_intruder", "PATIENT")
+    denied = client.post(
+        f"/api/v1/sos/{sos_id}/voice",
+        headers=auth(intruder),
+        json={"voice_audio_base64": "data:audio/wav;base64,UklGRg=="},
+    )
+    assert denied.status_code == 404, denied.text
+
+
+def test_sos_public_tracking_link_shows_family_what_they_need(client, patient_token, db_session=None):
+    """The link an emergency contact receives by SMS.
+
+    Contacts are phone numbers, not accounts, so this has to work with no
+    auth at all — and must still carry distance and ETA, which is the first
+    thing a relative asks.
+    """
+    from database import SessionLocal
+    import models
+
+    with SessionLocal() as db:
+        hosp_token, hospital_id = _make_hospital(client, db, "GH Track", 11.10, 77.10, "p6_hosp_track")
+
+    res = client.post("/api/v1/sos/trigger", headers=auth(patient_token), json={
+        "location_lat": 11.05, "location_lng": 77.08,
+        "location_text": "Track village", "severity": "CRITICAL",
+        "voice_note": "chest pain",
+    })
+    assert res.status_code == 200, res.text
+    sos_id = res.json()["id"]
+
+    with SessionLocal() as db:
+        token = db.query(models.EmergencySOS).filter(
+            models.EmergencySOS.id == sos_id).first().public_token
+    assert token, "every alert must be trackable by its contacts"
+
+    # No Authorization header at all — this is the whole point.
+    page = client.get(f"/api/v1/sos/track/{token}")
+    assert page.status_code == 200, page.text
+    body = page.json()
+
+    assert body["status"] == "ACTIVE"
+    assert body["voice_note"] == "chest pain"
+    assert body["location_lat"] == 11.05
+    # Distance must be a real kilometre figure, not raw degrees: the
+    # hospital is roughly 6 km away, so anything near 0.05 (the degree
+    # delta) would mean the haversine never ran.
+    assert body["distance_km"] is not None
+    assert 3 < body["distance_km"] < 15, body["distance_km"]
+    assert body["eta_minutes"] and body["eta_minutes"] > 0
+    assert body["hospital_name"] == "GH Track"
+
+    # Nothing clinical or identifying leaks through a link that travels by SMS.
+    for leaked in ("patient_id", "id", "allergies", "chronic_conditions"):
+        assert leaked not in body, leaked
+
+
+def test_sos_tracking_rejects_an_unknown_token(client):
+    assert client.get("/api/v1/sos/track/not-a-real-token").status_code == 404

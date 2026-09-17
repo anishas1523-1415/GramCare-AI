@@ -147,7 +147,11 @@ final GoRouter appRouter = GoRouter(
       pageBuilder: (context, state) {
         final lat = double.tryParse(state.uri.queryParameters['lat'] ?? '0') ?? 0;
         final lng = double.tryParse(state.uri.queryParameters['lng'] ?? '0') ?? 0;
-        return _appPage(SosActiveScreen(patientLat: lat, patientLng: lng), state);
+        final id = int.tryParse(state.uri.queryParameters['id'] ?? '');
+        return _appPage(
+          SosActiveScreen(patientLat: lat, patientLng: lng, sosId: (id ?? 0) > 0 ? id : null),
+          state,
+        );
       },
     ),
     GoRoute(

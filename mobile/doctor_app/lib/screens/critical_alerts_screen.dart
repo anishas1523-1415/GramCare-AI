@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:intl/intl.dart';
@@ -25,6 +26,10 @@ class CriticalAlertsScreen extends StatefulWidget {
 
 class _CriticalAlertsScreenState extends State<CriticalAlertsScreen> {
   List<SosAlert> _alerts = [];
+  // One player for the screen: starting a second recording must stop the
+  // first, not talk over it.
+  final AudioPlayer _player = AudioPlayer();
+  int? _playingAlertId;
   bool _loading = true;
   String? _error;
   Timer? _refreshTimer;
@@ -36,6 +41,29 @@ class _CriticalAlertsScreenState extends State<CriticalAlertsScreen> {
     // Periodic refresh — SOS alerts are time-critical; a doctor glancing at
     // this screen should see new alerts without manually pulling to refresh.
     _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) => _loadAlerts(silent: true));
+  }
+
+  Future<void> _toggleVoice(SosAlert alert) async {
+    if (_playingAlertId == alert.id) {
+      await _player.stop();
+      if (mounted) setState(() => _playingAlertId = null);
+      return;
+    }
+    await _player.stop();
+    try {
+      await _player.play(UrlSource(alert.voiceAudioUrl!));
+      if (!mounted) return;
+      setState(() => _playingAlertId = alert.id);
+      _player.onPlayerComplete.first.then((_) {
+        if (mounted) setState(() => _playingAlertId = null);
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _playingAlertId = null);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(context.read<LocaleService>().t('sos_voice_play_failed')),
+      ));
+    }
   }
 
   /// Hands the patient's coordinates to whatever navigation app the phone
@@ -55,6 +83,7 @@ class _CriticalAlertsScreenState extends State<CriticalAlertsScreen> {
 
   @override
   void dispose() {
+    _player.dispose();
     _refreshTimer?.cancel();
     super.dispose();
   }
@@ -274,6 +303,22 @@ class _CriticalAlertsScreenState extends State<CriticalAlertsScreen> {
                 ],
                 const SizedBox(height: 4),
                 Text('${locale.t('sos_status')}: ${alert.status}', style: const TextStyle(fontSize: 13)),
+                if (alert.voiceAudioUrl != null && alert.voiceAudioUrl!.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () => _toggleVoice(alert),
+                      icon: Icon(
+                        _playingAlertId == alert.id ? Icons.stop_circle : Icons.play_circle,
+                        size: 20,
+                      ),
+                      label: Text(locale.t(
+                        _playingAlertId == alert.id ? 'sos_voice_stop' : 'sos_voice_play',
+                      )),
+                    ),
+                  ),
+                ],
                 if (alert.locationLat != null && alert.locationLng != null) ...[
                   const SizedBox(height: 10),
                   SizedBox(

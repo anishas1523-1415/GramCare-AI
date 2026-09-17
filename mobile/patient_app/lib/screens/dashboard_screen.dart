@@ -162,7 +162,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     if (!mounted) return;
     if (result.sent) {
-      context.push('/sos-active?lat=${result.position?.latitude ?? 0}&lng=${result.position?.longitude ?? 0}');
+      context.push('/sos-active?lat=${result.position?.latitude ?? 0}&lng=${result.position?.longitude ?? 0}&id=${result.sosId ?? 0}');
     } else if (result.smsFallbackUsed) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(s.t('sos_sms_fallback')),

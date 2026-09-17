@@ -584,6 +584,11 @@ export default function DoctorDashboard() {
                 {sos.voice_note && (
                   <p className="text-sm italic text-gray-700 dark:text-gray-200 mb-1">&ldquo;{sos.voice_note}&rdquo;</p>
                 )}
+                {/* The recording itself — a transcript loses the distress
+                    and anyone else speaking in the room. */}
+                {sos.voice_audio_url && (
+                  <audio controls preload="none" src={sos.voice_audio_url} className="w-full mb-1 h-9" />
+                )}
                 {(sos.escalation_level ?? 0) > 0 && (
                   <p className="text-xs font-bold text-orange-600 mb-1">{t('escalated_label')} ×{sos.escalation_level} ({t('unanswered_label')})</p>
                 )}

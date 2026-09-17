@@ -91,6 +91,11 @@ dependencies:
   # RazorpayCheckout.tsx drives (POST /payments/create-order + /verify).
   razorpay_flutter: ^1.4.0
   qr_flutter: ^4.1.0
+  # The patient's actual SOS recording. speech_to_text holds the microphone
+  # through the press, so recording happens after the alert has fired.
+  record: ^5.1.2
+  # Somewhere to write the clip before it is read back and uploaded.
+  path_provider: ^2.1.4
   # Standard Bluetooth health devices for vitals. Licensed free for personal,
   # educational and nonprofit use only; a for-profit deployment needs a
   # commercial licence (see the call to connect() in ble_vitals_service.dart).

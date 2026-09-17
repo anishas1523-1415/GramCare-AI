@@ -15,6 +15,7 @@ Planning-doc rules implemented here:
 import logging
 import math
 import os
+import secrets
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -28,12 +29,68 @@ import schemas
 from modules.auth.router import get_current_user, require_role, require_approved_doctor
 from modules.family.router import resolve_owned_profile
 from core.maps import maps_client
+from core.cloudinary_service import cloudinary_client
 from core.ratelimit import rate_limit
 
 router = APIRouter()
 logger = logging.getLogger("gramcare.emergency")
 
 ESCALATION_AFTER_SECONDS = int(os.getenv("SOS_ESCALATION_AFTER_SECONDS", "180"))
+
+
+def _haversine_km(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
+    """Great-circle distance. _nearest_hospital ranks with math.hypot on raw
+    degrees, which is fine for ordering but is not a distance — a degree of
+    longitude is ~30% shorter than a degree of latitude at this latitude, and
+    neither is a kilometre. Anything shown to a family member has to be real.
+    """
+    radius_km = 6371.0
+    dlat = math.radians(lat2 - lat1)
+    dlng = math.radians(lng2 - lng1)
+    a = (math.sin(dlat / 2) ** 2
+         + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlng / 2) ** 2)
+    return radius_km * 2 * math.asin(math.sqrt(a))
+
+
+# Straight-line distance understates a real journey; rural roads wind. 1.3 is
+# the usual planning multiplier, and 40 km/h is a realistic average for an
+# ambulance on district roads rather than a highway figure that would promise
+# a family someone will arrive sooner than they can.
+_ROAD_WINDING_FACTOR = 1.3
+_AMBULANCE_KMH = 40.0
+
+
+def _tracking_url(sos: models.EmergencySOS) -> Optional[str]:
+    """Public tracking link for the patient's contacts, or None if the alert
+    predates public tokens."""
+    if not sos.public_token:
+        return None
+    base = os.getenv("PUBLIC_WEB_BASE_URL", "https://gram-care-ai.vercel.app").rstrip("/")
+    return f"{base}/sos/track/{sos.public_token}"
+
+
+def _distance_and_eta(lat1, lng1, lat2, lng2) -> tuple[Optional[float], Optional[int]]:
+    """Road-distance estimate in km and ETA in minutes, or (None, None).
+
+    Tries the Maps Distance Matrix first for a real road route, and falls
+    back to the estimate when that is unavailable — which it currently
+    always is, because the deployed key has no billing account.
+    """
+    if None in (lat1, lng1, lat2, lng2):
+        return None, None
+    try:
+        real = maps_client.get_distance_and_eta(lat1, lng1, lat2, lng2)
+        if real:
+            return (
+                round(real["distance_meters"] / 1000.0, 1),
+                max(1, round(real["duration_seconds"] / 60)),
+            )
+    except Exception:
+        logger.debug("Distance Matrix unavailable; using the offline estimate.", exc_info=True)
+
+    straight = _haversine_km(lat1, lng1, lat2, lng2)
+    road = straight * _ROAD_WINDING_FACTOR
+    return round(road, 1), max(1, round(road / _AMBULANCE_KMH * 60))
 
 
 def _nearest_hospital(
@@ -115,6 +172,15 @@ def escalate_stale_sos(db: Session) -> int:
 # SOS lifecycle
 # ==========================================================
 
+# Exactly the audio types the `filetype` sniffer in CloudinaryClient can
+# actually name — it reports "audio/x-wav", not "audio/wav", and an
+# allow-list written from intuition silently rejects every upload. Android's
+# recorder produces AAC in an MP4 container, which lands as audio/mp4.
+SOS_AUDIO_MIMES = [
+    "audio/mp4", "audio/aac", "audio/mpeg", "audio/ogg",
+    "audio/x-wav", "audio/x-flac", "audio/amr", "audio/x-aiff",
+]
+
 async def _dispatch_sos(db: Session, sos: models.EmergencySOS, patient: models.User,
                         hospital: Optional[models.Hospital]) -> None:
     """Fan a new SOS out to the people who can actually act on it.
@@ -176,7 +242,13 @@ async def _dispatch_sos(db: Session, sos: models.EmergencySOS, patient: models.U
         .all()
     )
     text = f"EMERGENCY: {who} triggered an SOS on GramCare AI. Location: {where}."
-    if maps_link:
+    # The tracking page carries the live map, the responding hospital, the
+    # distance and ETA, and the voice recording once it exists — far more
+    # than a map pin, and it keeps updating after this SMS is sent.
+    track = _tracking_url(sos)
+    if track:
+        text += f" Live updates: {track}"
+    elif maps_link:
         text += f" Map: {maps_link}"
     notified_contacts = 0
     for contact in contacts:
@@ -205,7 +277,7 @@ async def _dispatch_sos(db: Session, sos: models.EmergencySOS, patient: models.U
 
 @router.post("/trigger", response_model=schemas.EmergencySOSResponse, dependencies=[Depends(rate_limit("sos_trigger", 3, 60))])
 async def trigger_sos(
-    sos_data: schemas.EmergencySOSCreate,
+    sos_data: schemas.EmergencySOSTrigger,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(require_role("PATIENT"))
 ):
@@ -221,6 +293,25 @@ async def trigger_sos(
         if geo:
             loc_text = geo
 
+    # Store the recording before the row is written so the URL lands with
+    # it. A failed upload must not cost the patient their alert — the
+    # transcript and location still get through.
+    voice_audio_url = None
+    if sos_data.voice_audio_base64:
+        try:
+            uploaded = cloudinary_client.upload_base64(
+                sos_data.voice_audio_base64,
+                folder="sos_voice",
+                db=db,
+                # Cloudinary files audio under its video resource type.
+                resource_type="video",
+                max_size_bytes=2 * 1024 * 1024,
+                allowed_mimes=SOS_AUDIO_MIMES,
+            )
+            voice_audio_url = (uploaded or {}).get("url")
+        except Exception:
+            logger.exception("SOS voice recording upload failed for patient %d.", current_user.id)
+
     db_sos = models.EmergencySOS(
         patient_id=current_user.id,
         family_profile_id=sos_data.family_profile_id,
@@ -228,10 +319,12 @@ async def trigger_sos(
         location_lng=sos_data.location_lng,
         location_text=loc_text,
         voice_note=sos_data.voice_note,
+        voice_audio_url=voice_audio_url,
         severity=sos_data.severity,
         status="ACTIVE",
         escalation_level=0,
         assigned_hospital_id=hospital.id if hospital else None,
+        public_token=secrets.token_urlsafe(24),
     )
     db.add(db_sos)
     db.commit()
@@ -262,6 +355,130 @@ async def get_active_emergencies(
         .filter(models.EmergencySOS.status == "ACTIVE")
         .order_by(models.EmergencySOS.created_at.desc())
         .all()
+    )
+
+
+@router.post("/{sos_id}/voice", response_model=schemas.EmergencySOSResponse)
+async def attach_voice_recording(
+    sos_id: int,
+    payload: schemas.SosVoiceUpload,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_role("PATIENT")),
+):
+    """Attach the patient's actual recording to an SOS already in flight.
+
+    Recording does not happen during the press: speech_to_text holds the
+    microphone through the hold, and an SOS "must happen in a fraction of a
+    second" — so the alert fires first and the patient can speak afterwards,
+    while help is on its way. That also gives them far longer than the
+    three-second hold to say what is wrong.
+    """
+    sos = (
+        db.query(models.EmergencySOS)
+        .filter(models.EmergencySOS.id == sos_id,
+                models.EmergencySOS.patient_id == current_user.id)
+        .first()
+    )
+    if not sos:
+        raise HTTPException(status_code=404, detail="SOS alert not found.")
+    if sos.status == "RESOLVED":
+        raise HTTPException(status_code=409, detail="This emergency is already resolved.")
+
+    uploaded = cloudinary_client.upload_base64(
+        payload.voice_audio_base64,
+        folder="sos_voice",
+        db=db,
+        # Cloudinary files audio under its video resource type.
+        resource_type="video",
+        max_size_bytes=2 * 1024 * 1024,
+        allowed_mimes=SOS_AUDIO_MIMES,
+    )
+    if not uploaded or not uploaded.get("url"):
+        raise HTTPException(status_code=502, detail="Could not store the recording.")
+
+    sos.voice_audio_url = uploaded["url"]
+    db.commit()
+    db.refresh(sos)
+    logger.info("SOS %d: voice recording attached by patient %d.", sos.id, current_user.id)
+
+    # The contacts were SMSed at trigger time, before this recording
+    # existed, so they got a location and nothing else. Send the link on
+    # once it is there — hearing a relative's own voice is the difference
+    # between "something has happened" and knowing what.
+    from core.sms_service import SMSService
+
+    who = current_user.full_name or current_user.username
+    contacts = (
+        db.query(models.EmergencyContact)
+        .filter(models.EmergencyContact.user_id == current_user.id)
+        .all()
+    )
+    for contact in contacts:
+        if not contact.phone:
+            continue
+        try:
+            await SMSService().send_sms(
+                contact.phone,
+                f"{who} recorded a voice message with their GramCare AI "
+                f"emergency: {sos.voice_audio_url}",
+            )
+        except Exception as exc:
+            logger.warning("SOS %d: voice-link SMS to contact %d failed: %s",
+                           sos.id, contact.id, exc)
+
+    return sos
+
+
+@router.get("/track/{token}", response_model=schemas.SosTrackingResponse)
+async def track_sos(token: str, db: Session = Depends(get_db)):
+    """Public tracking view for the patient's emergency contacts.
+
+    Unauthenticated by necessity: contacts are phone numbers, not accounts.
+    Keyed by a high-entropy capability token that is not derivable from any
+    visible identifier, the same model the health passport public view uses.
+    The payload is deliberately minimal — see SosTrackingResponse.
+    """
+    sos = (
+        db.query(models.EmergencySOS)
+        .filter(models.EmergencySOS.public_token == token)
+        .first()
+    )
+    if not sos:
+        raise HTTPException(status_code=404, detail="This tracking link is not valid.")
+
+    patient = db.query(models.User).filter(models.User.id == sos.patient_id).first()
+    hospital = (
+        db.query(models.Hospital).filter(models.Hospital.id == sos.assigned_hospital_id).first()
+        if sos.assigned_hospital_id else None
+    )
+
+    distance_km = eta_minutes = None
+    if hospital:
+        distance_km, eta_minutes = _distance_and_eta(
+            hospital.lat, hospital.lng, sos.location_lat, sos.location_lng,
+        )
+
+    return schemas.SosTrackingResponse(
+        patient_name=(patient.full_name or patient.username) if patient else "Patient",
+        status=sos.status,
+        severity=sos.severity,
+        location_lat=sos.location_lat,
+        location_lng=sos.location_lng,
+        location_text=sos.location_text,
+        voice_note=sos.voice_note,
+        voice_audio_url=sos.voice_audio_url,
+        hospital_name=hospital.name if hospital else None,
+        hospital_phone=hospital.phone if hospital else None,
+        hospital_lat=hospital.lat if hospital else None,
+        hospital_lng=hospital.lng if hospital else None,
+        distance_km=distance_km,
+        eta_minutes=eta_minutes,
+        # True until the Distance Matrix API is reachable; the page says so
+        # rather than presenting a guess as a road ETA.
+        eta_is_estimate=not maps_client.configured if hasattr(maps_client, "configured") else True,
+        escalation_level=sos.escalation_level or 0,
+        created_at=sos.created_at,
+        resolved_at=sos.resolved_at,
     )
 
 

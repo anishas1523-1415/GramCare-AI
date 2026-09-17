@@ -37,6 +37,9 @@ dependencies:
   latlong2: ^0.9.1
   # Hand-off to whatever navigation app the doctor's phone has.
   url_launcher: ^6.3.0
+  # Plays the patient's own SOS recording. A transcript loses the distress,
+  # the breathlessness and anyone else speaking in the room.
+  audioplayers: ^6.1.0
 
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.

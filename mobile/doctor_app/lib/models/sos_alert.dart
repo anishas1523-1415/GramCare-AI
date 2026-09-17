@@ -6,6 +6,8 @@ class SosAlert {
   final double? locationLng;
   final String? locationText;
   final String? voiceNote;
+  /// URL of the patient's actual recording, when they made one.
+  final String? voiceAudioUrl;
   final String severity;
   final String status; // ACTIVE | RESPONDED | RESOLVED
   final int? respondedBy;
@@ -21,6 +23,7 @@ class SosAlert {
     this.locationLng,
     this.locationText,
     this.voiceNote,
+    this.voiceAudioUrl,
     required this.severity,
     required this.status,
     this.respondedBy,
@@ -36,6 +39,7 @@ class SosAlert {
         locationLat: (json['location_lat'] as num?)?.toDouble(),
         locationLng: (json['location_lng'] as num?)?.toDouble(),
         locationText: json['location_text'] as String?,
+        voiceAudioUrl: json['voice_audio_url'] as String?,
         voiceNote: json['voice_note'] as String?,
         severity: json['severity'] as String? ?? 'CRITICAL',
         status: json['status'] as String,

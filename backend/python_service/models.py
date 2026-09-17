@@ -286,6 +286,17 @@ class EmergencySOS(Base):
     # Transcribed voice description of the emergency (planning doc: the user
     # can SAY what happened; the text rides along with the alert).
     voice_note = Column(Text, nullable=True)
+    # URL of the patient's actual recording. voice_note above is only the
+    # speech-to-text transcript, which loses everything a responder listens
+    # for — distress, breathlessness, a third party speaking, a dialect the
+    # recogniser mangled. Served from GET /files/{token} when Cloudinary is
+    # unconfigured.
+    voice_audio_url = Column(String, nullable=True)
+    # High-entropy capability token for the public tracking page. Emergency
+    # contacts are phone numbers, not accounts — they have no way to log in,
+    # so the link in their SMS is the only way to show them anything. Same
+    # model as the health passport's public view, and for the same reason.
+    public_token = Column(String, unique=True, index=True, nullable=True)
     severity = Column(String, default="CRITICAL")
     status = Column(String, default="ACTIVE")  # ACTIVE/RESPONDED/RESOLVED
     responded_by = Column(Integer, ForeignKey("users.id"), nullable=True)
