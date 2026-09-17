@@ -35,13 +35,13 @@ jobs:
         cache: 'pip'
         
     - name: Install Dependencies
-      working-directory: ./apps/backend_service
+      working-directory: ./backend/python_service
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements-dev.txt
         
     - name: Run Backend Tests
-      working-directory: ./apps/backend_service
+      working-directory: ./backend/python_service
       env:
         DATABASE_URL: postgresql://gramcare_user:securepassword123@localhost:5432/gramcare_db
         # The app reads JWT_SECRET_KEY (not SECRET_KEY); the old name was a
@@ -51,7 +51,13 @@ jobs:
       run: |
         pytest tests/
 
-  # web_portal, react_dashboard, and lab_portal are npm workspaces sharing
+  # NOTE ON PATHS: every working-directory below moved in the "complete
+  # folder restructuring" commit (apps/* -> backend|frontend|mobile/*) and
+  # this workflow was not updated with it, so every job here failed on a
+  # missing directory from that commit onward. Keep these in step with
+  # /package.json's workspaces list and render.yaml's rootDir values.
+  #
+  # patient_web_portal, admin_dashboard, and lab_portal are npm workspaces sharing
   # one root package-lock.json (see /package.json) since they all depend on
   # the internal @gramcare/api-client package — `npm install` has to run
   # from the repo root so that workspace link resolves, then each app
@@ -80,7 +86,7 @@ jobs:
       run: npm install
 
     - name: Build
-      working-directory: ./apps/web_portal
+      working-directory: ./frontend/patient_web_portal
       run: npm run build
 
   build-pharmacy-portal:
@@ -101,7 +107,7 @@ jobs:
       run: npm install
 
     - name: Build
-      working-directory: ./apps/react_dashboard
+      working-directory: ./frontend/admin_dashboard
       run: npm run build
 
   build-lab-portal:
@@ -122,7 +128,7 @@ jobs:
       run: npm install
 
     - name: Build
-      working-directory: ./apps/lab_portal
+      working-directory: ./frontend/lab_portal
       run: npm run build
 
   build-mobile-apps:
@@ -149,19 +155,19 @@ jobs:
     # something to invent here. --debug needs no signing and produces a
     # real installable APK in the meantime.
     - name: Build Patient App APK
-      working-directory: ./apps/mobile_app
+      working-directory: ./mobile/patient_app
       run: |
         flutter pub get
         flutter build apk --debug
 
     - name: Build Doctor App APK
-      working-directory: ./apps/doctor_mobile_app
+      working-directory: ./mobile/doctor_app
       run: |
         flutter pub get
         flutter build apk --debug
 
     - name: Build Pharmacy App APK
-      working-directory: ./apps/pharmacy_mobile_app
+      working-directory: ./mobile/pharmacy_app
       run: |
         flutter pub get
         flutter build apk --debug
@@ -170,16 +176,16 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: patient-app-apk
-        path: apps/mobile_app/build/app/outputs/flutter-apk/app-debug.apk
+        path: mobile/patient_app/build/app/outputs/flutter-apk/app-debug.apk
 
     - name: Upload Doctor APK
       uses: actions/upload-artifact@v4
       with:
         name: doctor-app-apk
-        path: apps/doctor_mobile_app/build/app/outputs/flutter-apk/app-debug.apk
+        path: mobile/doctor_app/build/app/outputs/flutter-apk/app-debug.apk
 
     - name: Upload Pharmacy APK
       uses: actions/upload-artifact@v4
       with:
         name: pharmacy-app-apk
-        path: apps/pharmacy_mobile_app/build/app/outputs/flutter-apk/app-debug.apk
+        path: mobile/pharmacy_app/build/app/outputs/flutter-apk/app-debug.apk
