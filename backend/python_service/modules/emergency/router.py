@@ -61,12 +61,9 @@ _AMBULANCE_KMH = 40.0
 
 
 def _tracking_url(sos: models.EmergencySOS) -> Optional[str]:
-    """Public tracking link for the patient's contacts, or None if the alert
-    predates public tokens."""
-    if not sos.public_token:
-        return None
-    base = os.getenv("PUBLIC_WEB_BASE_URL", "https://gram-care-ai.vercel.app").rstrip("/")
-    return f"{base}/sos/track/{sos.public_token}"
+    """Public tracking link for the patient's contacts. Defined once, on the
+    model, so the server's SMS and the phone's message cannot drift apart."""
+    return sos.tracking_url
 
 
 def _distance_and_eta(lat1, lng1, lat2, lng2) -> tuple[Optional[float], Optional[int]]:

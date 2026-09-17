@@ -311,6 +311,21 @@ class EmergencySOS(Base):
     resolved_at = Column(DateTime, nullable=True)
 
 
+    @property
+    def tracking_url(self):
+        """Public tracking page for the patient's emergency contacts, or None
+        for an alert that predates public tokens. Lives on the model so the
+        phone gets the same link the server SMSes — the phone-composed SMS
+        and WhatsApp message are the channels that work with nothing
+        configured, and they previously carried only a map pin, so the
+        family never saw the responding hospital, the ETA or the recording.
+        """
+        if not self.public_token:
+            return None
+        import os
+        base = os.getenv("PUBLIC_WEB_BASE_URL", "https://gram-care-ai.vercel.app").rstrip("/")
+        return f"{base}/sos/track/{self.public_token}"
+
 class EmergencyContact(Base):
     """Family/neighbour contacts alerted on SOS (planning doc: "எமர்ஜென்சி
     காண்டாக்ட்ஸ்க்கு, அதாவது குடும்பத்தினருக்கு, ஒரு தானியங்கி SMS போகும்").

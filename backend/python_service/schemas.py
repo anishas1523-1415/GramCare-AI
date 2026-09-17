@@ -530,6 +530,10 @@ class EmergencySOSUpdate(BaseModel):
 class EmergencySOSResponse(EmergencySOSCreate):
     id: int
     voice_audio_url: Optional[str] = None
+    # The family tracking page. Returned to the patient so the phone can put
+    # it in the SMS/WhatsApp message it composes; responders on /sos/active
+    # receive it too, which is harmless — they are already acting on it.
+    tracking_url: Optional[str] = None
     patient_id: int
     status: str
     responded_by: Optional[int]

@@ -20,8 +20,11 @@ class SosResult {
   /// patient's voice recording to it afterwards. Null when nothing reached
   /// the server.
   final int? sosId;
+  /// Public page for the family: live location, the responding hospital,
+  /// distance and ETA, and the patient's recording once they make one.
+  final String? trackingUrl;
   const SosResult({required this.sent, this.smsFallbackUsed = false, this.error,
-      this.position, this.sosId});
+      this.position, this.sosId, this.trackingUrl});
 }
 
 class SosService {
@@ -93,12 +96,15 @@ class SosService {
       // those depend on push and SMS credentials that may not be live.
       // Opening the composer here is the one channel that needs nothing
       // configured, so family are told even when everything else is down.
-      final smsOpened = await _alertContacts(position);
+      final data = res.data is Map ? Map<String, dynamic>.from(res.data as Map) : const <String, dynamic>{};
+      final trackingUrl = data['tracking_url'] as String?;
+      final smsOpened = await _alertContacts(position, trackingUrl: trackingUrl);
       return SosResult(
         sent: true,
         smsFallbackUsed: smsOpened,
         position: position,
-        sosId: (res.data is Map) ? res.data['id'] as int? : null,
+        sosId: data['id'] as int?,
+        trackingUrl: trackingUrl,
       );
     } on DioException catch (e) {
       final offline = e.type == DioExceptionType.connectionError ||
@@ -132,19 +138,67 @@ class SosService {
   /// then read the joined recipient list as one number and reported it was
   /// not on WhatsApp. The message simply never left. MainActivity names the
   /// default SMS package instead.
-  Future<bool> _alertContacts(Position? position) async {
+  Future<bool> _alertContacts(Position? position, {String? trackingUrl}) async {
     final numbers = await cachedContactNumbers();
     if (numbers.isEmpty) return false;
-    final loc = position != null
-        ? 'https://maps.google.com/?q=${position.latitude},${position.longitude}'
-        : 'location unknown';
-    final body = 'EMERGENCY! I need help. My location: $loc — sent from GramCare AI';
     try {
       final opened = await _smsChannel.invokeMethod<bool>('openSmsComposer', {
         'recipients': numbers,
-        'body': body,
+        'body': emergencyMessage(
+          lat: position?.latitude,
+          lng: position?.longitude,
+          trackingUrl: trackingUrl,
+        ),
       });
       return opened ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// The text family receive, by SMS or WhatsApp. It leads with the
+  /// tracking link: that page is where the responding hospital, the
+  /// distance and ETA, and the voice recording live, and it keeps updating
+  /// after this message is sent — so a recording made afterwards still
+  /// reaches them. The map pin stays as a fallback for a phone with no
+  /// data to open the page.
+  String emergencyMessage({double? lat, double? lng, String? trackingUrl}) {
+    final parts = <String>['EMERGENCY! I need help.'];
+    if (trackingUrl != null) {
+      parts.add('Live location, the hospital coming, and my voice message: $trackingUrl');
+    }
+    if (lat != null && lng != null) {
+      parts.add('Map: https://maps.google.com/?q=$lat,$lng');
+    } else if (trackingUrl == null) {
+      parts.add('My location is unknown.');
+    }
+    parts.add('— sent from GramCare AI');
+    return parts.join('\n');
+  }
+
+  /// SMS to every cached emergency contact, from the SOS screen.
+  Future<bool> shareBySms({double? lat, double? lng, String? trackingUrl}) async {
+    final numbers = await cachedContactNumbers();
+    if (numbers.isEmpty) return false;
+    try {
+      return await _smsChannel.invokeMethod<bool>('openSmsComposer', {
+            'recipients': numbers,
+            'body': emergencyMessage(lat: lat, lng: lng, trackingUrl: trackingUrl),
+          }) ??
+          false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Opens WhatsApp's "Send to" picker with the same message, so several
+  /// family chats can be picked at once.
+  Future<bool> shareByWhatsApp({double? lat, double? lng, String? trackingUrl}) async {
+    try {
+      return await _smsChannel.invokeMethod<bool>('shareViaWhatsApp', {
+            'body': emergencyMessage(lat: lat, lng: lng, trackingUrl: trackingUrl),
+          }) ??
+          false;
     } catch (_) {
       return false;
     }

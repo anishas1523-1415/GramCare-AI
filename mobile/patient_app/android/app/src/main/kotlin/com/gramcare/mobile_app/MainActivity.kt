@@ -35,6 +35,10 @@ class MainActivity : FlutterActivity() {
                         val body = call.argument<String>("body").orEmpty()
                         result.success(openSmsComposer(recipients, body))
                     }
+                    "shareViaWhatsApp" -> {
+                        val body = call.argument<String>("body").orEmpty()
+                        result.success(shareViaWhatsApp(body))
+                    }
                     else -> result.notImplemented()
                 }
             }
@@ -72,5 +76,31 @@ class MainActivity : FlutterActivity() {
         } catch (_: Exception) {
             false
         }
+    }
+
+    /**
+     * Hands the emergency message to WhatsApp's own "Send to" picker.
+     *
+     * ACTION_SEND scoped to the WhatsApp package lets the patient pick
+     * several family chats and send once, which a wa.me link cannot do — a
+     * link opens a single chat. WhatsApp Business is tried second so a
+     * phone with only that installed still works.
+     */
+    private fun shareViaWhatsApp(body: String): Boolean {
+        for (pkg in listOf("com.whatsapp", "com.whatsapp.w4b")) {
+            val intent = Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(Intent.EXTRA_TEXT, body)
+                setPackage(pkg)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            try {
+                startActivity(intent)
+                return true
+            } catch (_: Exception) {
+                // Not installed; try the next one.
+            }
+        }
+        return false
     }
 }

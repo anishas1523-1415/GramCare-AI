@@ -291,3 +291,22 @@ def test_sos_accepts_a_recording_in_the_container_android_actually_writes(client
     )
     assert attached.status_code == 200, attached.text
     assert attached.json()["voice_audio_url"]
+
+
+def test_sos_trigger_returns_the_family_tracking_link(client, patient_token):
+    """The phone composes the SMS and WhatsApp message itself, because those
+    work with nothing configured. They used to carry only a map pin, so the
+    family never reached the page with the hospital, ETA and recording."""
+    res = client.post("/api/v1/sos/trigger", headers=auth(patient_token), json={
+        "location_lat": 11.05, "location_lng": 77.08, "severity": "CRITICAL",
+    })
+    assert res.status_code == 200, res.text
+    url = res.json()["tracking_url"]
+    assert url and "/sos/track/" in url
+
+    token = url.rsplit("/", 1)[-1]
+    page = client.get(f"/api/v1/sos/track/{token}")
+    assert page.status_code == 200, "the link the phone sends must actually open"
+
+    mine = client.get("/api/v1/sos/mine", headers=auth(patient_token)).json()
+    assert mine[0]["tracking_url"] == url

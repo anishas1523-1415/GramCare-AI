@@ -52,6 +52,10 @@ class _SosActiveScreenState extends State<SosActiveScreen> {
   bool _recording = false;
   bool _uploadingVoice = false;
   bool _voiceSent = false;
+  // Filled from the live status poll. Carried in the family message so they
+  // reach the page with the hospital, ETA and recording, not just a pin.
+  String? _trackingUrl;
+  bool _sharing = false;
   Timer? _recordTimer;
   int _recordSeconds = 0;
   static const int _maxRecordSeconds = 30;
@@ -84,6 +88,7 @@ class _SosActiveScreenState extends State<SosActiveScreen> {
       setState(() {
         _status = latest['status'] as String?;
         _escalationLevel = (latest['escalation_level'] as num?)?.toInt() ?? 0;
+        _trackingUrl = latest['tracking_url'] as String? ?? _trackingUrl;
         _hasError = false;
       });
       if (_status == 'RESOLVED') {
@@ -234,6 +239,66 @@ class _SosActiveScreenState extends State<SosActiveScreen> {
     );
   }
 
+  Future<void> _shareWithFamily({required bool whatsApp}) async {
+    setState(() => _sharing = true);
+    final lat = widget.patientLat == 0 ? null : widget.patientLat;
+    final lng = widget.patientLng == 0 ? null : widget.patientLng;
+    final ok = whatsApp
+        ? await SosService().shareByWhatsApp(lat: lat, lng: lng, trackingUrl: _trackingUrl)
+        : await SosService().shareBySms(lat: lat, lng: lng, trackingUrl: _trackingUrl);
+    if (!mounted) return;
+    setState(() => _sharing = false);
+    if (!ok) {
+      final s = context.read<LocaleService>();
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(s.t(whatsApp ? 'share_whatsapp_unavailable' : 'share_sms_no_contacts')),
+      ));
+    }
+  }
+
+  /// Family are usually closer than any ambulance, and they are not users
+  /// of this app — the tracking link in this message is the only way they
+  /// see the hospital coming, the ETA and the recording. Both channels are
+  /// offered because a village contact may have WhatsApp and no SMS habit,
+  /// or SMS and no data.
+  Widget _buildFamilyShare(LocaleService s) {
+    return Container(
+      width: double.infinity,
+      color: Colors.white,
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            s.t('tell_family'),
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _sharing ? null : () => _shareWithFamily(whatsApp: false),
+                  icon: const Icon(Icons.sms_outlined, size: 18),
+                  label: Text(s.t('share_sms')),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: _sharing ? null : () => _shareWithFamily(whatsApp: true),
+                  style: FilledButton.styleFrom(backgroundColor: const Color(0xFF25D366)),
+                  icon: const Icon(Icons.chat, size: 18),
+                  label: Text(s.t('share_whatsapp')),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _openInMaps() async {
     final lat = widget.patientLat;
     final lng = widget.patientLng;
@@ -289,6 +354,7 @@ class _SosActiveScreenState extends State<SosActiveScreen> {
               ],
             ),
           ),
+          _buildFamilyShare(s),
           _buildVoiceRecorder(s),
           // The embedded map needs a billed Google Maps key, which a build
           // without MAPS_API_KEY does not have — it renders as a blank grey
