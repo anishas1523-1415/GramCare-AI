@@ -68,7 +68,7 @@ class _LoginScreenState extends State<LoginScreen> {
       await context.read<DoctorSession>().loadProfile();
 
       // Best-effort; must never block navigation past login.
-      unawaited(FirebaseNotificationService().syncTokenWithBackend());
+      unawaited(FirebaseNotificationService().syncTokenWithBackend(afterSignIn: true));
 
       if (!mounted) return;
       context.go('/');

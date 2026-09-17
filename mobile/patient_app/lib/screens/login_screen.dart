@@ -63,7 +63,7 @@ class _LoginScreenState extends State<LoginScreen> {
       // token, and POST it to /auth/fcm-token now that we have a JWT. Never
       // blocks login — a notification-registration failure must not lock a
       // patient out of the app.
-      unawaited(FirebaseNotificationService().syncTokenWithBackend());
+      unawaited(FirebaseNotificationService().syncTokenWithBackend(afterSignIn: true));
 
       if (mounted) context.go('/');
     } catch (e) {

@@ -62,7 +62,7 @@ class _LoginScreenState extends State<LoginScreen> {
       await SecureStore().setToken(token);
       await SecureStore().setRole(role ?? '');
 
-      unawaited(FirebaseNotificationService().syncTokenWithBackend());
+      unawaited(FirebaseNotificationService().syncTokenWithBackend(afterSignIn: true));
 
       if (mounted) context.go('/');
     } catch (e) {

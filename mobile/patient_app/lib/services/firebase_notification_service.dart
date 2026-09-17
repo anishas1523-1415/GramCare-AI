@@ -214,8 +214,18 @@ class FirebaseNotificationService {
   /// already authenticated (dashboard's initState) — idempotent by design:
   /// skips the network call entirely if the current token already matches
   /// the last one this install successfully registered.
-  Future<void> syncTokenWithBackend() async {
+  /// [afterSignIn] must be true when a session has just been established.
+  /// The skip-if-unchanged marker below is keyed on the FCM token alone,
+  /// and the token does not change when a different person signs in on the
+  /// same phone — so without this the POST is skipped, the server keeps
+  /// mapping that token to the previous account, and their notifications
+  /// are delivered to whoever is holding the phone now. Shared and
+  /// handed-over phones are normal in the villages this is built for.
+  Future<void> syncTokenWithBackend({bool afterSignIn = false}) async {
     try {
+      if (afterSignIn) {
+        await SecureStore().clearLastRegisteredFcmToken();
+      }
       final settings = await _requestPermission();
       _logEvent('notification_permission_requested', {
         'status': settings.authorizationStatus.name,

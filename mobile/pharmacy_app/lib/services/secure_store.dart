@@ -58,4 +58,11 @@ class SecureStore {
 
   Future<void> setLastRegisteredFcmToken(String token) =>
       _storage.write(key: _lastFcmTokenKey, value: token);
+
+  /// Forgets which token was last registered, so the next sync re-POSTs.
+  /// Called when the session changes: the marker records "this token is
+  /// registered", not "registered for this user", and on a shared phone
+  /// those are very different claims.
+  Future<void> clearLastRegisteredFcmToken() =>
+      _storage.delete(key: _lastFcmTokenKey);
 }

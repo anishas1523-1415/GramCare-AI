@@ -115,7 +115,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         throw Exception('Login after registration did not return a token.');
       }
       await SecureStore().setToken(token as String);
-      unawaited(FirebaseNotificationService().syncTokenWithBackend());
+      unawaited(FirebaseNotificationService().syncTokenWithBackend(afterSignIn: true));
 
       if (mounted) context.go('/');
     } on DioException catch (e) {

@@ -168,8 +168,17 @@ class FirebaseNotificationService {
 
   /// Call after successful login and again on dashboard init while already
   /// authenticated — idempotent, skips the POST if the token hasn't changed.
-  Future<void> syncTokenWithBackend() async {
+  /// [afterSignIn] must be true when a session has just been established.
+  /// The skip-if-unchanged marker below is keyed on the FCM token alone,
+  /// and the token does not change when a different person signs in on the
+  /// same phone — so without this the POST is skipped, the server keeps
+  /// mapping that token to the previous account, and their notifications
+  /// are delivered to whoever is holding the phone now.
+  Future<void> syncTokenWithBackend({bool afterSignIn = false}) async {
     try {
+      if (afterSignIn) {
+        await SecureStore().clearLastRegisteredFcmToken();
+      }
       final settings = await _requestPermission();
       _logEvent('notification_permission_requested', {
         'status': settings.authorizationStatus.name,
