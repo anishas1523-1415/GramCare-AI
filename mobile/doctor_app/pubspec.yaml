@@ -31,6 +31,13 @@ dependencies:
   flutter:
     sdk: flutter
 
+  # Active SOS alerts on a map. OpenStreetMap rather than Google Maps: no
+  # API key, no billing account, nothing to configure or let lapse.
+  flutter_map: ^7.0.2
+  latlong2: ^0.9.1
+  # Hand-off to whatever navigation app the doctor's phone has.
+  url_launcher: ^6.3.0
+
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
