@@ -1,7 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:flutter/services.dart';
 import 'package:geocoding/geocoding.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import 'api_service.dart';
 
@@ -25,6 +25,8 @@ class SosResult {
 }
 
 class SosService {
+  static const _smsChannel = MethodChannel('com.gramcare.mobile_app/sms');
+
   static final SosService _instance = SosService._internal();
   factory SosService() => _instance;
   SosService._internal();
@@ -119,16 +121,30 @@ class SosService {
   /// hospital queue, and family are usually far closer than an ambulance.
   /// (True background SMS needs carrier-level integration — an explicit
   /// user send keeps this reliable and store-policy-safe.)
+  /// Opens the SMS composer pre-addressed to the locally cached emergency
+  /// contacts with a location link. Used both when the SOS reached the
+  /// server and when it did not: a delivered SOS still only sits in a
+  /// hospital queue, and family are usually far closer than an ambulance.
+  ///
+  /// Routed through a platform channel rather than url_launcher because
+  /// WhatsApp registers an ACTION_SENDTO filter for the smsto scheme, so
+  /// letting Android choose could hand the emergency to WhatsApp — which
+  /// then read the joined recipient list as one number and reported it was
+  /// not on WhatsApp. The message simply never left. MainActivity names the
+  /// default SMS package instead.
   Future<bool> _alertContacts(Position? position) async {
     final numbers = await cachedContactNumbers();
     if (numbers.isEmpty) return false;
     final loc = position != null
         ? 'https://maps.google.com/?q=${position.latitude},${position.longitude}'
         : 'location unknown';
-    final body = Uri.encodeComponent('EMERGENCY! I need help. My location: $loc — sent from GramCare AI');
-    final uri = Uri.parse('smsto:${numbers.join(',')}?body=$body');
+    final body = 'EMERGENCY! I need help. My location: $loc — sent from GramCare AI';
     try {
-      return await launchUrl(uri);
+      final opened = await _smsChannel.invokeMethod<bool>('openSmsComposer', {
+        'recipients': numbers,
+        'body': body,
+      });
+      return opened ?? false;
     } catch (_) {
       return false;
     }

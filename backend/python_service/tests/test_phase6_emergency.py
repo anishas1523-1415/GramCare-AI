@@ -265,3 +265,29 @@ def test_sos_public_tracking_link_shows_family_what_they_need(client, patient_to
 
 def test_sos_tracking_rejects_an_unknown_token(client):
     assert client.get("/api/v1/sos/track/not-a-real-token").status_code == 404
+
+
+def test_sos_accepts_a_recording_in_the_container_android_actually_writes(client, patient_token):
+    """Android's MediaMuxer stamps MPEG-4 with brand "isom"/"mp42", which
+    sniffs as video/mp4 rather than audio/mp4. An allow-list written from
+    what the format is called instead of what the sniffer returns rejected
+    every voice note the app recorded.
+    """
+    import base64
+
+    res = client.post("/api/v1/sos/trigger", headers=auth(patient_token), json={
+        "location_lat": 11.05, "location_lng": 77.08, "severity": "CRITICAL",
+    })
+    sos_id = res.json()["id"]
+
+    # Minimal ftyp box carrying the brand a phone really writes.
+    header = bytes([0, 0, 0, 0x20]) + b"ftypisom" + bytes([0, 0, 2, 0])
+    mp4 = base64.b64encode(header + b"isomiso2mp41" + bytes(32)).decode()
+
+    attached = client.post(
+        f"/api/v1/sos/{sos_id}/voice",
+        headers=auth(patient_token),
+        json={"voice_audio_base64": mp4},
+    )
+    assert attached.status_code == 200, attached.text
+    assert attached.json()["voice_audio_url"]

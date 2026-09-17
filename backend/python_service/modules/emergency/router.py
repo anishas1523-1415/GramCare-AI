@@ -179,6 +179,17 @@ def escalate_stale_sos(db: Session) -> int:
 SOS_AUDIO_MIMES = [
     "audio/mp4", "audio/aac", "audio/mpeg", "audio/ogg",
     "audio/x-wav", "audio/x-flac", "audio/amr", "audio/x-aiff",
+    # An audio-only recording from Android arrives as video/mp4. The phone's
+    # MediaMuxer stamps the MPEG-4 container with brand "isom" or "mp42",
+    # and a sniffer reading that box reports video/mp4 — only the "M4A "
+    # brand reads as audio/mp4, and Android does not write it. Leaving these
+    # out rejected every voice note the app recorded.
+    #
+    # Two of these entries have now been wrong in the same way: the sniffer
+    # also says audio/x-wav where "audio/wav" looks obvious. Do not write
+    # this list from what the format is called; write it from what the
+    # sniffer actually returns, and test it.
+    "video/mp4", "video/3gpp",
 ]
 
 async def _dispatch_sos(db: Session, sos: models.EmergencySOS, patient: models.User,
