@@ -16,8 +16,23 @@ import api from "../../lib/api";
 import { useProfile } from "../../contexts/ProfileContext";
 import { useLocale } from "../../contexts/LocaleContext";
 import { offlineTriageEstimate } from "../../lib/offlineTriage";
-import { getUserAiKey, hasUserAiKey } from "../../lib/aiKey";
+import { clearUserAiKey, getUserAiKey, hasUserAiKey } from "../../lib/aiKey";
 import AiQuotaPrompt from "../../components/AiQuotaPrompt";
+
+/** Which notice, if any, explains that this is not a real AI answer. */
+function aiNoticeKey(data: {
+  ai_quota_exhausted?: boolean;
+  ai_user_key_may_help?: boolean;
+  ai_user_key_error?: string | null;
+}): string | null {
+  const keyError = data.ai_user_key_error;
+  if (keyError === "AuthenticationError") return "ai_your_key_rejected";
+  if (keyError && /Quota|RateLimit|Billing/.test(keyError)) return "ai_your_key_limited";
+  if (keyError) return "ai_your_key_failed";
+  if (data.ai_quota_exhausted) return "ai_limit_exhausted";
+  if (data.ai_user_key_may_help) return "ai_unavailable_now";
+  return null;
+}
 
 interface TriageResult {
   severity: 'CRITICAL' | 'HIGH' | 'MODERATE' | 'LOW';
@@ -33,6 +48,8 @@ interface TriageResult {
   explanation?: string;
   ai_quota_exhausted?: boolean;
   ai_user_key_may_help?: boolean;
+  ai_user_key_error?: string | null;
+  ai_engine?: string;
 }
 
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "https://gramcare-signaling.onrender.com";
@@ -53,7 +70,7 @@ export default function SymptomCheckerPage() {
   // Mirrors the server's ai_quota_exhausted flag for the last analysis, so
   // the "bring your own key" prompt appears only when the shared free-tier
   // quota is genuinely spent — never for an ordinary failure.
-  const [quotaExhausted, setQuotaExhausted] = useState(false);
+  const [aiNotice, setAiNotice] = useState<string | null>(null);
   const [isListening, setIsListening] = useState(false);
   const [speechError, setSpeechError] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -133,7 +150,7 @@ export default function SymptomCheckerPage() {
     setTriageResult(null);
     setShowExplanation(false);
     setIsOfflineEstimate(false);
-    setQuotaExhausted(false);
+    setAiNotice(null);
 
     try {
       const res = await api.post("/triage/analyze", {
@@ -148,10 +165,11 @@ export default function SymptomCheckerPage() {
       });
 
       const data = res.data;
-      // ai_user_key_may_help covers every reason the real providers
-      // dropped out, not just quota: a revoked or absent key looks nothing
-      // like exhaustion, and the user's own key fixes all of them.
-      setQuotaExhausted(data.ai_user_key_may_help === true || data.ai_quota_exhausted === true);
+      // A rejected key is forgotten so the prompt can ask for a new one;
+      // keeping it would resend the same bad key on every attempt.
+      if (data.ai_user_key_error === "AuthenticationError") clearUserAiKey();
+      setAiNotice(aiNoticeKey(data));
+      const isRealAnswer = data.ai_engine !== "mock" && !aiNoticeKey(data);
 
       const severityLabel = data.severity_score >= 75 ? "CRITICAL"
         : data.severity_score >= 50 ? "HIGH"
@@ -173,16 +191,21 @@ export default function SymptomCheckerPage() {
       });
 
       // Emit the triage alert to the WebSocket server for the doctor
-      // dashboard's own live feed (see doctor/dashboard/page.tsx).
-      const socket = io(WS_URL);
-      socket.emit("new_triage_alert", {
-        id: Math.random().toString(36).substring(7),
-        time: new Date().toLocaleTimeString(),
-        severity: severityLabel,
-        department: data.predicted_condition,
-        symptoms: symptoms.substring(0, 50) + (symptoms.length > 50 ? "..." : ""),
-      });
-      setTimeout(() => socket.disconnect(), 1000);
+      // dashboard's own live feed (see doctor/dashboard/page.tsx). Only for
+      // a real assessment: the offline placeholder is severity 50, which
+      // labels as HIGH, so doctors were being shown "HIGH — Unknown (AI
+      // Engines Unavailable)" alerts for patients no AI had assessed.
+      if (isRealAnswer) {
+        const socket = io(WS_URL);
+        socket.emit("new_triage_alert", {
+          id: Math.random().toString(36).substring(7),
+          time: new Date().toLocaleTimeString(),
+          severity: severityLabel,
+          department: data.predicted_condition,
+          symptoms: symptoms.substring(0, 50) + (symptoms.length > 50 ? "..." : ""),
+        });
+        setTimeout(() => socket.disconnect(), 1000);
+      }
 
     } catch (err) {
       // Mirror the exact network-vs-server-error distinction used in
@@ -333,10 +356,13 @@ export default function SymptomCheckerPage() {
           {/* The shared free-tier quota is spent, so the card below is a
               placeholder rather than a real assessment. Say so, and offer
               the way through it. */}
-          {quotaExhausted && !hasUserAiKey() && (
+          {/* A key error is shown even with a key saved: the point is to
+              say that key did not work and let it be replaced. */}
+          {aiNotice && (aiNotice.startsWith("ai_your_key") || !hasUserAiKey()) && (
             <AiQuotaPrompt
+              titleKey={aiNotice}
               onKeySaved={analyzeSymptoms}
-              onDismiss={() => setQuotaExhausted(false)}
+              onDismiss={() => setAiNotice(null)}
             />
           )}
 

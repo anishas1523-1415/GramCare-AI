@@ -691,6 +691,10 @@ const en: Record<string, string> = {
   // Shown only when the shared AI quota is spent, offering the user their
   // own provider key rather than a dead assistant.
   ai_limit_exhausted: 'AI limit reached',
+  ai_unavailable_now: 'The AI assistant is unavailable right now — this is not an AI assessment',
+  ai_your_key_rejected: 'Your API key was rejected — check it and paste it again',
+  ai_your_key_limited: 'Your API key has reached its limit',
+  ai_your_key_failed: 'Your API key could not be used right now',
   have_own_api_key: 'Do you have your own API key?',
   yes: 'Yes',
   no: 'No',
@@ -1339,6 +1343,10 @@ const ta: Record<string, string> = {
   none_recorded: 'எதுவும் பதிவு செய்யப்படவில்லை',
   recent_medicines: 'சமீபத்தில் பரிந்துரைக்கப்பட்ட மருந்துகள்',
   ai_limit_exhausted: 'AI வரம்பு முடிந்தது',
+  ai_unavailable_now: 'AI உதவியாளர் இப்போது கிடைக்கவில்லை — இது AI மதிப்பீடு அல்ல',
+  ai_your_key_rejected: 'உங்கள் API விசை நிராகரிக்கப்பட்டது — சரிபார்த்து மீண்டும் ஒட்டவும்',
+  ai_your_key_limited: 'உங்கள் API விசையின் வரம்பு முடிந்தது',
+  ai_your_key_failed: 'உங்கள் API விசையை இப்போது பயன்படுத்த முடியவில்லை',
   have_own_api_key: 'உங்களிடம் சொந்த API விசை உள்ளதா?',
   yes: 'ஆம்',
   no: 'இல்லை',

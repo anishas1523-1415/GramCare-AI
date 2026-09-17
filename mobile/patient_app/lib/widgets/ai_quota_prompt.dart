@@ -20,7 +20,20 @@ class AiQuotaPrompt extends StatefulWidget {
   /// that triggered this prompt.
   final VoidCallback onKeySaved;
 
-  const AiQuotaPrompt({super.key, required this.onKeySaved});
+  /// String key for the headline. The reason there is no AI answer decides
+  /// it: "limit reached" shown for an unfunded account or a retired model
+  /// told patients they had hit a limit they had not.
+  final String titleKey;
+
+  /// Called when the patient says they have no key.
+  final VoidCallback? onDismiss;
+
+  const AiQuotaPrompt({
+    super.key,
+    required this.onKeySaved,
+    this.titleKey = 'ai_limit_exhausted',
+    this.onDismiss,
+  });
 
   @override
   State<AiQuotaPrompt> createState() => _AiQuotaPromptState();
@@ -73,7 +86,7 @@ class _AiQuotaPromptState extends State<AiQuotaPrompt> {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  s.t('ai_limit_exhausted'),
+                  s.t(widget.titleKey),
                   style: const TextStyle(
                     color: Color(0xFFB91C1C),
                     fontWeight: FontWeight.bold,
@@ -106,7 +119,10 @@ class _AiQuotaPromptState extends State<AiQuotaPrompt> {
                   // "No" simply dismisses. The offline estimate below is
                   // still there; nagging someone who does not have a key
                   // would just be in the way of reading it.
-                  onPressed: () => AiKeyService().noteQuotaExhausted(false),
+                  onPressed: () {
+                    AiKeyService().noteQuotaExhausted(false);
+                    widget.onDismiss?.call();
+                  },
                   style: OutlinedButton.styleFrom(
                     foregroundColor: const Color(0xFFB91C1C),
                     side: const BorderSide(color: Color(0xFFEF4444)),

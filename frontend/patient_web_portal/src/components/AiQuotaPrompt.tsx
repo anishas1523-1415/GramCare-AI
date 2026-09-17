@@ -15,13 +15,17 @@ import { useLocale } from "../contexts/LocaleContext";
 import { setUserAiKey } from "../lib/aiKey";
 
 interface Props {
+  /** Locale key for the headline. The reason there is no AI answer decides
+   *  it: saying "limit reached" when the cause was an unfunded account or a
+   *  retired model told people they had hit a limit they had not. */
+  titleKey?: string;
   /** Called after a key is saved, so the caller can retry the request. */
   onKeySaved: () => void;
   /** Called when the user says they have no key, to dismiss the prompt. */
   onDismiss: () => void;
 }
 
-export default function AiQuotaPrompt({ onKeySaved, onDismiss }: Props) {
+export default function AiQuotaPrompt({ titleKey = "ai_limit_exhausted", onKeySaved, onDismiss }: Props) {
   const { t } = useLocale();
   const [entering, setEntering] = useState(false);
   const [value, setValue] = useState("");
@@ -37,7 +41,7 @@ export default function AiQuotaPrompt({ onKeySaved, onDismiss }: Props) {
   return (
     <div className="mb-6 rounded-2xl border-2 border-red-500/60 bg-red-500/10 p-4">
       <p className="flex items-center gap-2 font-bold text-red-500">
-        <AlertCircle size={18} /> {t("ai_limit_exhausted")}
+        <AlertCircle size={18} /> {t(titleKey)}
       </p>
 
       {!entering ? (

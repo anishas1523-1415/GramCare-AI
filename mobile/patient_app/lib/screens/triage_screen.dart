@@ -43,6 +43,9 @@ class _TriageScreenState extends State<TriageScreen> {
   // the "bring your own key" prompt appears only when the shared free-tier
   // quota is genuinely spent — never for an ordinary failure.
   bool _quotaExhausted = false;
+  // Which notice explains that the last answer is not a real AI assessment,
+  // or null when it is one.
+  String? _aiNoticeKey;
   Map<String, dynamic>? _result;
   String _error = '';
   // True when `_result` came from the offline keyword-matching fallback
@@ -194,12 +197,25 @@ class _TriageScreenState extends State<TriageScreen> {
       );
 
       final data = response.data as Map<String, dynamic>;
-      final exhausted = data['ai_user_key_may_help'] == true || data['ai_quota_exhausted'] == true;
-      AiKeyService().noteQuotaExhausted(exhausted);
+      final noticeKey = _noticeKeyFor(data);
+      // A rejected key is forgotten so the prompt can ask for a new one;
+      // keeping it would resend the same bad key on every attempt.
+      if (data['ai_user_key_error'] == 'AuthenticationError') {
+        await AiKeyService().clear();
+      }
+      AiKeyService().noteQuotaExhausted(noticeKey != null);
+      if (!mounted) return;
       setState(() {
         _result = data;
-        _quotaExhausted = exhausted;
+        _quotaExhausted = noticeKey != null;
+        _aiNoticeKey = noticeKey;
       });
+
+      // The offline placeholder is not an assessment. Saving it put
+      // "Unknown (AI Engines Unavailable)" into the patient's Health Wallet
+      // as a record from "GramCare AI".
+      final isRealAnswer = data['ai_engine'] != 'mock' && noticeKey == null;
+      if (!isRealAnswer) return;
 
       final severityScore = (data['severity_score'] as num?)?.toInt() ?? 0;
 
@@ -300,6 +316,20 @@ class _TriageScreenState extends State<TriageScreen> {
         Text(value, style: TextStyle(fontSize: 15, color: color ?? const Color(0xFF2D3748))),
       ],
     );
+  }
+
+  /// Which notice explains that this is not a real AI answer, if any.
+  String? _noticeKeyFor(Map<String, dynamic> data) {
+    final keyError = data['ai_user_key_error'] as String?;
+    if (keyError == 'AuthenticationError') return 'ai_your_key_rejected';
+    if (keyError != null &&
+        (keyError.contains('Quota') || keyError.contains('RateLimit') || keyError.contains('Billing'))) {
+      return 'ai_your_key_limited';
+    }
+    if (keyError != null) return 'ai_your_key_failed';
+    if (data['ai_quota_exhausted'] == true) return 'ai_limit_exhausted';
+    if (data['ai_user_key_may_help'] == true) return 'ai_unavailable_now';
+    return null;
   }
 
   @override
@@ -451,9 +481,17 @@ class _TriageScreenState extends State<TriageScreen> {
               // placeholder rather than a real assessment. Say so, and offer
               // the way through it, instead of letting an empty result pass
               // for a confident one.
-              if (_quotaExhausted && !AiKeyService().hasKey) ...[
+              // A key error is shown even with a key saved: the point is
+              // to say that key did not work and let it be replaced.
+              if (_quotaExhausted &&
+                  _aiNoticeKey != null &&
+                  (_aiNoticeKey!.startsWith('ai_your_key') || !AiKeyService().hasKey)) ...[
                 const SizedBox(height: 24),
-                AiQuotaPrompt(onKeySaved: _analyze),
+                AiQuotaPrompt(
+                  titleKey: _aiNoticeKey!,
+                  onKeySaved: _analyze,
+                  onDismiss: () => setState(() => _quotaExhausted = false),
+                ),
               ],
 
               // Unmissable — this must never look like a real online result.
