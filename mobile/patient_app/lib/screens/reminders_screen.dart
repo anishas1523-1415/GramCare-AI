@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import '../services/api_service.dart';
 import '../services/app_strings.dart';
 import '../services/profile_service.dart';
 import '../services/reminder_service.dart';
@@ -21,6 +22,7 @@ class RemindersScreen extends StatefulWidget {
 }
 
 class _RemindersScreenState extends State<RemindersScreen> {
+  bool _testingPush = false;
   // Module theme: reminder red/amber (planning doc per-module identity)
   static const _theme = Color(0xFFEF4444);
 
@@ -125,6 +127,31 @@ class _RemindersScreenState extends State<RemindersScreen> {
     return '${hh.toString()}:${m.toString().padLeft(2, '0')} $period';
   }
 
+  /// Sends a real push to this phone and says what happened.
+  ///
+  /// Reminders are delivered by notification, so "my reminders never go
+  /// off" and "notifications do not work on this phone" look identical
+  /// from here. Nothing else in the app can tell the two apart: a push
+  /// that is silently dropped looks exactly like one that arrived while
+  /// the screen was off.
+  Future<void> _testNotifications() async {
+    setState(() => _testingPush = true);
+    final s = context.read<LocaleService>();
+    String message;
+    try {
+      final res = await ApiService().client.post('/auth/fcm-token/test');
+      final data = Map<String, dynamic>.from(res.data as Map);
+      message = (data['delivered'] as int? ?? 0) > 0
+          ? s.t('push_test_sent')
+          : s.t('push_test_not_delivered');
+    } catch (_) {
+      message = s.t('push_test_failed');
+    }
+    if (!mounted) return;
+    setState(() => _testingPush = false);
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  }
+
   @override
   Widget build(BuildContext context) {
     final s = context.watch<LocaleService>();
@@ -149,6 +176,15 @@ class _RemindersScreenState extends State<RemindersScreen> {
               color: neu.foreground, fontWeight: FontWeight.bold, fontSize: 17),
         ),
         actions: [
+          IconButton(
+            tooltip: s.t('push_test'),
+            onPressed: _testingPush ? null : _testNotifications,
+            icon: _testingPush
+                ? const SizedBox(
+                    width: 18, height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2))
+                : const Icon(Icons.notifications_active_outlined, color: _theme),
+          ),
           IconButton(
             tooltip: 'Import from prescriptions',
             onPressed: _importing ? null : _importFromPrescriptions,
