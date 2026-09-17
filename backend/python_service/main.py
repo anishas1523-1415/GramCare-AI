@@ -229,6 +229,64 @@ def health():
     }
 
 
+@app.get("/health/integrations", tags=["System"])
+def integrations_health():
+    """Which external integrations are actually live.
+
+    Every one of these degrades to a mock rather than failing loudly, which
+    is the right behaviour at runtime and terrible for knowing what is
+    switched on: "FCM will be mocked" appears once in a deploy log and is
+    then invisible forever. A push that silently goes nowhere looks exactly
+    like a push that was delivered.
+
+    Booleans only — never a key, a path, or a fragment of either.
+    """
+    import os
+
+    from core.cloudinary_service import cloudinary_client
+    from core import notifications
+
+    cred_path = os.getenv("FIREBASE_SERVICE_ACCOUNT_PATH")
+    return {
+        "push_notifications": {
+            "live": bool(notifications._firebase_initialized),
+            "detail": "FCM delivering"
+            if notifications._firebase_initialized
+            else (
+                "credential path set but Firebase did not initialise"
+                if cred_path
+                else "FIREBASE_SERVICE_ACCOUNT_PATH not set — every push is silently dropped"
+            ),
+        },
+        "sms": {
+            "live": bool(os.getenv("MSG91_AUTH_KEY")),
+            "detail": "MSG91 configured" if os.getenv("MSG91_AUTH_KEY")
+            else "MSG91_AUTH_KEY not set — SOS contact SMS is dropped",
+        },
+        "email": {
+            "live": bool(os.getenv("RESEND_API_KEY")),
+            "detail": "Resend configured" if os.getenv("RESEND_API_KEY")
+            else "RESEND_API_KEY not set",
+        },
+        "payments": {
+            "live": bool(os.getenv("RAZORPAY_KEY_ID") and os.getenv("RAZORPAY_KEY_SECRET")),
+            "detail": "Razorpay live" if os.getenv("RAZORPAY_KEY_ID") and os.getenv("RAZORPAY_KEY_SECRET")
+            else "mock mode — orders are not real",
+        },
+        "file_storage": {
+            "live": True,
+            "detail": "Cloudinary" if cloudinary_client.configured
+            else "database-backed (/files/{token}) — working, no Cloudinary needed",
+        },
+        "maps_geocoding": {
+            "live": bool(os.getenv("GOOGLE_MAPS_API_KEY")),
+            "detail": "Google geocoding available" if os.getenv("GOOGLE_MAPS_API_KEY")
+            else "no key — map tiles are OpenStreetMap and need none; only "
+                 "address lookup and road ETA degrade",
+        },
+    }
+
+
 @app.get("/health/ai", tags=["System"])
 def ai_health():
     """Why the AI is or is not answering.
