@@ -96,7 +96,10 @@ def _nearest_hospital(
     lng: Optional[float],
     exclude_ids: List[int],
 ) -> Optional[models.Hospital]:
-    q = db.query(models.Hospital)
+    # Only approved hospitals. Without this filter, anyone who registered an
+    # account with role=HOSPITAL was immediately eligible to be sent a
+    # patient's location, name and voice recording.
+    q = db.query(models.Hospital).filter(models.Hospital.verification_status == "APPROVED")
     if exclude_ids:
         q = q.filter(~models.Hospital.id.in_(exclude_ids))
     hospitals = q.all()
@@ -339,6 +342,18 @@ async def trigger_sos(
     db.refresh(db_sos)
     logger.info("SOS %d triggered by patient %d (hospital=%s).",
                 db_sos.id, current_user.id, hospital.name if hospital else "none")
+    if hospital is None:
+        # Every SOS ever raised in production was assigned to nobody, because
+        # no hospital was registered — while the patient's screen said
+        # "waiting for a hospital to respond". An alert with no recipient has
+        # to say so, not imply someone is coming.
+        logger.error(
+            "SOS %d has NO hospital to route to: no APPROVED hospital exists%s. "
+            "The patient must be told to call 108 directly.",
+            db_sos.id,
+            " within range" if db.query(models.Hospital).filter(
+                models.Hospital.verification_status == "APPROVED").first() else "",
+        )
 
     # Page the hospital and the patient's emergency contacts. Guarded as a
     # whole as well as per channel: a patient in an emergency must still get

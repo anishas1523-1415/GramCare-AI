@@ -10,7 +10,13 @@ def _make_hospital(client, db, name, lat, lng, username):
     desk = None
     token = _register_and_login(client, username, "HOSPITAL")
     me = client.get("/api/v1/auth/me", headers=auth(token)).json()
-    h = models.Hospital(name=name, lat=lat, lng=lng, emergency_desk_user_id=me["id"])
+    # verification_status="APPROVED": _nearest_hospital() only routes SOS to
+    # government-reviewed hospitals (modules/hospital/router.py). Left at the
+    # model's PENDING default, every SOS test hospital was invisible to
+    # routing and these lifecycle tests failed with "no APPROVED hospital
+    # exists" — a fixture gap, not a bug in the gate itself.
+    h = models.Hospital(name=name, lat=lat, lng=lng, emergency_desk_user_id=me["id"],
+                         verification_status="APPROVED")
     db.add(h)
     db.commit()
     db.refresh(h)
@@ -136,8 +142,12 @@ def test_assist_summary_requires_doctor(client, patient_token, doctor_token):
     assert "summary_text" in body
 
 
-def test_health_clusters_role_gate_and_shape(client, patient_token, doctor_token):
-    # Generate a few triage logs for clustering
+def test_health_clusters_role_gate_and_shape(client, patient_token, doctor_token, real_ai_answer):
+    # Generate a few triage logs for clustering. Needs real_ai_answer: every
+    # provider key is blanked in this suite, so without it each call would
+    # be MockProvider's offline placeholder, which is deliberately never
+    # persisted to triage_logs (see ai_triage/router.py) and would leave
+    # health-clusters with nothing to find.
     for _ in range(3):
         client.post("/api/v1/triage/analyze", headers=auth(patient_token), json={
             "symptoms_text": "fever and body pain", "patient_id": "self", "age": 30,

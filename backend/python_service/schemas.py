@@ -202,8 +202,7 @@ class DoctorApprovalAction(BaseModel):
 # ==========================================
 class HospitalCreate(BaseModel):
     """Self-registration for a HOSPITAL-role account (modules/hospital/router.py).
-    Data-collection only for now — instant access, no government approval
-    gate (unlike DoctorProfile)."""
+    Starts PENDING: an ADMIN must approve it before SOS routing can see it."""
     name: str = Field(..., min_length=2, max_length=150)
     address: Optional[str] = None
     lat: Optional[float] = Field(None, ge=-90, le=90)
@@ -219,9 +218,16 @@ class HospitalResponse(HospitalCreate):
     owner_user_id: Optional[int] = None
     license_document_url: Optional[str] = None
     emergency_desk_user_id: Optional[int] = None
+    verification_status: str = "PENDING"
+    verification_notes: Optional[str] = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class HospitalApprovalAction(BaseModel):
+    """Reason is required on rejection so the hospital is told what to fix."""
+    reason: str = Field(..., min_length=3, max_length=500)
 
 # ==========================================
 # File Upload Schemas (Cloudinary — core/cloudinary_service.py)

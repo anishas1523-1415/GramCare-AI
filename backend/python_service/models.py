@@ -504,8 +504,14 @@ class Hospital(Base):
     owned or self-registered one) — owner_user_id + the richer profile
     fields below back the new self-service registration flow
     (modules/hospital/router.py), mirroring Pharmacy/LabCenter's existing
-    owner-registers-their-own-record pattern. Data-collection only for now
-    (instant access, no government approval gate) — unlike DoctorProfile.
+    owner-registers-their-own-record pattern.
+
+    Registration is gated: a new hospital starts PENDING and is invisible to
+    SOS routing until a government reviewer approves it. It previously had
+    instant access with no gate at all, which meant anyone who registered an
+    account with role=HOSPITAL immediately became eligible to receive live
+    emergency alerts — a patient's name, GPS coordinates and voice recording
+    — for whoever they happened to be nearest to.
     """
     __tablename__ = "hospitals"
 
@@ -522,6 +528,12 @@ class Hospital(Base):
     license_number = Column(String, nullable=True)
     license_document_url = Column(String, nullable=True)  # Cloudinary scan
     emergency_desk_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, unique=True)
+    # PENDING / APPROVED / REJECTED, mirroring DoctorProfile.verification_status.
+    # Only APPROVED hospitals are visible to SOS routing.
+    verification_status = Column(String, default="PENDING", index=True)
+    verification_notes = Column(String, nullable=True)
+    reviewed_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    reviewed_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=_utcnow)
 
     owner = relationship("User", back_populates="hospital", foreign_keys=[owner_user_id])
