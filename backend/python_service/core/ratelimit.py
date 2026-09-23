@@ -11,11 +11,16 @@ Usage:
     from core.ratelimit import rate_limit
     @router.post("/login", dependencies=[Depends(rate_limit("login", 10, 60))])
 """
+import hashlib
+import logging
+import os
 import time
 import threading
 from collections import defaultdict, deque
 
 from fastapi import HTTPException, Request
+
+logger = logging.getLogger("gramcare.ratelimit")
 
 _lock = threading.Lock()
 _hits: dict[str, deque] = defaultdict(deque)
@@ -43,12 +48,31 @@ def _client_ip(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 
+def _caller_key(request: Request) -> str:
+    """Who this request counts against.
+
+    The bearer token, when present, identifies one account regardless of
+    which network it is on; otherwise the source IP. The token is hashed
+    rather than used raw so a limiter dict can never become somewhere
+    credentials sit in memory in plaintext.
+    """
+    auth = request.headers.get("Authorization", "")
+    if auth.startswith("Bearer ") and len(auth) > 16:
+        return "u:" + hashlib.sha256(auth[7:].encode()).hexdigest()[:32]
+    return "ip:" + _client_ip(request)
+
+
 def rate_limit(bucket: str, max_requests: int, window_seconds: int):
     """Return a FastAPI dependency enforcing `max_requests` per
     `window_seconds` per client IP for the given bucket name."""
 
     def dependency(request: Request):
-        key = f"{bucket}:{_client_ip(request)}"
+        # Keyed on the caller, not just their IP. A whole village behind one
+        # clinic router shared a single bucket, so one person's retries
+        # throttled everyone else's — including their SOS. An Authorization
+        # header identifies the caller directly; anonymous traffic still
+        # falls back to IP.
+        key = f"{bucket}:{_caller_key(request)}"
         now = time.monotonic()
         with _lock:
             q = _hits[key]
@@ -73,3 +97,24 @@ def reset_for_tests():
     """Test helper: clear all rate-limit state between test cases."""
     with _lock:
         _hits.clear()
+
+
+def warn_if_counters_are_split() -> None:
+    """Say so at boot when these counters stop meaning anything.
+
+    Every count lives in this process's memory. With more than one worker
+    each gets its own independent allowance, so the real limit silently
+    becomes N times what it says — including the login brute-force and
+    SOS-spam limits. Called from main.py at startup.
+    """
+    try:
+        workers = int(os.getenv("WEB_CONCURRENCY", "1"))
+    except ValueError:
+        workers = 1
+    if workers > 1:
+        logger.error(
+            "WEB_CONCURRENCY=%d but rate limiting is per-process and in-memory: "
+            "every limit is effectively %dx looser than configured. Move the "
+            "limiter to shared storage before scaling workers.",
+            workers, workers,
+        )

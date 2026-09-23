@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from dotenv import load_dotenv
 
-from core.ratelimit import rate_limit
+from core.ratelimit import rate_limit, warn_if_counters_are_split
 from core.security_middleware import SecurityHeadersMiddleware
 from core.timezone_json import UtcJSONResponse
 
@@ -218,6 +218,9 @@ app.include_router(ai_health_router, prefix="/api/v1/ai", tags=["AI Operations"]
 
 
 
+warn_if_counters_are_split()
+
+
 @app.get("/")
 def read_root():
     return {"message": "Welcome to the GramCare AI API. System is fully operational."}
@@ -286,9 +289,22 @@ def integrations_health():
             else "MSG91_AUTH_KEY not set — SOS contact SMS is dropped",
         },
         "email": {
-            "live": bool(os.getenv("RESEND_API_KEY")),
-            "detail": "Resend configured" if os.getenv("RESEND_API_KEY")
-            else "RESEND_API_KEY not set",
+            # A key alone delivers nothing. Resend's shared onboarding@resend.dev
+            # only accepts the address that owns the Resend account; every other
+            # recipient comes back 422, so password resets and verification links
+            # silently went nowhere while this reported "configured".
+            "live": bool(os.getenv("RESEND_API_KEY")) and bool(os.getenv("RESEND_FROM_EMAIL")),
+            "from_address": os.getenv("RESEND_FROM_EMAIL") or "onboarding@resend.dev (shared sandbox)",
+            "detail": (
+                "Resend configured with a sender on your own domain"
+                if os.getenv("RESEND_API_KEY") and os.getenv("RESEND_FROM_EMAIL")
+                else "RESEND_API_KEY not set — no email is sent at all"
+                if not os.getenv("RESEND_API_KEY")
+                else "No RESEND_FROM_EMAIL, so sending falls back to Resend's shared "
+                     "sandbox address, which only delivers to the Resend account "
+                     "owner. Password resets and verification links are rejected "
+                     "(422) for everyone else."
+            ),
         },
         "payments": {
             "live": bool(os.getenv("RAZORPAY_KEY_ID") and os.getenv("RAZORPAY_KEY_SECRET")),
