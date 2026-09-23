@@ -468,6 +468,33 @@ def refresh_token(request: Request, payload: schemas.RefreshTokenRequest, db: Se
         if session:
             session.is_revoked = True
             db.commit()
+        else:
+            # The token is either fabricated or one that was already rotated
+            # away. A rotated token being presented again is the signature of
+            # a stolen refresh token: the thief used it, rotation revoked it,
+            # and now the real owner (or the thief) is replaying it. Either
+            # way the family is compromised, so every session for that user
+            # is revoked and everyone has to sign in again. Silently 401ing
+            # the single request left the thief's freshly-rotated token alive.
+            replayed = (
+                db.query(models.UserSession)
+                .filter(models.UserSession.refresh_token == payload.refresh_token)
+                .first()
+            )
+            if replayed is not None:
+                revoked = (
+                    db.query(models.UserSession)
+                    .filter(
+                        models.UserSession.user_id == replayed.user_id,
+                        models.UserSession.is_revoked == False,  # noqa: E712
+                    )
+                    .update({"is_revoked": True}, synchronize_session=False)
+                )
+                db.commit()
+                logger.warning(
+                    "Refresh token replay for user %d — revoked %d live session(s).",
+                    replayed.user_id, revoked,
+                )
         raise HTTPException(status_code=401, detail="Invalid or expired refresh token")
 
     user = session.user
