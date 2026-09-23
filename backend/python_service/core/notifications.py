@@ -163,19 +163,25 @@ class NotificationService:
             data={"type": "sos_alert", "status": status}
         )
 
+    # Notification text lands on a lock screen, where anyone holding or
+    # glancing at the phone can read it without unlocking. A doctor's name or
+    # a test name is enough to disclose a diagnosis, a pregnancy, an HIV
+    # test or a psychiatric referral to a family member, partner or employer.
+    # Titles and bodies below stay deliberately non-specific; the details
+    # ride in `data`, which only the app can read once it is open.
     def notify_appointment_reminder(self, user_id: int, doctor_name: str, time_str: str):
         self.send_notification(
             user_id=user_id,
-            title="Appointment Reminder",
-            body=f"You have an upcoming appointment with {doctor_name} at {time_str}.",
+            title="Appointment reminder",
+            body=f"You have an appointment at {time_str}. Open GramCare AI for details.",
             data={"type": "appointment_reminder"}
         )
 
     def notify_lab_report_ready(self, user_id: int, test_name: str):
         self.send_notification(
             user_id=user_id,
-            title="Lab Report Ready",
-            body=f"Your {test_name} report is ready to view.",
+            title="Lab report ready",
+            body="A lab report is ready. Open GramCare AI to view it.",
             data={"type": "lab_report_ready"}
         )
 
