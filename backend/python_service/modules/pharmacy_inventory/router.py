@@ -18,7 +18,7 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import func
+from sqlalchemy import func, update as sa_update
 from sqlalchemy.orm import Session
 
 import models
@@ -220,12 +220,30 @@ async def update_stock(
     if quantity_added == 0:
         raise HTTPException(status_code=400, detail="quantity_added must be non-zero")
     item = _owned_item(medicine_id, current_user, db)
+    # Read-modify-write on stock_count let two concurrent updates (a double
+    # tap on a flaky rural connection, two staff on one counter) both read
+    # the same count and both write from it, silently losing one. The
+    # conditional UPDATE below only applies if the row still holds the count
+    # this request read, mirroring the slot-booking claim in
+    # modules/appointments/router.py.
     old_count = item.stock_count
     new_count = item.stock_count + quantity_added
     if new_count < 0:
         raise HTTPException(
             status_code=400,
             detail=f"Cannot reduce stock below zero (current: {item.stock_count}, requested change: {quantity_added})",
+        )
+    claimed = db.execute(
+        sa_update(models.PharmacyItem)
+        .where(models.PharmacyItem.id == item.id,
+               models.PharmacyItem.stock_count == old_count)
+        .values(stock_count=new_count)
+    )
+    if claimed.rowcount != 1:
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="This medicine's stock changed while you were editing. Reload and try again.",
         )
     item.stock_count = new_count
     db.commit()
@@ -261,7 +279,23 @@ async def decrement_stock(
     """Tap-to-decrement on sale — the planning doc's other rural entry mode."""
     item = _owned_item(medicine_id, current_user, db)
     old_count = item.stock_count
-    item.stock_count = max(0, item.stock_count - count)
+    new_count = max(0, item.stock_count - count)
+    sold = db.execute(
+        sa_update(models.PharmacyItem)
+        .where(models.PharmacyItem.id == item.id,
+               models.PharmacyItem.stock_count == old_count)
+        .values(stock_count=new_count)
+    )
+    if sold.rowcount != 1:
+        # Two sales racing would otherwise both decrement from the same
+        # stale count, leaving the shelf empty while the app still shows
+        # stock — a patient told a medicine is available when it is not.
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="This medicine's stock changed while you were selling. Reload and try again.",
+        )
+    item.stock_count = new_count
     db.commit()
     _notify_if_newly_low(db, current_user.id, item, old_count)
     return {"message": f"Sold {count}. Remaining: {item.stock_count}", "id": item.id}
@@ -353,8 +387,25 @@ async def fulfill_prescription(
             .first()
         )
         if item and item.stock_count > 0:
-            newly_low_items.append((item, item.stock_count))
-            item.stock_count -= 1
+            old_count = item.stock_count
+            # An absolute value, like update_stock and decrement_stock above.
+            # A relative `stock_count - 1` here was applied a second time when
+            # the in-memory item was decremented too, so each fulfilled
+            # medicine cost the shelf two units (found by
+            # test_fulfillment_decrements_stock).
+            dispensed = db.execute(
+                sa_update(models.PharmacyItem)
+                .where(models.PharmacyItem.id == item.id,
+                       models.PharmacyItem.stock_count == old_count)
+                .values(stock_count=old_count - 1)
+            )
+            if dispensed.rowcount != 1:
+                # Someone else moved this item's count mid-fulfilment; skip
+                # rather than write a count derived from a stale read.
+                missing.append(name)
+                continue
+            item.stock_count = old_count - 1
+            newly_low_items.append((item, old_count))
             decremented.append(name)
         else:
             missing.append(name)
