@@ -21,6 +21,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, model_validator
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from datetime import datetime, timedelta
@@ -285,7 +286,22 @@ async def create_record(
         record_date=record.record_date,
     )
     db.add(db_record)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        # client_uuid is UNIQUE, so two retries of the same queued record
+        # racing past the check above collide here. That is the exact case
+        # the idempotency key exists for, so return the row that won rather
+        # than handing the patient's phone a 500 for a successful sync.
+        db.rollback()
+        existing = (
+            db.query(models.EHRRecord)
+            .filter(models.EHRRecord.client_uuid == record.client_uuid)
+            .first()
+        )
+        if existing is None:
+            raise
+        return existing
     db.refresh(db_record)
     
     db.add(models.AuditLog(
@@ -344,7 +360,37 @@ async def sync_offline_records(
         )
         synced.append(item.client_uuid)
 
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        # client_uuid is UNIQUE, so a record that raced past the check above
+        # collides here and takes the whole batch down with it. A patient's
+        # offline queue can hold days of records, so re-apply them one at a
+        # time and count the collisions as the duplicates they are.
+        db.rollback()
+        synced, duplicates = [], []
+        for item in batch.records:
+            if db.query(models.EHRRecord).filter(
+                    models.EHRRecord.client_uuid == item.client_uuid).first():
+                duplicates.append(item.client_uuid)
+                continue
+            db.add(models.EHRRecord(
+                patient_id=current_user.id,
+                family_profile_id=item.family_profile_id,
+                record_type=item.record_type,
+                title=item.title,
+                content=item.content,
+                payload=item.payload,
+                doctor_name=item.doctor_name,
+                client_uuid=item.client_uuid,
+                record_date=item.record_date,
+            ))
+            try:
+                db.commit()
+                synced.append(item.client_uuid)
+            except IntegrityError:
+                db.rollback()
+                duplicates.append(item.client_uuid)
     return schemas.EHRSyncResult(synced=synced, duplicates=duplicates)
 
 
