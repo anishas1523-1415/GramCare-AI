@@ -44,6 +44,13 @@ export default function LoginPage() {
   const [otp, setOtp] = useState('');
   const [otpSent, setOtpSent] = useState(false);
   const [phoneVerified, setPhoneVerified] = useState(false);
+  // 503 from /auth/phone/send-otp means the server has no SMS provider
+  // configured. The OTP was blocking the Create Account button outright
+  // while the server-side requirement for it is commented out, so doctors
+  // and hospitals could not register at all — which is why SOS had no
+  // hospital to route to. Verification still happens: both roles land in
+  // PENDING and an ADMIN reviews them.
+  const [phoneOtpUnavailable, setPhoneOtpUnavailable] = useState(false);
   const [sendingOtp, setSendingOtp] = useState(false);
   const [verifyingOtp, setVerifyingOtp] = useState(false);
   const [error, setError] = useState('');
@@ -81,8 +88,25 @@ export default function LoginPage() {
       await api.post('/auth/phone/send-otp', { phone });
       setOtpSent(true);
     } catch (err) {
-      const message = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
-      setError(typeof message === 'string' ? message : 'Could not send OTP. Check the number and try again.');
+      const axiosErr = err as {
+        response?: { status?: number; data?: { detail?: string } };
+        request?: unknown;
+      };
+      const status = axiosErr?.response?.status;
+      if (status === 503) {
+        // Nothing the person entering their number can do about this.
+        setPhoneOtpUnavailable(true);
+        setError('');
+      } else if (!axiosErr?.response && axiosErr?.request) {
+        // The request went out and nothing came back: the API is down,
+        // unreachable, or NEXT_PUBLIC_API_URL points somewhere that is not
+        // running. Blaming the phone number for that sent people off
+        // re-typing a number that was never the problem.
+        setError('Could not reach the server. Check your connection and try again.');
+      } else {
+        const message = axiosErr?.response?.data?.detail;
+        setError(typeof message === 'string' ? message : 'Could not send OTP. Check the number and try again.');
+      }
     } finally {
       setSendingOtp(false);
     }
@@ -95,8 +119,16 @@ export default function LoginPage() {
       await api.post('/auth/phone/verify-otp', { phone, otp });
       setPhoneVerified(true);
     } catch (err) {
-      const message = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
-      setError(typeof message === 'string' ? message : 'Incorrect OTP.');
+      const axiosErr = err as {
+        response?: { data?: { detail?: string } };
+        request?: unknown;
+      };
+      if (!axiosErr?.response && axiosErr?.request) {
+        setError('Could not reach the server. Check your connection and try again.');
+      } else {
+        const message = axiosErr?.response?.data?.detail;
+        setError(typeof message === 'string' ? message : 'Incorrect OTP.');
+      }
     } finally {
       setVerifyingOtp(false);
     }
@@ -355,7 +387,7 @@ export default function LoginPage() {
                           type="tel"
                           placeholder="+91XXXXXXXXXX"
                           value={phone}
-                          onChange={(e) => { setPhone(e.target.value); setOtpSent(false); }}
+                          onChange={(e) => { setPhone(e.target.value); setOtpSent(false); setPhoneOtpUnavailable(false); }}
                           disabled={otpSent}
                           className="flex-1 p-2.5 rounded-lg bg-white/50 dark:bg-black/20 border border-white/20 text-sm focus:ring-2 focus:ring-indigo-400 focus:outline-none disabled:opacity-60"
                         />
@@ -368,6 +400,13 @@ export default function LoginPage() {
                           {sendingOtp ? 'Sending…' : otpSent ? 'Sent' : 'Send OTP'}
                         </button>
                       </div>
+                      {phoneOtpUnavailable && (
+                        <p className="text-xs text-amber-600 dark:text-amber-400 font-semibold">
+                          SMS verification is unavailable on the server right now. Your
+                          number is recorded and will be checked when your account is
+                          reviewed — you can finish creating the account.
+                        </p>
+                      )}
                       {otpSent && (
                         <div className="flex gap-2">
                           <input
@@ -449,7 +488,7 @@ export default function LoginPage() {
 
           <button
             type="submit"
-            disabled={submitting || (needsPhoneVerification && !phoneVerified)}
+            disabled={submitting || (needsPhoneVerification && !phoneVerified && !phoneOtpUnavailable)}
             className="neu-button w-full py-3 bg-indigo-500 text-white font-bold rounded-xl disabled:opacity-50"
           >
             {submitting ? t('please_wait') : mode === 'login' ? t('sign_in') : t('create_account')}
