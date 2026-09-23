@@ -205,7 +205,16 @@ async def run_triage_analysis(
         # Persist the original symptom photo (previously analyzed once and
         # discarded) so it's retrievable later — e.g. a doctor confirming
         # what the AI actually saw. Best-effort: never blocks the analysis.
-        uploaded = cloudinary_client.upload_base64(image_b64, folder="gramcare/symptom_photos", db=db)
+        # 2MB, not the 10MB default: this is an app built for 2G. The
+        # client already downscales, but the server must not accept a
+        # 13MB base64 body that blocks the single worker — and every
+        # request behind it, SOS included — for the length of the upload.
+        uploaded = cloudinary_client.upload_base64(
+            image_b64,
+            folder="gramcare/symptom_photos",
+            db=db,
+            max_size_bytes=2 * 1024 * 1024,
+        )
         if uploaded:
             image_url = uploaded["url"]
 
@@ -383,7 +392,12 @@ async def extract_prescription_text(request: OCRRequest, db: Session = Depends(g
         raise HTTPException(status_code=400, detail="Invalid Base64 Image provided to OCR.")
 
     # Best-effort: never blocks OCR if storage is unconfigured/unreachable.
-    uploaded = cloudinary_client.upload_base64(request.image_base64, folder="gramcare/ocr_scans", db=db)
+    uploaded = cloudinary_client.upload_base64(
+        request.image_base64,
+        folder="gramcare/ocr_scans",
+        db=db,
+        max_size_bytes=2 * 1024 * 1024,
+    )
     image_url = uploaded["url"] if uploaded else None
     if uploaded:
         db.commit()
