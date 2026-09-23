@@ -1,14 +1,23 @@
 "use client";
 
-// Hospital's own profile — name, address, established year, service
-// timing, specializations, license number/document. Data-collection only
-// (instant access, no government approval gate, unlike the doctor
-// workflow). Mirrors /doctor/profile's structure and the
-// register-then-fill-in-details pattern already used by the Pharmacy
-// dashboard (react_dashboard) and Lab portal.
+// Hospital's own profile — name, location, contact, departments, licence.
+//
+// The location half matters more here than anywhere else in the product:
+// SOS routing sorts candidate hospitals by distance, so a hospital saved
+// without coordinates is invisible to it and will never be sent an
+// emergency. Coordinates can therefore be set three ways — picked from
+// address search, dropped on the map, or taken from the device — because
+// relying on the browser's location prompt alone left people stuck with a
+// profile that silently could not receive anything.
+//
+// A new or edited profile is PENDING until a government reviewer approves
+// it (modules/hospital/router.py), and that state is shown here rather than
+// left for someone to wonder about.
 
 import React, { useEffect, useRef, useState } from 'react';
-import { Building2, FileUp, Save, MapPin } from 'lucide-react';
+import { Building2, FileUp, Save, ShieldCheck, Clock, XCircle } from 'lucide-react';
+import LocationPicker from '../../../components/LocationPicker';
+import DepartmentPicker from '../../../components/DepartmentPicker';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useLocale } from '../../../contexts/LocaleContext';
 import { useRouter } from 'next/navigation';
@@ -26,6 +35,8 @@ interface HospitalSelf {
   specializations?: string | null;
   license_number?: string | null;
   license_document_url?: string | null;
+  verification_status?: string | null;
+  verification_notes?: string | null;
 }
 
 function readAsBase64(file: File): Promise<string> {
@@ -80,18 +91,11 @@ export default function HospitalProfilePage() {
     setProfile((prev) => ({ ...prev, [key]: value }));
   };
 
-  const useMyLocation = () => {
-    if (!navigator.geolocation) return;
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setProfile((prev) => ({
-          ...prev,
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude,
-        }));
-      },
-      () => setError(t('could_not_access_location')),
-    );
+  // Location is owned by LocationPicker, which can set all three of
+  // address/lat/lng at once (picking a search result moves the pin; moving
+  // the pin rewrites the address).
+  const setLocation = (next: { address: string; lat: number | null; lng: number | null }) => {
+    setProfile((prev) => ({ ...prev, address: next.address, lat: next.lat, lng: next.lng }));
   };
 
   const save = async (e: React.FormEvent) => {
@@ -155,6 +159,42 @@ export default function HospitalProfilePage() {
       {error && <p role="alert" className="text-red-500 font-semibold mb-4">{error}</p>}
       {success && <p role="status" className="text-emerald-500 font-semibold mb-4">{success}</p>}
 
+      {!isNew && profile.verification_status && (
+        <div
+          className={`mb-4 rounded-xl border-2 p-3.5 flex items-start gap-2.5 ${
+            profile.verification_status === 'APPROVED'
+              ? 'border-emerald-500/60 bg-emerald-500/10'
+              : profile.verification_status === 'REJECTED'
+                ? 'border-red-500/60 bg-red-500/10'
+                : 'border-amber-500/60 bg-amber-500/10'
+          }`}
+        >
+          {profile.verification_status === 'APPROVED' ? (
+            <ShieldCheck size={18} className="text-emerald-500 mt-0.5 shrink-0" />
+          ) : profile.verification_status === 'REJECTED' ? (
+            <XCircle size={18} className="text-red-500 mt-0.5 shrink-0" />
+          ) : (
+            <Clock size={18} className="text-amber-500 mt-0.5 shrink-0" />
+          )}
+          <div className="text-sm">
+            <p className="font-bold">
+              {profile.verification_status === 'APPROVED'
+                ? 'Approved — this hospital receives emergency alerts'
+                : profile.verification_status === 'REJECTED'
+                  ? 'Not approved'
+                  : 'Waiting for government review'}
+            </p>
+            <p className="text-gray-600 dark:text-gray-300">
+              {profile.verification_status === 'APPROVED'
+                ? 'Editing the details below sends the profile back for review.'
+                : profile.verification_status === 'REJECTED'
+                  ? (profile.verification_notes ?? 'Correct the details below and save to resubmit.')
+                  : 'Emergency alerts are only routed to approved hospitals, so nothing will arrive until this is reviewed.'}
+            </p>
+          </div>
+        </div>
+      )}
+
       <form onSubmit={save} className="glass-panel p-6 space-y-4 mb-6">
         <div>
           <label htmlFor="hosp-name" className="block text-sm font-semibold mb-1.5">{t('hospital_name_label')}</label>
@@ -166,15 +206,14 @@ export default function HospitalProfilePage() {
             className="w-full p-3 rounded-xl bg-white/50 dark:bg-black/20 border border-white/20 focus:ring-2 focus:ring-red-400 focus:outline-none"
           />
         </div>
-        <div>
-          <label htmlFor="hosp-address" className="block text-sm font-semibold mb-1.5">Address</label>
-          <input
-            id="hosp-address"
-            value={profile.address ?? ''}
-            onChange={(e) => field('address', e.target.value)}
-            className="w-full p-3 rounded-xl bg-white/50 dark:bg-black/20 border border-white/20 focus:ring-2 focus:ring-red-400 focus:outline-none"
-          />
-        </div>
+        <LocationPicker
+          label="Address & location on map"
+          address={profile.address ?? ''}
+          lat={profile.lat ?? null}
+          lng={profile.lng ?? null}
+          onChange={setLocation}
+          hint="Emergency alerts are routed to the nearest hospital by these coordinates, so place the pin on the actual building entrance."
+        />
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label htmlFor="hosp-phone" className="block text-sm font-semibold mb-1.5">Phone</label>
@@ -215,23 +254,12 @@ export default function HospitalProfilePage() {
             />
           </div>
         </div>
-        <div>
-          <label htmlFor="hosp-specializations" className="block text-sm font-semibold mb-1.5">Specializations / Departments</label>
-          <input
-            id="hosp-specializations"
-            value={profile.specializations ?? ''}
-            onChange={(e) => field('specializations', e.target.value)}
-            placeholder="General Medicine, Pediatrics, Orthopedics"
-            className="w-full p-3 rounded-xl bg-white/50 dark:bg-black/20 border border-white/20 focus:ring-2 focus:ring-red-400 focus:outline-none"
-          />
-        </div>
-        <button
-          type="button"
-          onClick={useMyLocation}
-          className="text-sm font-semibold text-red-500 flex items-center gap-1"
-        >
-          <MapPin size={14} /> {t('use_my_current_location')}
-        </button>
+        <DepartmentPicker
+          label="Departments & specialities"
+          value={profile.specializations ?? ''}
+          onChange={(v) => field('specializations', v)}
+        />
+
 
         <button
           type="submit"
