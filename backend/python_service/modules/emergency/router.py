@@ -363,6 +363,16 @@ async def trigger_sos(
     except Exception:
         logger.exception("SOS %d: dispatch failed entirely.", db_sos.id)
 
+    if hospital is None:
+        # Tell the caller, not just the log. The client shows this instead of
+        # a waiting state, because nobody is coming.
+        response = schemas.EmergencySOSResponse.model_validate(db_sos)
+        response.unrouted_reason = (
+            "No approved hospital could receive this alert. Call 108 now. "
+            "Your emergency contacts have been notified."
+        )
+        return response
+
     return db_sos
 
 

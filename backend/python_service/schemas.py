@@ -545,6 +545,10 @@ class EmergencySOSResponse(EmergencySOSCreate):
     responded_by: Optional[int]
     escalation_level: Optional[int] = 0
     assigned_hospital_id: Optional[int] = None
+    # Set when the alert could not be routed at all — no approved hospital
+    # within reach. The patient's screen must say so and point at 108 rather
+    # than showing a "waiting for a response" state nobody will answer.
+    unrouted_reason: Optional[str] = None
     created_at: datetime
     resolved_at: Optional[datetime]
 

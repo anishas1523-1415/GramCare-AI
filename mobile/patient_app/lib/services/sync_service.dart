@@ -5,6 +5,7 @@ import 'package:uuid/uuid.dart';
 
 import '../models/health_record.dart';
 import 'api_service.dart';
+import 'encrypted_boxes.dart';
 
 /// Offline-first Health Wallet engine.
 ///
@@ -26,7 +27,8 @@ class SyncService {
   static const walletBoxName = 'health_wallet';
   final _uuid = const Uuid();
 
-  Future<Box<HealthRecord>> _wallet() => Hive.openBox<HealthRecord>(walletBoxName);
+  Future<Box<HealthRecord>> _wallet() =>
+      EncryptedBoxes.open<HealthRecord>(walletBoxName);
 
   /// Create a record locally (works fully offline) and opportunistically try
   /// to sync it immediately.

@@ -11,7 +11,7 @@
 // patient TRIGGER. This page is that missing trigger.
 
 import { motion } from "framer-motion";
-import { ShieldAlert, MapPin, Phone, Plus, Trash2, Clock, CheckCircle2 } from "lucide-react";
+import { ShieldAlert, MapPin, Phone, Plus, Trash2, Clock, CheckCircle2, AlertTriangle } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "../../contexts/AuthContext";
 import { useProfile } from "../../contexts/ProfileContext";
@@ -206,6 +206,21 @@ export default function SosPage() {
                 <p className="text-sm text-gray-500 flex items-center gap-1.5 mb-3">
                   <MapPin size={14} /> {active.location_text}
                 </p>
+              )}
+              {/* No approved hospital could take this alert. Showing the
+                  normal "waiting" state here would imply someone is coming
+                  when nobody was ever paged. */}
+              {active.unrouted_reason && (
+                <div className="mb-3 p-3 rounded-xl bg-red-600/15 border-2 border-red-600/60 flex items-start gap-2">
+                  <AlertTriangle size={18} className="text-red-500 mt-0.5 shrink-0" />
+                  <div className="text-sm text-left">
+                    <p className="font-bold text-red-500">No hospital has received this alert</p>
+                    <p className="text-gray-600 dark:text-gray-300">{active.unrouted_reason}</p>
+                    <a href="tel:108" className="inline-block mt-2 px-4 py-2 rounded-lg bg-red-600 text-white font-bold text-sm">
+                      Call 108 now
+                    </a>
+                  </div>
+                </div>
               )}
               <button
                 type="button"

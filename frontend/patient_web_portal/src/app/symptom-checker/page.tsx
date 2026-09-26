@@ -7,7 +7,7 @@
 // dashboard's own socket feed.
 
 import { motion, AnimatePresence } from "framer-motion";
-import { Activity, Brain, ChevronDown, Stethoscope, Camera, X, ArrowLeft, WifiOff, Mic, MicOff } from "lucide-react";
+import { Activity, Brain, ChevronDown, Stethoscope, Camera, X, ArrowLeft, WifiOff, Mic, MicOff, AlertTriangle } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -46,6 +46,7 @@ interface TriageResult {
   untreated_outcome?: string;
   confidence?: number;
   explanation?: string;
+  disclaimer?: string;
   ai_quota_exhausted?: boolean;
   ai_user_key_may_help?: boolean;
   ai_user_key_error?: string | null;
@@ -188,6 +189,7 @@ export default function SymptomCheckerPage() {
         untreated_outcome: data.untreated_outcome,
         confidence: data.confidence_score,
         explanation: data.explanation,
+        disclaimer: data.disclaimer,
       });
 
       // Emit the triage alert to the WebSocket server for the doctor
@@ -476,6 +478,18 @@ export default function SymptomCheckerPage() {
                   in the GramCare mobile app immediately.
                 </div>
               )}
+
+              {/* The API returns this on every assessment and the mobile app
+                  has always shown it; the web result rendered severity and a
+                  booking button with no safety text at all. An automated
+                  urgency estimate must never read as a diagnosis. */}
+              <div className="mt-4 p-3 rounded-xl bg-amber-500/10 border border-amber-500/40 flex items-start gap-2">
+                <AlertTriangle size={15} className="text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+                <p className="text-xs leading-relaxed text-amber-800 dark:text-amber-200">
+                  {triageResult.disclaimer ??
+                    "This is an AI-generated indication of urgency, not a medical diagnosis. It does not replace examination by a qualified clinician and must not delay emergency care. In an emergency, call 108."}
+                </p>
+              </div>
 
               <button
                 onClick={() => {

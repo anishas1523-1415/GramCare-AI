@@ -7,6 +7,7 @@ import 'package:timezone/timezone.dart' as tz;
 import '../models/health_record.dart';
 import 'firebase_notification_service.dart';
 import 'sync_service.dart';
+import 'encrypted_boxes.dart';
 
 /// Medicine reminders — the planning doc's Medication Management module
 /// ("குறிப்பிட்ட நேரம் வந்ததும், ஆப் அவங்களுக்கு அலர்ட் நோட்டிபிகேஷன்
@@ -38,7 +39,7 @@ class ReminderService extends ChangeNotifier {
   static const _slotTimes = [(8, 0), (14, 0), (20, 0)];
   static const _slotNames = ['Morning', 'Afternoon', 'Night'];
 
-  Future<Box> _box() => Hive.openBox(_boxName);
+  Future<Box> _box() => EncryptedBoxes.openDynamic(_boxName);
 
   void _ensureTz() {
     if (_tzReady) return;
@@ -116,7 +117,8 @@ class ReminderService extends ChangeNotifier {
   /// Parses the Indian "1-0-1" dose notation from record content; medicines
   /// without a recognizable pattern default to a single morning dose.
   Future<int> importFromPrescriptions({int? familyProfileId}) async {
-    final wallet = await Hive.openBox<HealthRecord>(SyncService.walletBoxName);
+    final wallet =
+        await EncryptedBoxes.open<HealthRecord>(SyncService.walletBoxName);
     final box = await _box();
     final existing = box.values
         .map((e) => (Map<String, dynamic>.from(e as Map))['medicine'] as String)

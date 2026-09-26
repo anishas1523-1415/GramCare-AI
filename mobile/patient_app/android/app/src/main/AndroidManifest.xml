@@ -45,6 +45,9 @@
         <intent><action android:name="android.speech.RecognitionService"/></intent>
     </queries>
     <application
+        android:allowBackup="false"
+        android:fullBackupContent="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
         android:label="GramCare AI"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">

@@ -1,9 +1,9 @@
 import 'package:flutter/foundation.dart';
-import 'package:hive_flutter/hive_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/family_profile.dart';
 import 'api_service.dart';
+import 'encrypted_boxes.dart';
 
 /// App-wide family-profile state (planning doc: the user first selects WHICH
 /// family member they act for; every feature is then scoped to that member).
@@ -31,11 +31,11 @@ class ProfileService extends ChangeNotifier {
           .map((j) => FamilyProfile.fromJson(j as Map<String, dynamic>))
           .toList();
       // Refresh the offline cache
-      final box = await Hive.openBox(_cacheBox);
+      final box = await EncryptedBoxes.openDynamic(_cacheBox);
       await box.put('profiles', _profiles.map((p) => p.toJson()).toList());
     } catch (_) {
       // Offline: fall back to the cached list so selection keeps working
-      final box = await Hive.openBox(_cacheBox);
+      final box = await EncryptedBoxes.openDynamic(_cacheBox);
       final cached = box.get('profiles');
       if (cached is List) {
         _profiles = cached

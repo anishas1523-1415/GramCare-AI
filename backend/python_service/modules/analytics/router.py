@@ -67,6 +67,46 @@ def _authorize(user: models.User, db: Session):
             )
 
 
+# Syndromic grouping for outbreak detection.
+#
+# Grouping on the model's exact wording never detects anything: the same
+# outbreak comes back as "possible viral fever (e.g. dengue or malaria)",
+# "acute febrile illness" and "fever with rash" on three consecutive
+# patients, so six real cases presented as six clusters of one. Public
+# health surveillance (IDSP) does not group by diagnosis either — it groups
+# by syndrome, then investigates. The buckets below follow that, and the
+# raw condition is kept as an example so a clinician can still see what the
+# assessments actually said.
+_SYNDROMES: list[tuple[str, tuple[str, ...]]] = [
+    ("Acute febrile illness", ("fever", "febrile", "dengue", "malaria",
+                               "typhoid", "chikungunya", "viral fever")),
+    ("Acute diarrhoeal illness", ("diarrhoea", "diarrhea", "loose stool",
+                                  "gastroenteritis", "cholera", "dysentery",
+                                  "vomiting and loose")),
+    ("Acute respiratory illness", ("cough", "respiratory", "breathless",
+                                   "asthma", "pneumonia", "bronchitis",
+                                   "sore throat", "covid", "influenza")),
+    ("Skin and rash presentations", ("rash", "skin", "measles", "chickenpox",
+                                     "dermatitis", "scabies")),
+    ("Jaundice / hepatic", ("jaundice", "hepatitis", "liver")),
+    ("Neurological", ("seizure", "convulsion", "encephalitis", "meningitis",
+                      "stroke", "paralysis")),
+    ("Cardiac / chest pain", ("chest pain", "cardiac", "heart attack",
+                              "myocardial", "angina")),
+    ("Maternal and child health", ("pregnan", "antenatal", "postnatal",
+                                   "neonat", "obstetric")),
+]
+
+
+def _syndrome_of(condition: str) -> str:
+    """Map a free-text AI condition to a surveillance syndrome."""
+    text = (condition or "").lower()
+    for label, keywords in _SYNDROMES:
+        if any(k in text for k in keywords):
+            return label
+    return "Other presentations"
+
+
 @router.get("/health-clusters", response_model=List[HealthCluster])
 async def health_clusters(
     days: int = Query(7, ge=1, le=90),
@@ -107,23 +147,43 @@ async def health_clusters(
             func.coalesce(models.TriageLog.location_text, "Unknown"),
         )
         .order_by(func.count(models.TriageLog.id).desc())
-        .limit(50)
+        .limit(500)
         .all()
     )
 
-    return [
+    # Re-aggregate the per-wording rows into syndrome buckets per locality.
+    buckets: dict[tuple[str, str], dict] = {}
+    for r in rows:
+        key = (_syndrome_of(r.cond), r.loc)
+        b = buckets.setdefault(key, {
+            "n": 0, "sev_sum": 0.0, "max_sev": 0,
+            "first": r.first_seen, "last": r.last_seen, "examples": [],
+        })
+        b["n"] += r.n
+        b["sev_sum"] += float(r.avg_sev or 0) * r.n
+        b["max_sev"] = max(b["max_sev"], int(r.max_sev or 0))
+        if r.first_seen and (b["first"] is None or r.first_seen < b["first"]):
+            b["first"] = r.first_seen
+        if r.last_seen and (b["last"] is None or r.last_seen > b["last"]):
+            b["last"] = r.last_seen
+        if len(b["examples"]) < 3:
+            b["examples"].append(r.cond)
+
+    out = [
         HealthCluster(
-            condition=r.cond,
-            location=r.loc,
-            case_count=r.n,
-            avg_severity=round(float(r.avg_sev or 0), 1),
-            max_severity=int(r.max_sev or 0),
-            first_seen=r.first_seen,
-            last_seen=r.last_seen,
-            alert=r.n >= min_cases,
+            condition=syndrome,
+            location=loc,
+            case_count=b["n"],
+            avg_severity=round(b["sev_sum"] / b["n"], 1) if b["n"] else 0.0,
+            max_severity=b["max_sev"],
+            first_seen=b["first"],
+            last_seen=b["last"],
+            alert=b["n"] >= min_cases,
         )
-        for r in rows
+        for (syndrome, loc), b in buckets.items()
     ]
+    out.sort(key=lambda c: c.case_count, reverse=True)
+    return out
 
 
 @router.get("/overview", response_model=OverviewStats)

@@ -147,6 +147,9 @@ export interface EmergencySOS {
   severity: string;
   status: 'ACTIVE' | 'RESPONDED' | 'RESOLVED';
   responded_by?: number | null;
+  /** Set when no approved hospital could receive the alert. The patient
+   *  must be told and pointed at 108, never left on a waiting state. */
+  unrouted_reason?: string | null;
   /** Times the alert was reassigned after going unanswered (Phase 6). */
   escalation_level?: number;
   assigned_hospital_id?: number | null;

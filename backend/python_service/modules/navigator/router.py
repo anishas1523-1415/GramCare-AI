@@ -112,13 +112,24 @@ def _appointment_items(patient_id: int, db: Session) -> List[schemas.NavigatorIt
     for appt in rows:
         doctor = db.query(models.User).filter(models.User.id == appt.doctor_id).first()
         doctor_name = doctor.full_name if doctor and doctor.full_name else "your doctor"
-        when = appt.scheduled_at.strftime("%d %b, %I:%M %p") if appt.scheduled_at else "soon"
+        # Doctors register as "Dr. Ramesh Kumar", so prefixing unconditionally
+        # printed "Dr. Dr. Ramesh Kumar" on the care timeline.
+        if not doctor_name.lower().startswith(("dr.", "dr ")):
+            doctor_name = f"Dr. {doctor_name}"
+        # scheduled_at is stored UTC-naive. Rendering it raw showed 09:00
+        # here while the appointments screen, which converts in the browser,
+        # showed 14:30 for the same booking. Convert to IST so every surface
+        # agrees with the patient's clock.
+        when = (
+            (appt.scheduled_at + timedelta(hours=5, minutes=30)).strftime("%d %b, %I:%M %p")
+            if appt.scheduled_at else "soon"
+        )
         items.append(
             schemas.NavigatorItem(
                 category="appointment",
                 priority="HIGH",
                 title="Upcoming appointment",
-                reason=f"Upcoming appointment with Dr. {doctor_name} on {when}",
+                reason=f"Upcoming appointment with {doctor_name} on {when}",
                 cta_label="View details",
                 cta_route="/book",
             )
