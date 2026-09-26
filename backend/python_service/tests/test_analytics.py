@@ -50,7 +50,10 @@ def test_health_clusters_groups_by_condition_and_location(client, db):
 
     by_location = {c["location"]: c for c in r.json()}
     cluster = by_location["Thiruvallur"]
-    assert cluster["condition"] == "dengue"  # grouped case-insensitively
+    # Clusters are keyed by surveillance syndrome, not by the model's exact
+    # wording: the same outbreak comes back phrased differently on every
+    # patient, which grouped six real cases into six clusters of one.
+    assert cluster["condition"] == "Acute febrile illness"
     assert cluster["case_count"] == 3
     assert cluster["alert"] is True
 
@@ -65,10 +68,10 @@ def test_health_clusters_excludes_readings_outside_the_window(client, db):
     _seed_triage(db, condition="Cholera", location="Salem", severity=90, days_ago=40)
 
     recent = client.get("/api/v1/analytics/health-clusters?days=7", headers=auth(token))
-    assert "cholera" not in [c["condition"] for c in recent.json()]
+    assert "Acute diarrhoeal illness" not in [c["condition"] for c in recent.json()]
 
     wide = client.get("/api/v1/analytics/health-clusters?days=90", headers=auth(token))
-    assert "cholera" in [c["condition"] for c in wide.json()]
+    assert "Acute diarrhoeal illness" in [c["condition"] for c in wide.json()]
 
 
 def test_health_clusters_skips_logs_the_ai_could_not_classify(client, db):

@@ -236,5 +236,17 @@ def test_stored_placeholders_are_left_out_of_outbreak_clusters(client):
     clusters = client.get("/api/v1/analytics/health-clusters?days=7&min_cases=3",
                           headers=auth(admin)).json()
     conditions = {c["condition"] for c in clusters}
-    assert "dengue fever" in conditions
-    assert not any(c.startswith("unknown (") for c in conditions)
+    # The five real assessments land in their syndrome bucket.
+    assert "Acute febrile illness" in conditions
+
+    # The five placeholders must not be counted. Checking the label alone is
+    # no longer enough — every unclassifiable string now falls into "Other
+    # presentations", so a leak would hide there rather than showing up as
+    # an "unknown (...)" row. Count the cases in the bucket these rows land
+    # in instead: 5 real assessments, not the 10 rows that were inserted.
+    # (Scoped to this bucket because the suite shares one database.)
+    mine = [c for c in clusters
+            if c["condition"] == "Acute febrile illness" and c["location"] == "Unknown"]
+    assert mine, f"expected a febrile cluster, got {clusters}"
+    assert mine[0]["case_count"] == 5, (
+        f"placeholder rows leaked into the counts: {mine[0]}")
