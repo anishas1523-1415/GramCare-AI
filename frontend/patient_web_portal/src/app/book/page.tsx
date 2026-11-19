@@ -53,6 +53,10 @@ function BookingFlow() {
   const [symptoms, setSymptoms] = useState(searchParams.get('symptoms') || '');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [booking, setBooking] = useState(false);
+  // Set only when a payment was captured but POST /appointments/book then
+  // failed - the one state where the patient has paid and has nothing.
+  const [paidOrderId, setPaidOrderId] = useState<string | null>(null);
 
   // Registration never asks a PATIENT for a phone number (deliberately
   // low-friction), so anyone who registered before SMS reminders existed
@@ -114,7 +118,11 @@ function BookingFlow() {
   };
 
   const bookWithPayment = async (orderId: string | null) => {
-    if (!doctor || !slot) return;
+    if (!doctor || !slot || booking) return;
+    // The free path had no busy guard at all (the paid one does), so a
+    // double-click fired two booking requests for the same slot.
+    setBooking(true);
+    setError('');
     try {
       await api.post('/appointments/book', {
         doctor_id: doctor.id,
@@ -125,11 +133,19 @@ function BookingFlow() {
         payment_order_id: orderId,
       });
       setStep('done');
+      setPaidOrderId(null);
     } catch (err) {
       const message = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
       setError(typeof message === 'string'
         ? message
         : t('payment_succeeded_booking_failed'));
+      // The payment is already captured and verified at this point. Keep
+      // the order id so the patient can retry the booking leg against the
+      // same payment, and can quote a reference if they need a refund —
+      // previously this failure left a red line of text and nothing else.
+      if (orderId) setPaidOrderId(orderId);
+    } finally {
+      setBooking(false);
     }
   };
 
@@ -158,6 +174,22 @@ function BookingFlow() {
           </p>
 
           {error && <p role="alert" className="text-red-500 font-semibold mb-6">{error}</p>}
+
+          {paidOrderId && (
+            <div className="mb-6 rounded-2xl border-2 border-amber-500/50 bg-amber-500/10 p-5 text-left">
+              <p className="font-bold text-amber-700 dark:text-amber-300">{t('payment_captured_title')}</p>
+              <p className="mt-1 text-sm text-gray-700 dark:text-gray-200">{t('payment_captured_body')}</p>
+              <p className="mt-2 font-mono text-xs text-gray-500">{t('payment_reference')}: {paidOrderId}</p>
+              <button
+                type="button"
+                disabled={booking}
+                onClick={() => bookWithPayment(paidOrderId)}
+                className="neu-button mt-3 rounded-xl bg-amber-500 px-5 py-2.5 text-sm font-bold text-white disabled:opacity-60"
+              >
+                {booking ? t('booking_in_progress') : t('retry_booking')}
+              </button>
+            </div>
+          )}
 
           {step === 'doctor' && !user.phone && !phoneSaved && (
             <div className="mb-6 p-4 rounded-2xl bg-teal-500/10 border border-teal-500/30 flex flex-col sm:flex-row sm:items-center gap-3">

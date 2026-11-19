@@ -89,7 +89,7 @@ class _BookConsultationScreenState extends State<BookConsultationScreen> {
           .toList();
       setState(() => _doctors = all);
     } catch (_) {
-      setState(() => _error = 'error');
+      setState(() => _error = 'load_failed');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -112,7 +112,7 @@ class _BookConsultationScreenState extends State<BookConsultationScreen> {
         _step = _Step.slot;
       });
     } catch (_) {
-      setState(() => _error = 'error');
+      setState(() => _error = 'load_failed');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -309,6 +309,39 @@ class _BookConsultationScreenState extends State<BookConsultationScreen> {
   }
 
   Widget _doctorList(NeumorphicColors neu, LocaleService locale) {
+    // _error was tracked but never read here, so a backend outage or a
+    // cold start was presented as "No doctors are currently available" —
+    // an empty marketplace rather than a transient failure.
+    if (_error != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.cloud_off, size: 40, color: neu.foregroundMuted),
+              const SizedBox(height: 14),
+              Text(
+                locale.t(_error!),
+                textAlign: TextAlign.center,
+                style: TextStyle(color: neu.foregroundMuted),
+              ),
+              const SizedBox(height: 18),
+              ElevatedButton(
+                onPressed: () {
+                  setState(() {
+                    _error = null;
+                    _loading = true;
+                  });
+                  _loadDoctors();
+                },
+                child: Text(locale.t('try_again')),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
     if (_doctors.isEmpty) {
       return Center(child: Text(locale.t('no_doctors_available'), style: TextStyle(color: neu.foregroundMuted)));
     }
@@ -438,7 +471,7 @@ class _BookConsultationScreenState extends State<BookConsultationScreen> {
           ),
           if (_error != null) ...[
             const SizedBox(height: 16),
-            Text(_error!, style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+            Text(locale.t(_error!), style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
           ],
           const SizedBox(height: 24),
           GestureDetector(

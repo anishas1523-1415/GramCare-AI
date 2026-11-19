@@ -35,8 +35,14 @@ export default function HospitalEmergencyDesk() {
 
   const fetchSos = useCallback(async () => {
     try {
-      const res = await api.get<EmergencySOS[]>('/sos/active');
-      setActive(res.data);
+      const res = await api.get<EmergencySOS[]>('/sos/active', {
+        params: { include_responded: true },
+      });
+      // Both columns now come from the server. "Help En Route" used to be
+      // populated only from the respond() response, so an acknowledged
+      // emergency disappeared from the desk entirely on the next refresh.
+      setActive(res.data.filter((s) => s.status === 'ACTIVE'));
+      setResponded(res.data.filter((s) => s.status === 'RESPONDED'));
       setLastUpdated(new Date());
       setError('');
     } catch {

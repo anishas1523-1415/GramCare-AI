@@ -398,6 +398,10 @@ def _my_hospital_id(user: models.User, db: Session):
 
 @router.get("/active", response_model=List[schemas.EmergencySOSResponse])
 async def get_active_emergencies(
+    # The emergency desk needs its accepted alerts to survive a refresh:
+    # they leave ACTIVE the moment they are acknowledged, so the "Help En
+    # Route" column was client-only state that vanished on reload.
+    include_responded: bool = False,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(require_approved_doctor("HOSPITAL"))
 ):
@@ -416,7 +420,8 @@ async def get_active_emergencies(
     assignment to scope them by; unrouted alerts are exactly the case where
     a clinician outside the hospital network is the backstop.
     """
-    q = db.query(models.EmergencySOS).filter(models.EmergencySOS.status == "ACTIVE")
+    statuses = ["ACTIVE", "RESPONDED"] if include_responded else ["ACTIVE"]
+    q = db.query(models.EmergencySOS).filter(models.EmergencySOS.status.in_(statuses))
 
     if current_user.role != "ADMIN":
         mine = models.EmergencySOS.responded_by == current_user.id

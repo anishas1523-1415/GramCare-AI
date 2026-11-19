@@ -14,6 +14,7 @@ export default function ProfilePage() {
   const router = useRouter();
   const [lab, setLab] = useState<LabCenter | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (authLoading) return;
@@ -24,7 +25,14 @@ export default function ProfilePage() {
     api.get<LabCenter>('/lab/me')
       .then((res) => setLab(res.data))
       .catch((err) => {
-        if (err?.response?.status === 409) router.replace('/onboarding');
+        if (err?.response?.status === 409) {
+          router.replace('/onboarding');
+          return;
+        }
+        // Anything else used to fall through with lab still null, and the
+        // page renders {lab && ...} — so a 500 or a dropped connection
+        // produced a heading, a sign-out button and nothing else.
+        setError(t('lab_profile_load_failed'));
       })
       .finally(() => setLoading(false));
   }, [user, authLoading, router]);
@@ -38,6 +46,12 @@ export default function ProfilePage() {
       <h1 className="text-2xl font-extrabold mb-6 flex items-center gap-3">
         <Building2 className="text-[var(--primary)]" size={28} /> {t('lab_profile')}
       </h1>
+
+      {error && (
+        <p role="alert" className="mb-6 rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm font-medium text-red-600 dark:text-red-300">
+          {error}
+        </p>
+      )}
 
       {lab && (
         <div className="glass-panel p-6 space-y-4 mb-6">

@@ -248,8 +248,12 @@ export default function LoginPage() {
     setError('');
     try {
       await api.post('/auth/resend-verification', { email: target });
-      setInfo('If that email is registered and unverified, a new verification link has been sent.');
+      setInfo(t('resend_verification_sent'));
       setShowResend(false);
+    } catch {
+      // No catch at all before this: a failed request rejected unhandled
+      // and the button simply did nothing, twice in a row, forever.
+      setError(t('resend_verification_failed'));
     } finally {
       setResending(false);
     }

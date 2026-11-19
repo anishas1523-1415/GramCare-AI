@@ -14,6 +14,7 @@ import Link from "next/link";
 import { io } from "socket.io-client";
 import api from "../../lib/api";
 import { useProfile } from "../../contexts/ProfileContext";
+import { useAuth } from "../../contexts/AuthContext";
 import { useLocale } from "../../contexts/LocaleContext";
 import { offlineTriageEstimate } from "../../lib/offlineTriage";
 import { clearUserAiKey, getUserAiKey, hasUserAiKey } from "../../lib/aiKey";
@@ -57,6 +58,7 @@ const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "https://gramcare-signaling.onr
 
 export default function SymptomCheckerPage() {
   const { activeProfile } = useProfile();
+  const { user } = useAuth();
   const { t } = useLocale();
   const router = useRouter();
   const [symptoms, setSymptoms] = useState("");
@@ -156,7 +158,9 @@ export default function SymptomCheckerPage() {
     try {
       const res = await api.post("/triage/analyze", {
         symptoms_text: symptoms,
-        patient_id: "GUEST",
+        // The authenticated patient when there is one; the checker is also
+        // reachable signed-out, which is what GUEST is for.
+        patient_id: user ? String(user.id) : "GUEST",
         age: activeProfile?.age ?? 30,
         family_profile_id: activeProfile?.id ?? null,
         image_base64: symptomImage?.base64 ?? null,
@@ -233,7 +237,11 @@ export default function SymptomCheckerPage() {
           );
         }
       } else {
-        setError(err instanceof Error ? err.message : "An error occurred");
+        // Was err.message, which for a server-answered failure is the raw
+        // Axios string: patients were shown "Request failed with status
+        // code 500".
+        const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+        setError(typeof detail === "string" && detail ? detail : t('triage_failed_generic'));
       }
     } finally {
       setLoading(false);
@@ -388,7 +396,7 @@ export default function SymptomCheckerPage() {
               }`}
             >
               <div className="flex justify-between items-center mb-2">
-                <span className="font-bold">Severity:</span>
+                <span className="font-bold">{t('triage_severity')}</span>
                 <span className={`px-2 py-1 rounded text-xs font-bold ${
                   triageResult.severity === 'CRITICAL' ? 'bg-red-500 text-white' :
                   triageResult.severity === 'HIGH' ? 'bg-orange-500 text-white' :
@@ -399,40 +407,40 @@ export default function SymptomCheckerPage() {
                 </span>
               </div>
               <div className="mb-2">
-                <span className="font-bold">Department: </span>
+                <span className="font-bold">{t('triage_department')} </span>
                 {triageResult.department}
               </div>
               <div className="mb-2">
-                <span className="font-bold">Recommendation: </span>
+                <span className="font-bold">{t('triage_recommendation')} </span>
                 {triageResult.recommendation}
               </div>
               {triageResult.possible_causes && (
                 <div className="mb-2">
-                  <span className="font-bold">Possible causes: </span>
+                  <span className="font-bold">{t('triage_possible_causes')} </span>
                   {triageResult.possible_causes}
                 </div>
               )}
               {triageResult.first_aid && (
                 <div className="mb-2">
-                  <span className="font-bold text-orange-600">First aid: </span>
+                  <span className="font-bold text-orange-600">{t('triage_first_aid')} </span>
                   {triageResult.first_aid}
                 </div>
               )}
               {triageResult.home_remedies && (
                 <div className="mb-2">
-                  <span className="font-bold">Home remedies: </span>
+                  <span className="font-bold">{t('triage_home_remedies')} </span>
                   {triageResult.home_remedies}
                 </div>
               )}
               {triageResult.specialist_type && (
                 <div className="mb-2">
-                  <span className="font-bold text-indigo-500">See a: </span>
+                  <span className="font-bold text-indigo-500">{t('triage_see_a')} </span>
                   {triageResult.specialist_type}
                 </div>
               )}
               {triageResult.untreated_outcome && (
                 <div className="mb-2">
-                  <span className="font-bold text-red-500">If left untreated: </span>
+                  <span className="font-bold text-red-500">{t('triage_if_untreated')} </span>
                   {triageResult.untreated_outcome}
                 </div>
               )}
@@ -444,10 +452,10 @@ export default function SymptomCheckerPage() {
                     className="w-full flex items-center justify-between text-sm font-bold text-teal-600 dark:text-teal-400"
                   >
                     <span className="flex items-center gap-2">
-                      <Brain size={15} /> Why does the AI think this?
+                      <Brain size={15} /> {t('triage_why_ai')}
                       {typeof triageResult.confidence === "number" && (
                         <span className="text-xs font-semibold text-gray-500">
-                          ({Math.round(triageResult.confidence * 100)}% confidence)
+                          ({Math.round(triageResult.confidence * 100)}% {t('triage_confidence')})
                         </span>
                       )}
                     </span>
@@ -474,8 +482,7 @@ export default function SymptomCheckerPage() {
 
               {triageResult.severity === 'CRITICAL' && (
                 <div className="mt-3 p-3 rounded-xl bg-red-500/15 border border-red-500/40 text-sm font-semibold text-red-600">
-                  ⚠ This looks like an emergency. Call 108 or use the Emergency SOS
-                  in the GramCare mobile app immediately.
+                  {t('triage_critical_banner')}
                 </div>
               )}
 
@@ -486,8 +493,7 @@ export default function SymptomCheckerPage() {
               <div className="mt-4 p-3 rounded-xl bg-amber-500/10 border border-amber-500/40 flex items-start gap-2">
                 <AlertTriangle size={15} className="text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
                 <p className="text-xs leading-relaxed text-amber-800 dark:text-amber-200">
-                  {triageResult.disclaimer ??
-                    "This is an AI-generated indication of urgency, not a medical diagnosis. It does not replace examination by a qualified clinician and must not delay emergency care. In an emergency, call 108."}
+                  {triageResult.disclaimer ?? t('triage_disclaimer_fallback')}
                 </p>
               </div>
 
@@ -501,7 +507,7 @@ export default function SymptomCheckerPage() {
                 className="neu-button w-full mt-4 py-3 bg-indigo-500 text-white font-bold rounded-xl flex items-center justify-center gap-2"
               >
                 <Stethoscope size={18} />
-                {triageResult.specialist_type ? `Book a ${triageResult.specialist_type}` : "Book a Consultation"}
+                {triageResult.specialist_type ? `${t('triage_book_a')} ${triageResult.specialist_type}` : t('triage_book_consultation')}
               </button>
             </motion.div>
           )}

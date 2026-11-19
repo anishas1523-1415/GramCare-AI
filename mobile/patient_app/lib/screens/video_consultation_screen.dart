@@ -36,6 +36,10 @@ class _VideoConsultationScreenState extends State<VideoConsultationScreen> {
   bool _isMuted = false;
   bool _isVideoOff = false;
   bool _isConnected = false;
+  // A failure in _startMedia() was debugPrint only, so a denied camera or
+  // any WebRTC error left this screen spinning on black forever with no
+  // message and no way out. _callError drives a real panel with a retry.
+  String? _callError;
 
   @override
   void initState() {
@@ -148,7 +152,24 @@ class _VideoConsultationScreenState extends State<VideoConsultationScreen> {
       });
     } catch (e) {
       debugPrint('Failed to start media: $e');
+      if (!mounted) return;
+      final message = e.toString().toLowerCase();
+      setState(() {
+        if (message.contains('permission') || message.contains('notallowed')) {
+          _callError = 'Camera and microphone permission was denied. '
+              'Allow them in Settings, then try again.';
+        } else if (message.contains('notfound')) {
+          _callError = 'No camera or microphone was found on this device.';
+        } else {
+          _callError = 'The call could not be started on this device.';
+        }
+      });
     }
+  }
+
+  Future<void> _retryCall() async {
+    setState(() => _callError = null);
+    await _startMedia();
   }
 
   void _toggleMute() {
@@ -188,7 +209,43 @@ class _VideoConsultationScreenState extends State<VideoConsultationScreen> {
       body: Stack(
         children: [
           Positioned.fill(
-            child: _isConnected
+            child: _callError != null
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 32),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.videocam_off, color: Colors.redAccent, size: 44),
+                          const SizedBox(height: 16),
+                          const Text(
+                            'Cannot start the call',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            _callError!,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(color: Colors.white70, fontSize: 14),
+                          ),
+                          const SizedBox(height: 20),
+                          ElevatedButton(
+                            onPressed: _retryCall,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF2DD4BF),
+                              foregroundColor: Colors.black,
+                            ),
+                            child: const Text('Try again'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                : _isConnected
                 ? RTCVideoView(_remoteRenderer, objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover)
                 : const Center(child: CircularProgressIndicator(color: Color(0xFF2DD4BF))),
           ),

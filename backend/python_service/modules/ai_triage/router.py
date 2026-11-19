@@ -11,7 +11,7 @@ from ai import AITask, get_ai_manager
 from core.ratelimit import rate_limit
 from core.cloudinary_service import cloudinary_client
 from database import get_db
-from modules.auth.router import get_current_user_optional
+from modules.auth.router import get_current_user, get_current_user_optional
 
 load_dotenv()
 
@@ -378,7 +378,15 @@ Respond in JSON format only, no markdown:
     # Gemini Vision costs more per call than text triage — tighter window.
     dependencies=[Depends(rate_limit("ocr", 10, 300))],
 )
-async def extract_prescription_text(request: OCRRequest, db: Session = Depends(get_db)):
+async def extract_prescription_text(
+    request: OCRRequest,
+    db: Session = Depends(get_db),
+    # Was unauthenticated: anyone on the internet could post images here,
+    # spending Gemini Vision credits and filling the Cloudinary account.
+    # Unlike /triage/analyze, which is deliberately open so a guest can
+    # check symptoms, reading a prescription is not a guest action.
+    current_user: models.User = Depends(get_current_user),
+):
     """
     Extracts text from a prescription image. Routed through AIManager,
     which restricts OCR's candidate providers to ones that actually support

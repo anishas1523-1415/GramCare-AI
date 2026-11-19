@@ -83,23 +83,24 @@ async def list_doctors(
     appear — an unverified doctor must not be bookable, however complete
     their profile looks (planning doc: government approval prevents fake
     doctors from reaching patients)."""
-    doctors = (
-        db.query(models.User)
-        .filter(models.User.role == "DOCTOR", models.User.is_active == True)  # noqa: E712
-        .offset(skip)
-        .limit(limit)
-        .all()
+    # Both filters are applied in SQL, before the page is taken. They used
+    # to run in Python afterwards, so a page of 50 doctor accounts could
+    # yield two results (or none) while approved doctors sat on page 2 and
+    # the directory looked empty.
+    q = (
+        db.query(models.User, models.DoctorProfile)
+        .join(models.DoctorProfile, models.DoctorProfile.user_id == models.User.id)
+        .filter(
+            models.User.role == "DOCTOR",
+            models.User.is_active == True,  # noqa: E712
+            models.DoctorProfile.verification_status == "APPROVED",
+        )
     )
-    results = []
-    for doc in doctors:
-        profile = _ensure_profile(doc, db)
-        if profile.verification_status != "APPROVED":
-            continue
-        public = _to_public(doc, profile)
-        if specialty and specialty.lower() not in public["specialty"].lower():
-            continue
-        results.append(public)
-    return results
+    if specialty:
+        q = q.filter(models.DoctorProfile.specialty.ilike("%%%s%%" % specialty))
+
+    rows = q.order_by(models.User.id).offset(skip).limit(limit).all()
+    return [_to_public(doc, profile) for doc, profile in rows]
 
 
 @router.get("/me", response_model=schemas.DoctorSelfResponse)

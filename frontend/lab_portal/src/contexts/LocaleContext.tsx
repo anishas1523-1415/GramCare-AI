@@ -107,6 +107,7 @@ const en: Record<string, string> = {
 
   // Profile
   loading_profile: 'Loading profile…',
+  lab_profile_load_failed: 'Could not load your lab profile. Please try again in a moment.',
   lab_profile: 'Lab Profile',
   name: 'Name',
   signed_in_as: 'Signed in as',
@@ -216,6 +217,7 @@ const ta: Record<string, string> = {
   submit_report: 'அறிக்கையைச் சமர்ப்பி',
 
   loading_profile: 'சுயவிவரம் ஏற்றப்படுகிறது…',
+  lab_profile_load_failed: 'உங்கள் ஆய்வக சுயவிவரத்தை ஏற்ற முடியவில்லை. சிறிது நேரத்தில் மீண்டும் முயற்சிக்கவும்.',
   lab_profile: 'ஆய்வக சுயவிவரம்',
   name: 'பெயர்',
   signed_in_as: 'உள்நுழைந்துள்ளவர்',
