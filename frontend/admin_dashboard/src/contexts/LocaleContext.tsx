@@ -90,6 +90,8 @@ const en: Record<string, string> = {
   no_recalls: 'No recalls affecting your stock.',
   preorders: 'Pre-orders',
   no_preorders: 'No pending pre-orders.',
+  data_unavailable: 'Could not be loaded.',
+  no_inventory_yet: 'No medicines added yet. Use the form above to add your first item.',
   mark_ready: 'Mark Ready',
   low_stock_alerts: 'Low Stock Alerts',
 
@@ -226,6 +228,8 @@ const ta: Record<string, string> = {
   no_recalls: 'உங்கள் இருப்பைப் பாதிக்கும் திரும்பப்பெறல்கள் இல்லை.',
   preorders: 'முன்பதிவுகள்',
   no_preorders: 'நிலுவையில் முன்பதிவுகள் இல்லை.',
+  data_unavailable: 'ஏற்ற முடியவில்லை.',
+  no_inventory_yet: 'இதுவரை மருந்துகள் சேர்க்கப்படவில்லை. மேலே உள்ள படிவத்தைப் பயன்படுத்தி முதல் பொருளைச் சேர்க்கவும்.',
   mark_ready: 'தயார் எனக் குறி',
   low_stock_alerts: 'குறைந்த இருப்பு எச்சரிக்கைகள்',
 

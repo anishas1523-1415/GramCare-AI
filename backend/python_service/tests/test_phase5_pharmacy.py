@@ -82,6 +82,17 @@ def test_fulfillment_decrements_stock(client, doctor_token, patient_token):
     })
     assert rx.status_code == 200, rx.text
 
+    # The queue no longer lists every unfulfilled prescription in the
+    # system: a pharmacy sees a patient's prescription only once that
+    # patient has actually reserved medicine there.
+    queue = client.get("/api/v1/pharmacy/queue", headers=auth(pharma_token)).json()
+    assert not any(q["id"] == rx.json()["id"] for q in queue)
+
+    client.post("/api/v1/pharmacy/preorders", headers=auth(patient_token), json={
+        "pharmacy_id": pharmacy_id,
+        "medicine_name": "Amoxicillin 250mg",
+        "quantity": 1,
+    })
     queue = client.get("/api/v1/pharmacy/queue", headers=auth(pharma_token)).json()
     assert any(q["id"] == rx.json()["id"] for q in queue)
 

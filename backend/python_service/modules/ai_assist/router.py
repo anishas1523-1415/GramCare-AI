@@ -215,8 +215,18 @@ async def patient_summary(
         active_medicines=active,
         recent_conditions=recent_conditions,
         latest_vitals=latest_vitals,
-        chronic_conditions=profile.chronic_conditions if profile else None,
-        allergies=profile.allergies if profile else None,
+        # Fall back to the account's own Health Passport fields. These were
+        # read only off FamilyProfile, so a patient consulting as themselves
+        # (no family profile selected) always presented to the doctor as
+        # "allergies: none" even with allergies recorded on their account.
+        chronic_conditions=(
+            (profile.chronic_conditions if profile else None)
+            or getattr(patient, "chronic_conditions", None)
+        ),
+        allergies=(
+            (profile.allergies if profile else None)
+            or getattr(patient, "allergies", None)
+        ),
         generated_by=generated_by,
     )
 
@@ -265,7 +275,10 @@ async def parse_prescription(
     if not body.dictation_text or len(body.dictation_text.strip()) < 5:
         return ParsePrescriptionResponse(diagnosis="", notes="", medicines=[])
         
-    prompt = PARSE_PROMPT.format(dictation_text=body.dictation_text)
+    # NOT str.format: the prompt embeds a literal JSON example, so every
+    # "{" in it reads as a format field and .format() raised KeyError on the
+    # first one. Voice dictation returned 500 on every single call.
+    prompt = PARSE_PROMPT.replace("{dictation_text}", body.dictation_text)
     
     try:
         outcome = await ai_manager.run(AITask.PARSE_PRESCRIPTION, prompt=prompt)

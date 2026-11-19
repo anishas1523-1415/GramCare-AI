@@ -30,6 +30,12 @@ export default function ConsultationRoom({ params }: { params: Promise<{ id: str
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
+  // A failure in startMedia() used to be console.error only: the room then
+  // sat on a black screen forever, because join_room never fired either.
+  // mediaError drives a real panel with a retry, so a denied camera or a
+  // sleeping signalling server is visible instead of silent.
+  const [mediaError, setMediaError] = useState<string | null>(null);
+  const [retryTick, setRetryTick] = useState(0);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
 
   // Adaptive Bandwidth Switching (planning doc: video -> audio -> text as
@@ -162,8 +168,28 @@ export default function ConsultationRoom({ params }: { params: Promise<{ id: str
 
       } catch (err) {
         console.error("Media error:", err);
+        const name = (err as { name?: string } | null)?.name;
+        if (name === "NotAllowedError" || name === "SecurityError") {
+          setMediaError(t("call_error_permission"));
+        } else if (name === "NotFoundError" || name === "OverconstrainedError") {
+          setMediaError(t("call_error_no_device"));
+        } else if (name === "NotReadableError") {
+          setMediaError(t("call_error_device_busy"));
+        } else {
+          setMediaError(t("call_error_generic"));
+        }
       }
     };
+
+    // The signalling server is on a free tier and can be cold. Say so
+    // rather than spinning: previously there was no connect_error handler
+    // at all, so an asleep server looked identical to a silent peer.
+    socketRef.current.on("connect_error", () => {
+      setMediaError(t("call_error_signaling"));
+    });
+    socketRef.current.on("connect", () => {
+      setMediaError((prev) => (prev === t("call_error_signaling") ? null : prev));
+    });
 
     startMedia();
 
@@ -231,7 +257,8 @@ export default function ConsultationRoom({ params }: { params: Promise<{ id: str
       peerRef.current?.close();
       socketRef.current?.disconnect();
     };
-  }, [roomId]);
+  // retryTick re-runs the whole setup when the user presses Retry.
+  }, [roomId, retryTick]);
 
   const sendChatMessage = () => {
     const text = chatInput.trim();
@@ -363,7 +390,22 @@ export default function ConsultationRoom({ params }: { params: Promise<{ id: str
           </div>
         ) : (
           <>
-            {!isConnected && (
+            {!isConnected && mediaError && (
+              <div className="flex flex-col items-center text-center max-w-sm px-6">
+                <div className="w-16 h-16 rounded-full bg-red-500/15 border border-red-500/40 flex items-center justify-center mb-4">
+                  <VideoOff size={28} className="text-red-400" />
+                </div>
+                <p className="text-white font-semibold mb-2">{t('call_cannot_start')}</p>
+                <p className="text-white/60 text-sm mb-5">{mediaError}</p>
+                <button
+                  onClick={() => { setMediaError(null); setRetryTick((n) => n + 1); }}
+                  className="px-5 py-2.5 rounded-lg bg-teal-500 hover:bg-teal-400 text-white font-medium transition-colors"
+                >
+                  {t('retry')}
+                </button>
+              </div>
+            )}
+            {!isConnected && !mediaError && (
               <div className="flex flex-col items-center text-white/50 animate-pulse">
                 <div className="w-20 h-20 rounded-full border-4 border-t-teal-500 border-white/20 animate-spin mb-4" />
                 <p>{t('waiting_for_other_party')}</p>

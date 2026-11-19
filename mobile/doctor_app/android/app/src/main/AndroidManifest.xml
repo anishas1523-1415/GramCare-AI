@@ -1,6 +1,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <uses-feature android:name="android.hardware.camera" />
-    <uses-feature android:name="android.hardware.camera.autofocus" />
+    <!-- required="false": the camera is used for video consultation, not a
+         hard requirement. Left at the default (true), Play hides the app
+         from every camera-less device. patient_app already declares these
+         the same way. -->
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
@@ -12,7 +16,7 @@
         android:allowBackup="false"
         android:fullBackupContent="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
-        android:label="doctor_mobile_app"
+        android:label="GramCare Doctor"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
@@ -53,5 +57,13 @@
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
         </intent>
+        <!-- Android 11+ package visibility: url_launcher resolves geo: via
+             resolveActivity, which this blocks by default, so "Navigate to
+             patient" on a critical alert never opened the maps app. -->
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="geo"/>
+        </intent>
+        <intent><action android:name="android.intent.action.DIAL"/></intent>
     </queries>
 </manifest>

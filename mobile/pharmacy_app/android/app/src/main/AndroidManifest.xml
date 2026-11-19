@@ -8,7 +8,7 @@
         android:allowBackup="false"
         android:fullBackupContent="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
-        android:label="pharmacy_mobile_app"
+        android:label="GramCare Pharmacy"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

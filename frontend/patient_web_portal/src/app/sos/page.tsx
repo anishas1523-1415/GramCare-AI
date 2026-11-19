@@ -59,6 +59,7 @@ export default function SosPage() {
 
   const [history, setHistory] = useState<EmergencySOS[]>([]);
   const [historyLoading, setHistoryLoading] = useState(true);
+  const [historyFailed, setHistoryFailed] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const [contacts, setContacts] = useState<EmergencyContact[]>([]);
@@ -69,12 +70,19 @@ export default function SosPage() {
 
   const active = history.find((s) => s.status === "ACTIVE" || s.status === "RESPONDED");
 
-  const loadHistory = async () => {
+  const loadHistory = async (surfaceFailure = false) => {
     try {
       const res = await api.get<EmergencySOS[]>("/sos/mine");
       setHistory(res.data);
+      setHistoryFailed(false);
     } catch {
-      // silent — this is a background refresh, not a user-initiated action
+      // A background poll failing is noise; the same call failing right
+      // after the patient pressed SOS is not. Swallowing it meant a
+      // triggered alert showed no confirmation at all and the page fell
+      // back to the big red button — so a frightened patient presses it
+      // again, and again.
+      setHistoryFailed(true);
+      if (surfaceFailure) setError(t('sos_status_unconfirmed'));
     } finally {
       setHistoryLoading(false);
     }
@@ -122,7 +130,7 @@ export default function SosPage() {
       });
       setConfirming(false);
       setNote("");
-      await loadHistory();
+      await loadHistory(true);
     } catch (err) {
       const message = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
       setError(typeof message === "string" ? message : t('sos_send_failed'));
@@ -192,7 +200,24 @@ export default function SosPage() {
 
           {error && <p role="alert" className="text-red-500 font-semibold mb-6">{error}</p>}
 
-          {active ? (
+          {/* The live status below is a poll. Say when it has gone stale
+              rather than showing a confident but frozen card. */}
+          {historyFailed && !historyLoading && (
+            <p className="mb-6 text-sm font-medium text-amber-600 dark:text-amber-400">
+              {t('sos_status_stale')}
+            </p>
+          )}
+
+          {/* Until /sos/mine answers, `active` is undefined and the page
+              used to render the trigger button — so a patient who already
+              has a live alert is shown "send one" during a cold start and
+              fires a duplicate emergency. */}
+          {historyLoading ? (
+            <div className="mb-8 flex flex-col items-center gap-3 py-10 text-gray-400">
+              <div className="h-10 w-10 animate-spin rounded-full border-4 border-red-500/30 border-t-red-500" />
+              <p className="text-sm">{t('sos_checking_status')}</p>
+            </div>
+          ) : active ? (
             <div className="mb-8 p-5 rounded-2xl border-2 border-red-500/30 bg-red-500/5">
               <div className="flex items-center justify-between mb-3">
                 <span className={`px-3 py-1 rounded-full text-xs font-bold border ${STATUS_META[active.status].cls} ${active.status === "ACTIVE" ? "animate-pulse" : ""}`}>
@@ -214,10 +239,10 @@ export default function SosPage() {
                 <div className="mb-3 p-3 rounded-xl bg-red-600/15 border-2 border-red-600/60 flex items-start gap-2">
                   <AlertTriangle size={18} className="text-red-500 mt-0.5 shrink-0" />
                   <div className="text-sm text-left">
-                    <p className="font-bold text-red-500">No hospital has received this alert</p>
+                    <p className="font-bold text-red-500">{t('sos_unrouted_title')}</p>
                     <p className="text-gray-600 dark:text-gray-300">{active.unrouted_reason}</p>
                     <a href="tel:108" className="inline-block mt-2 px-4 py-2 rounded-lg bg-red-600 text-white font-bold text-sm">
-                      Call 108 now
+                      {t('sos_call_108_now')}
                     </a>
                   </div>
                 </div>

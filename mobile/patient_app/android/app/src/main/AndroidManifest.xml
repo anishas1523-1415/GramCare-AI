@@ -43,6 +43,19 @@
         <intent><action android:name="android.intent.action.SENDTO"/><data android:scheme="smsto"/></intent>
         <intent><action android:name="android.intent.action.DIAL"/></intent>
         <intent><action android:name="android.speech.RecognitionService"/></intent>
+        <!-- Android 11+ package visibility. Without this entry the explicit
+             setPackage("com.whatsapp") intent in MainActivity throws
+             ActivityNotFoundException even on a phone that HAS WhatsApp,
+             so "share my SOS with family" reported "WhatsApp unavailable". -->
+        <package android:name="com.whatsapp"/>
+        <package android:name="com.whatsapp.w4b"/>
+        <!-- Same reason: url_launcher resolves geo: via resolveActivity,
+             which package visibility blocks, so "Open in Maps" always fell
+             back to a browser page instead of the phone's maps app. -->
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="geo"/>
+        </intent>
     </queries>
     <application
         android:allowBackup="false"

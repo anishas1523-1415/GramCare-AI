@@ -156,6 +156,13 @@ io.on("connection", (socket) => {
       io.to(alertData.department).emit("triage_update", alertData);
     }
 
+    // department is the PREDICTED CONDITION ("Fever / Viral infection"),
+    // not a department anyone joins, so the room above almost never has a
+    // subscriber and the live triage feed reached nobody. Every on-duty
+    // doctor also joins "triage_feed", which is the room that actually
+    // delivers.
+    io.to("triage_feed").emit("triage_update", alertData);
+
     if (alertData.severity === "CRITICAL") {
       // Scoped to on-duty responders (doctors/hospital desks join the
       // "emergency_responders" room on connect) instead of every socket.

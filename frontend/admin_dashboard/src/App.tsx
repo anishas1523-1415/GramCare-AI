@@ -173,6 +173,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
   const [preorders, setPreorders] = useState<MedicinePreorder[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [loadFailed, setLoadFailed] = useState(false);
   const [actionError, setActionError] = useState('');
   const [lastInteractionWarnings, setLastInteractionWarnings] = useState<InteractionWarning[]>([]);
   const [newMedName, setNewMedName] = useState('');
@@ -201,6 +202,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
 
   const fetchData = useCallback(async () => {
     setError('');
+    setLoadFailed(false);
     try {
       const me = await api.get<Pharmacy>('/pharmacy/me');
       setPharmacy(me.data);
@@ -224,6 +226,11 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
       } else {
         console.error('Failed to fetch pharmacy data:', err);
         setError(t('pharmacy_data_failed'));
+        // Previously the stale [] state stayed on screen, so an API outage
+        // rendered "No pending prescriptions", "Nothing expiring", "No
+        // recalls" and "No preorders" all at once, next to the red error
+        // box. A pharmacist cannot tell that apart from a quiet morning.
+        setLoadFailed(true);
       }
     } finally {
       setLoading(false);
@@ -231,6 +238,15 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  // When the load failed, the lists below are empty because nothing was
+  // fetched — not because the pharmacy has nothing. Render this instead of
+  // their empty states.
+  const dataUnavailable = (
+    <p style={{ color: '#a0aec0', fontStyle: 'italic', padding: '0.5rem 0' }}>
+      {t('data_unavailable')}
+    </p>
+  );
 
   const act = async (fn: () => Promise<unknown>) => {
     setActionError('');
@@ -358,7 +374,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
             <h2 style={{ marginTop: 0, display: 'flex', alignItems: 'center', gap: '10px' }}>
               <ShoppingCart className="text-teal-500" /> {t('pending_prescriptions')}
             </h2>
-            {prescriptions.length === 0 ? (
+            {loadFailed ? dataUnavailable : prescriptions.length === 0 ? (
               <div style={{ padding: '2rem', textAlign: 'center', color: '#718096' }}>{t('no_pending_prescriptions')}</div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
@@ -401,7 +417,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
             <h2 style={{ marginTop: 0, display: 'flex', alignItems: 'center', gap: 10, color: '#f59e0b' }}>
               <CalendarClock /> {t('expiry_alerts')}
             </h2>
-            {expiring.length === 0 ? (
+            {loadFailed ? dataUnavailable : expiring.length === 0 ? (
               <p style={{ color: '#718096' }}>{t('nothing_expiring')} 🎉</p>
             ) : (
               expiring.map((item) => (
@@ -422,7 +438,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
             <h2 style={{ marginTop: 0, display: 'flex', alignItems: 'center', gap: 10, color: '#ef4444' }}>
               <TriangleAlert /> {t('batch_recall_alerts')}
             </h2>
-            {recalls.length === 0 ? (
+            {loadFailed ? dataUnavailable : recalls.length === 0 ? (
               <p style={{ color: '#718096' }}>{t('no_recalls')}</p>
             ) : (
               recalls.map((r) => (
@@ -440,7 +456,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
             <h2 style={{ marginTop: 0, display: 'flex', alignItems: 'center', gap: 10, color: '#6366f1' }}>
               <PackageSearch /> {t('preorders')}
             </h2>
-            {preorders.length === 0 ? (
+            {loadFailed ? dataUnavailable : preorders.length === 0 ? (
               <p style={{ color: '#718096' }}>{t('no_preorders')}</p>
             ) : (
               preorders.map((p) => (
@@ -493,6 +509,16 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
                 </tr>
               </thead>
               <tbody>
+                {/* The one table with no empty state: a newly registered
+                    pharmacy rendered four headers over nothing, which reads
+                    as broken rather than empty. */}
+                {inventory.length === 0 && (
+                  <tr>
+                    <td colSpan={4} style={{ padding: '2rem', textAlign: 'center', color: '#718096' }}>
+                      {loadFailed ? t('data_unavailable') : t('no_inventory_yet')}
+                    </td>
+                  </tr>
+                )}
                 {inventory.map((item) => (
                   <tr key={item.id} className="inventory-row">
                     <td style={{ fontWeight: 'bold' }}>

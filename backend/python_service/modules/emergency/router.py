@@ -19,7 +19,7 @@ import secrets
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone, timedelta
 
@@ -376,19 +376,61 @@ async def trigger_sos(
     return db_sos
 
 
+def _my_hospital_id(user: models.User, db: Session):
+    """The hospital this account speaks for, or None.
+
+    An account is a hospital's emergency desk if it owns the record or is
+    named as its desk user. Both columns are unique, so this is at most one
+    hospital.
+    """
+    row = (
+        db.query(models.Hospital.id)
+        .filter(
+            or_(
+                models.Hospital.owner_user_id == user.id,
+                models.Hospital.emergency_desk_user_id == user.id,
+            )
+        )
+        .first()
+    )
+    return row[0] if row else None
+
+
 @router.get("/active", response_model=List[schemas.EmergencySOSResponse])
 async def get_active_emergencies(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(require_approved_doctor("HOSPITAL"))
 ):
-    """All active SOS emergencies (Doctor/Hospital desk/Admin)."""
+    """Active SOS emergencies this caller is actually responsible for.
 
-    return (
-        db.query(models.EmergencySOS)
-        .filter(models.EmergencySOS.status == "ACTIVE")
-        .order_by(models.EmergencySOS.created_at.desc())
-        .all()
-    )
+    An SOS carries the patient's name, live GPS and voice recording. This
+    previously returned every active alert in the system to any account with
+    role=HOSPITAL or any approved DOCTOR: a hospital registered in Salem
+    could watch emergencies unfolding in Madurai. Scoped now:
+
+      ADMIN     every alert (oversight is the role)
+      HOSPITAL  alerts routed to that hospital, plus ones it accepted
+      DOCTOR    only alerts no hospital could take, plus ones they accepted
+
+    A doctor has no hospital link anywhere in the schema, so there is no
+    assignment to scope them by; unrouted alerts are exactly the case where
+    a clinician outside the hospital network is the backstop.
+    """
+    q = db.query(models.EmergencySOS).filter(models.EmergencySOS.status == "ACTIVE")
+
+    if current_user.role != "ADMIN":
+        mine = models.EmergencySOS.responded_by == current_user.id
+        hospital_id = _my_hospital_id(current_user, db)
+        if hospital_id is not None:
+            q = q.filter(
+                or_(models.EmergencySOS.assigned_hospital_id == hospital_id, mine)
+            )
+        else:
+            q = q.filter(
+                or_(models.EmergencySOS.assigned_hospital_id.is_(None), mine)
+            )
+
+    return q.order_by(models.EmergencySOS.created_at.desc()).all()
 
 
 @router.post("/{sos_id}/voice", response_model=schemas.EmergencySOSResponse)
@@ -542,6 +584,23 @@ async def respond_to_sos(
     sos = db.query(models.EmergencySOS).filter(models.EmergencySOS.id == sos_id).first()
     if not sos:
         raise HTTPException(status_code=404, detail="SOS not found.")
+
+    # Accepting an alert hands the responder the patient's identity,
+    # location and voice note, so the same scope that governs GET /active
+    # governs who may accept. Without this, any approved doctor or any
+    # registered hospital could claim an emergency routed elsewhere and
+    # pull the patient's details along with it.
+    if current_user.role != "ADMIN":
+        hospital_id = _my_hospital_id(current_user, db)
+        if hospital_id is not None:
+            permitted = sos.assigned_hospital_id == hospital_id
+        else:
+            permitted = sos.assigned_hospital_id is None
+        if not permitted:
+            raise HTTPException(
+                status_code=403,
+                detail="This emergency is assigned to another hospital.",
+            )
 
     if sos.status != "ACTIVE":
         raise HTTPException(status_code=400, detail="SOS is already being handled or resolved.")

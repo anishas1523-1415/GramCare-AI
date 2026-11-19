@@ -60,9 +60,15 @@ def test_sos_full_lifecycle_and_contacts(client, patient_token, doctor_token):
         assert responded.status_code == 200
         assert responded.json()["status"] == "RESPONDED"
 
-        # Second respond attempt is blocked (double-dispatch prevention)
-        again = client.put(f"/api/v1/sos/{sos['id']}/respond", headers=auth(doctor_token))
-        assert again.status_code == 400
+        # A doctor the alert was never routed to cannot take it over, and
+        # cannot read the patient's name, GPS or voice note by doing so.
+        poached = client.put(f"/api/v1/sos/{sos['id']}/respond", headers=auth(doctor_token))
+        assert poached.status_code == 403, poached.text
+
+        # The assigned hospital responding twice is blocked separately
+        # (double-dispatch prevention).
+        again = client.put(f"/api/v1/sos/{sos['id']}/respond", headers=auth(hosp_token))
+        assert again.status_code == 400, again.text
 
         # Contact cleanup
         cid = contacts[0]["id"]

@@ -337,10 +337,30 @@ async def get_prescription_queue(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(require_role("PHARMACIST")),
 ):
-    """Unfulfilled digital prescriptions awaiting pickup, newest first."""
+    """Unfulfilled prescriptions this pharmacy has actually been asked to fill.
+
+    This previously returned every unfulfilled prescription in the database
+    to any pharmacist account - diagnosis, prescribing doctor and medicine
+    list for patients who had never walked into that shop. A prescription
+    reaches a pharmacy when the patient reserves against it (a medicine
+    pre-order), so that reservation is the link scoped on here; a pharmacy
+    also keeps seeing the ones it has handled itself.
+    """
+    pharmacy = _my_pharmacy(current_user, db)
+
+    linked_patients = (
+        db.query(models.MedicinePreorder.patient_id)
+        .filter(models.MedicinePreorder.pharmacy_id == pharmacy.id)
+        .distinct()
+        .scalar_subquery()
+    )
+
     return (
         db.query(models.Prescription)
-        .filter(models.Prescription.is_fulfilled == False)  # noqa: E712
+        .filter(
+            models.Prescription.is_fulfilled == False,  # noqa: E712
+            models.Prescription.patient_id.in_(linked_patients),
+        )
         .order_by(models.Prescription.created_at.desc())
         .limit(100)
         .all()
@@ -369,6 +389,37 @@ async def fulfill_prescription(
     )
     if not prescription:
         raise HTTPException(status_code=404, detail="Prescription not found")
+
+    # Dispensing is deliberately NOT restricted to pre-order-linked
+    # prescriptions: the ordinary flow is a patient walking in holding the
+    # prescription a doctor just issued, at whichever pharmacy is open.
+    # Browsing other people's prescriptions is the leak, and GET
+    # /pharmacy/queue is scoped for it. What remains here is a pharmacist
+    # guessing prescription ids to flip the fulfilled flag, so record which
+    # pharmacy dispensed what; the row is the trail if a patient reports a
+    # prescription marked collected that they never collected.
+    db.add(
+        models.AuditLog(
+            user_id=current_user.id,
+            action="PRESCRIPTION_DISPENSE",
+            resource="prescription",
+            resource_id=str(prescription.id),
+            details={
+                "pharmacy_id": pharmacy.id,
+                "patient_id": prescription.patient_id,
+                "pre_order_linked": (
+                    db.query(models.MedicinePreorder.id)
+                    .filter(
+                        models.MedicinePreorder.pharmacy_id == pharmacy.id,
+                        models.MedicinePreorder.patient_id == prescription.patient_id,
+                    )
+                    .first()
+                    is not None
+                ),
+            },
+        )
+    )
+
     if prescription.is_fulfilled:
         raise HTTPException(status_code=400, detail="Prescription already fulfilled")
 

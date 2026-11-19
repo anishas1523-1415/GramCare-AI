@@ -1,8 +1,18 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+
+/** One live alert from the symptom checker, as the signalling server
+ *  re-broadcasts it. Shape is set by symptom-checker/page.tsx. */
+interface TriageAlert {
+  id: string;
+  time: string;
+  severity: string;
+  department: string;
+  symptoms: string;
+}
 import { motion } from 'framer-motion';
-import { Users, Calendar, ShieldAlert, Video, FileText, CheckCircle, Clock, Plus, Trash2, Brain, BarChart3, AlertTriangle, Share2 } from 'lucide-react';
+import { Users, Calendar, ShieldAlert, Video, FileText, CheckCircle, Clock, Plus, Trash2, Brain, BarChart3, AlertTriangle, Share2, Activity } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useLocale } from '../../../contexts/LocaleContext';
 import { useRouter } from 'next/navigation';
@@ -363,6 +373,19 @@ export default function DoctorDashboard() {
   const [activeSOS, setActiveSOS] = useState<EmergencySOS[]>([]);
   const [loading, setLoading] = useState(true);
   const [socketConnected, setSocketConnected] = useState(false);
+  // A failed fetch used to be console.error only, so a 403, a 500 or a
+  // Render cold-start timeout rendered a complete dashboard reading "no
+  // upcoming appointments" and no emergencies — indistinguishable from a
+  // quiet day. fetchError puts the real reason on screen with a retry.
+  const [fetchError, setFetchError] = useState<string | null>(null);
+  const [reloadTick, setReloadTick] = useState(0);
+  // Live triage feed. The alerts were being broadcast all along; nothing
+  // in any portal subscribed to them.
+  const [liveTriage, setLiveTriage] = useState<TriageAlert[]>([]);
+  const [toast, setToast] = useState<string | null>(null);
+  // Read inside the socket "connect" handler, which must not re-subscribe
+  // every time the profile loads — a ref keeps the effect's deps stable.
+  const specialtyRef = useRef<string>('General Medicine');
   // Government verification gate: a doctor account works the moment it's
   // registered, but is PENDING until a government reviewer approves it —
   // the backend blocks the queue/SOS-response endpoints for anyone not
@@ -385,6 +408,7 @@ export default function DoctorDashboard() {
         const me = await api.get('/doctors/me');
         setVerificationStatus(me.data.verification_status);
         setRejectionReason(me.data.rejection_reason ?? null);
+        if (me.data.specialty) specialtyRef.current = me.data.specialty;
 
         if (me.data.verification_status !== 'APPROVED') {
           setLoading(false);
@@ -406,8 +430,10 @@ export default function DoctorDashboard() {
 
         setAppointments(queueRes.data);
         setActiveSOS(sosRes.data);
+        setFetchError(null);
       } catch (error) {
         console.error("Failed to fetch doctor data:", error);
+        setFetchError(t('dashboard_load_failed'));
       } finally {
         setLoading(false);
       }
@@ -426,7 +452,12 @@ export default function DoctorDashboard() {
 
     socket.on("connect", () => {
       setSocketConnected(true);
-      socket.emit("join_department", "General Medicine");
+      // This doctor's real specialty, not a hardcoded "General Medicine" —
+      // every non-GP was subscribed to the wrong room.
+      socket.emit("join_department", specialtyRef.current || "General Medicine");
+      // The room the triage broadcast actually reaches (the per-condition
+      // room it also emits to has no subscribers by construction).
+      socket.emit("join_department", "triage_feed");
       // Scoped SOS delivery: responders join this room instead of relying
       // on a global broadcast to every connected socket.
       socket.emit("join_department", "emergency_responders");
@@ -439,18 +470,30 @@ export default function DoctorDashboard() {
       fetchData();
     });
 
+    socket.on("triage_update", (alert: TriageAlert) => {
+      setLiveTriage((prev) => [alert, ...prev].slice(0, 8));
+    });
+
     return () => {
       socket.disconnect();
     };
-  }, [user, authLoading, router]);
+  }, [user, authLoading, router, reloadTick, t]);
+
+  useEffect(() => {
+    if (!toast) return;
+    const id = setTimeout(() => setToast(null), 4000);
+    return () => clearTimeout(id);
+  }, [toast]);
 
   const respondToSOS = async (sosId: number) => {
     try {
       await api.put(`/sos/${sosId}/respond`);
       setActiveSOS(activeSOS.filter(sos => sos.id !== sosId));
-      alert(t('sos_responded_alert'));
+      // Was a native window.alert — a raw "localhost:3000 says…" chrome
+      // dialog at the emergency-response moment of the product.
+      setToast(t('sos_responded_alert'));
     } catch {
-      alert(t('sos_respond_failed_alert'));
+      setToast(t('sos_respond_failed_alert'));
     }
   };
 
@@ -547,6 +590,58 @@ export default function DoctorDashboard() {
           </button>
         </div>
       </header>
+
+      {toast && (
+        <div
+          role="status"
+          className="mb-6 rounded-xl border border-teal-500/40 bg-teal-500/10 px-5 py-3 text-sm font-medium text-teal-800 dark:text-teal-200"
+        >
+          {toast}
+        </div>
+      )}
+
+      {fetchError && (
+        <div
+          role="alert"
+          className="mb-10 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-red-500/40 bg-red-500/10 px-6 py-4"
+        >
+          <p className="text-sm font-medium text-red-700 dark:text-red-300">{fetchError}</p>
+          <button
+            onClick={() => { setLoading(true); setReloadTick((n) => n + 1); }}
+            className="rounded-lg bg-red-500 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-600"
+          >
+            {t('retry')}
+          </button>
+        </div>
+      )}
+
+      {/* Live triage feed. The symptom checker has always broadcast these;
+          until now no portal subscribed, so the "patient checks symptoms →
+          doctor sees it live" path silently reached nobody. */}
+      {liveTriage.length > 0 && (
+        <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="mb-12">
+          <h2 className="mb-6 flex items-center gap-2 text-2xl font-bold text-amber-500">
+            <Activity className="animate-pulse" /> {t('live_triage_title')}
+          </h2>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {liveTriage.map((a) => (
+              <div
+                key={a.id}
+                className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-5"
+              >
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <span className="rounded-full bg-amber-500 px-3 py-1 text-xs font-bold text-white">
+                    {a.severity}
+                  </span>
+                  <span className="text-xs text-gray-500">{a.time}</span>
+                </div>
+                <h3 className="mb-1 font-bold">{a.department}</h3>
+                <p className="text-sm text-gray-600 dark:text-gray-300">{a.symptoms}</p>
+              </div>
+            ))}
+          </div>
+        </motion.div>
+      )}
 
       {/* Active Emergencies (High Priority) */}
       {activeSOS.length > 0 && (
