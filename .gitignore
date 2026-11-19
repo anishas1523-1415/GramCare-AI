@@ -52,3 +52,6 @@ apk-builds/
 # the correct binary every time instead of trusting a stale, wrong-platform
 # lockfile.
 package-lock.json
+
+# Office lock files
+~$*
