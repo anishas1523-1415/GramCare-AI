@@ -43,21 +43,23 @@ export default function AdminAnalytics() {
 
   useEffect(() => {
     const fetchData = async () => {
-      try {
-        const [statsRes, clustersRes, forecastsRes] = await Promise.all([
-          api.get<OverviewStats>('/analytics/overview?days=7'),
-          api.get<HealthCluster[]>('/analytics/health-clusters?days=14&min_cases=3'),
-          api.get<ResourceForecast[]>('/analytics/resource-forecasting')
-        ]);
-        setStats(statsRes.data);
-        setClusters(clustersRes.data);
-        setForecasts(forecastsRes.data);
-      } catch (err) {
-        console.error('Failed to load analytics', err);
+      // allSettled, not all: this was all-or-nothing, so one slow or
+      // failing endpoint replaced the whole Community Health Intelligence
+      // tab with a single line of red text. Each panel now stands alone,
+      // and only a total failure reports an error.
+      const [statsRes, clustersRes, forecastsRes] = await Promise.allSettled([
+        api.get<OverviewStats>('/analytics/overview?days=7'),
+        api.get<HealthCluster[]>('/analytics/health-clusters?days=14&min_cases=3'),
+        api.get<ResourceForecast[]>('/analytics/resource-forecasting')
+      ]);
+      if (statsRes.status === 'fulfilled') setStats(statsRes.value.data);
+      if (clustersRes.status === 'fulfilled') setClusters(clustersRes.value.data);
+      if (forecastsRes.status === 'fulfilled') setForecasts(forecastsRes.value.data);
+      if ([statsRes, clustersRes, forecastsRes].every((r) => r.status === 'rejected')) {
+        console.error('Failed to load analytics', statsRes);
         setError('analytics_failed');
-      } finally {
-        setLoading(false);
       }
+      setLoading(false);
     };
     
     fetchData();

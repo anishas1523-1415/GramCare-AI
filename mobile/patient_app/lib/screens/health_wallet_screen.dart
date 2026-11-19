@@ -22,13 +22,16 @@ class HealthWalletScreen extends StatefulWidget {
   State<HealthWalletScreen> createState() => _HealthWalletScreenState();
 }
 
+/// Third slot is a translation KEY, not a label: this screen was the one
+/// place in the app that rendered English record types regardless of the
+/// selected language.
 const Map<String, (Color, IconData, String)> kRecordTypeStyle = {
-  'prescription': (Color(0xFF4F46E5), Icons.receipt_long, 'Prescription'),
-  'lab_report': (Color(0xFF0EA5E9), Icons.science, 'Lab Report'),
-  'triage_log': (Color(0xFF2DD4BF), Icons.psychology, 'AI Check'),
-  'vaccination': (Color(0xFF10B981), Icons.vaccines, 'Vaccination'),
-  'scan': (Color(0xFF8B5CF6), Icons.document_scanner, 'Scanned'),
-  'note': (Color(0xFF718096), Icons.notes, 'Note'),
+  'prescription': (Color(0xFF4F46E5), Icons.receipt_long, 'record_prescription'),
+  'lab_report': (Color(0xFF0EA5E9), Icons.science, 'record_lab_report'),
+  'triage_log': (Color(0xFF2DD4BF), Icons.psychology, 'record_ai_check'),
+  'vaccination': (Color(0xFF10B981), Icons.vaccines, 'record_vaccination'),
+  'scan': (Color(0xFF8B5CF6), Icons.document_scanner, 'record_scanned'),
+  'note': (Color(0xFF718096), Icons.notes, 'record_note'),
 };
 
 class _HealthWalletScreenState extends State<HealthWalletScreen> {
@@ -68,6 +71,7 @@ class _HealthWalletScreenState extends State<HealthWalletScreen> {
   @override
   Widget build(BuildContext context) {
     final active = context.watch<ProfileService>().active;
+    final locale = context.watch<LocaleService>();
     final neu = Theme.of(context).extension<NeumorphicColors>()!;
 
     return Scaffold(
@@ -77,16 +81,18 @@ class _HealthWalletScreenState extends State<HealthWalletScreen> {
         elevation: 0,
         leading: IconButton(
           icon: Icon(Icons.arrow_back, color: neu.foreground),
-          tooltip: 'Back',
+          tooltip: locale.t('back'),
           onPressed: () => context.pop(),
         ),
         title: Text(
-          active == null ? 'My Health Wallet' : "${active.fullName}'s Wallet",
+          active == null
+              ? locale.t('my_health_wallet')
+              : '${active.fullName} - ${locale.t('wallet')}',
           style: TextStyle(color: neu.foreground, fontWeight: FontWeight.bold),
         ),
         actions: [
           IconButton(
-            tooltip: 'Sync now',
+            tooltip: locale.t('sync_now'),
             icon: _syncing
                 ? const SizedBox(
                     width: 18, height: 18,
@@ -134,8 +140,9 @@ class _HealthWalletScreenState extends State<HealthWalletScreen> {
               itemCount: records.length,
               itemBuilder: (context, index) {
                 final record = records[index];
-                final (color, icon, label) =
+                final (color, icon, labelKey) =
                     kRecordTypeStyle[record.recordType] ?? kRecordTypeStyle['note']!;
+                final label = locale.t(labelKey);
                 return Container(
                   margin: const EdgeInsets.only(bottom: 16),
                   padding: const EdgeInsets.all(20),

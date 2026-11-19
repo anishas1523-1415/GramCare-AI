@@ -632,6 +632,15 @@ function App() {
     setAuthenticated(false);
   };
 
+  // `authenticated` was derived from localStorage once at mount and never
+  // again, so an expired session left the pharmacist stuck on a dashboard
+  // that could not load anything and offered no way back.
+  useEffect(() => {
+    const onExpired = () => setAuthenticated(false);
+    window.addEventListener('gramcare:session-expired', onExpired);
+    return () => window.removeEventListener('gramcare:session-expired', onExpired);
+  }, []);
+
   if (!authenticated) {
     return <LoginScreen onLoginSuccess={() => setAuthenticated(true)} />;
   }

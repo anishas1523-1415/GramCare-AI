@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../services/app_strings.dart';
+import '../services/error_text.dart';
 import '../services/firebase_notification_service.dart';
 import '../services/pharmacy_service.dart';
 import '../services/secure_store.dart';
@@ -21,7 +22,10 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   final _service = PharmacyService();
   bool _loading = true;
-  String? _error;
+  // Holds the exception itself, not e.toString(): the UI needs to tell
+  // an expired session from a 500 from a genuinely dropped connection,
+  // all three of which used to render as "you are offline".
+  Object? _error;
   int _pendingOrders = 0;
   int _expiringSoon = 0;
   int _lowStock = 0;
@@ -71,12 +75,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
         return;
       }
       setState(() {
-        _error = e.toString();
+        _error = e;
         _loading = false;
       });
     } catch (e) {
       setState(() {
-        _error = e.toString();
+        _error = e;
         _loading = false;
       });
     }
@@ -121,7 +125,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return ListView(
       children: [
         const SizedBox(height: 120),
-        Center(child: Text(locale.t('offline_note'))),
+        Center(child: Text(errorTextFor(locale, _error))),
         const SizedBox(height: 16),
         Center(
           child: ElevatedButton(onPressed: _load, child: Text(locale.t('retry'))),

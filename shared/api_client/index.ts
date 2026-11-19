@@ -49,6 +49,11 @@ export function createApiClient({
     for (const key of extraKeysOnUnauthorized) {
       localStorage.removeItem(key);
     }
+    // Clearing the tokens silently left single-page apps that read
+    // localStorage once at mount showing a signed-in shell where every
+    // call 401s, with no route back to the login screen short of a manual
+    // reload. Anyone holding that state can listen for this.
+    window.dispatchEvent(new CustomEvent('gramcare:session-expired'));
   };
 
   api.interceptors.request.use((config) => {

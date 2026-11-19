@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../models/stock_item.dart';
 import '../services/app_strings.dart';
+import '../services/error_text.dart';
 import '../services/pharmacy_service.dart';
 import '../theme.dart';
 
@@ -18,7 +19,10 @@ class ExpiryAlertsScreen extends StatefulWidget {
 class _ExpiryAlertsScreenState extends State<ExpiryAlertsScreen> {
   final _service = PharmacyService();
   bool _loading = true;
-  String? _error;
+  // Holds the exception itself, not e.toString(): the UI needs to tell
+  // an expired session from a 500 from a genuinely dropped connection,
+  // all three of which used to render as "you are offline".
+  Object? _error;
   List<StockItem> _items = [];
 
   @override
@@ -40,7 +44,7 @@ class _ExpiryAlertsScreenState extends State<ExpiryAlertsScreen> {
       });
     } catch (e) {
       setState(() {
-        _error = e.toString();
+        _error = e;
         _loading = false;
       });
     }
@@ -56,7 +60,7 @@ class _ExpiryAlertsScreenState extends State<ExpiryAlertsScreen> {
         child: _loading
             ? const Center(child: CircularProgressIndicator())
             : _error != null
-                ? ListView(children: [const SizedBox(height: 100), Center(child: Text(locale.t('offline_note')))])
+                ? ListView(children: [const SizedBox(height: 100), Center(child: Text(errorTextFor(locale, _error)))])
                 : _items.isEmpty
                     ? ListView(children: [const SizedBox(height: 100), Center(child: Text(locale.t('no_expiring_items')))])
                     : ListView.builder(

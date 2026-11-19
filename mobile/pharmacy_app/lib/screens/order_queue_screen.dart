@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../models/prescription.dart';
 import '../services/app_strings.dart';
+import '../services/error_text.dart';
 import '../services/pharmacy_service.dart';
 import '../theme.dart';
 
@@ -21,7 +22,10 @@ class OrderQueueScreen extends StatefulWidget {
 class _OrderQueueScreenState extends State<OrderQueueScreen> {
   final _service = PharmacyService();
   bool _loading = true;
-  String? _error;
+  // Holds the exception itself, not e.toString(): the UI needs to tell
+  // an expired session from a 500 from a genuinely dropped connection,
+  // all three of which used to render as "you are offline".
+  Object? _error;
   List<PrescriptionQueueItem> _queue = [];
 
   @override
@@ -43,7 +47,7 @@ class _OrderQueueScreenState extends State<OrderQueueScreen> {
       });
     } catch (e) {
       setState(() {
-        _error = e.toString();
+        _error = e;
         _loading = false;
       });
     }
@@ -130,7 +134,7 @@ class _OrderQueueScreenState extends State<OrderQueueScreen> {
             : _error != null
                 ? ListView(children: [
                     const SizedBox(height: 100),
-                    Center(child: Text(locale.t('offline_note'))),
+                    Center(child: Text(errorTextFor(locale, _error))),
                   ])
                 : _queue.isEmpty
                     ? ListView(children: [
