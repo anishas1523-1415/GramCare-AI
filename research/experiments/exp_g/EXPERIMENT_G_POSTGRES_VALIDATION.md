@@ -177,11 +177,15 @@ The new migration is index-only: it adds no column, drops nothing, changes no
 data, and skips an index whose name already exists. It is therefore safe to
 apply to a live database.
 
-> **⚠ Production action required.** Alembic does **not** run automatically on
-> deploy in this project. Migration `d1f7c3b9e205` must be applied by hand to
-> the production database. Until it is, `GET /sos/active` and `GET /ehr/records`
-> remain sequential scans in production — functionally correct, progressively
-> slower with volume.
+> **Production status: APPLIED AND VERIFIED, 20 November 2026.** Production
+> (PostgreSQL 17.6, Supabase) reports `alembic_version = d1f7c3b9e205` with both
+> indexes present, valid and ready.
+>
+> **Correction.** An earlier revision of this report asserted that Alembic does
+> not run on deploy and that the migration needed manual application. That was
+> incorrect: `render.yaml` sets
+> `startCommand: alembic upgrade head && uvicorn ...`, so the deploy triggered
+> by the commit carrying this migration applied it automatically.
 
 ---
 

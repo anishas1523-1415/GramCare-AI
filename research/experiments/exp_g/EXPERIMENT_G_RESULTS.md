@@ -221,7 +221,9 @@ Full report in `EXPERIMENT_G_POSTGRES_VALIDATION.md`. In brief:
 - **The audit trail behaves in both directions:** a permitted read writes exactly
   one row; a **denied** read writes none.
 - **26 migrations apply cleanly** to a fresh PostgreSQL 15 database, head
-  `d1f7c3b9e205`, both indexes present.
+  `d1f7c3b9e205`, both indexes present — and the same migration is **applied and
+  verified in production** (PostgreSQL 17.6), since `render.yaml` runs
+  `alembic upgrade head` on every start.
 
 ---
 
@@ -301,7 +303,7 @@ intact. 5xx responses are no longer counted as passes. Error bodies leak nothing
 | 6 | one run per probe — correct for deterministic authorisation outcomes, and the concurrency checks are the exception and do repeat |
 | 7 | the harness flips `is_verified` and doctor approval directly, exactly as the project's own conftest does; those gates are covered by the test suite, not by this experiment |
 | 8 | G-5's residual (prescription-id enumeration to flip the fulfilled flag) is **documented, not eliminated** |
-| 9 | migration `d1f7c3b9e205` is **not yet applied to production** — Alembic does not run on deploy here |
+| 9 | ~~migration `d1f7c3b9e205` is not yet applied to production~~ — **resolved 20 Nov 2026.** It is applied and verified in production (`alembic_version = d1f7c3b9e205`, both indexes valid). The earlier claim that Alembic does not run on deploy was wrong: `render.yaml` runs `alembic upgrade head` on every start |
 
 ### To reach A
 
@@ -310,7 +312,7 @@ intact. 5xx responses are no longer counted as passes. Error bodies leak nothing
 2. Parameterise the project test suite over both engines.
 3. Add a rotation and revocation path for the `/files` and `/sos/track` tokens.
 4. Move the rate limiter to shared storage and re-measure.
-5. Apply `d1f7c3b9e205` to production and confirm both indexes.
+5. ~~Apply `d1f7c3b9e205` to production and confirm both indexes.~~ **Done, 20 Nov 2026.**
 6. Have someone outside this effort re-run the scripts and compare.
 
 ---

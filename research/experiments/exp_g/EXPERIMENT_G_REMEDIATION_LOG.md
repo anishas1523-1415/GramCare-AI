@@ -147,9 +147,12 @@ index instead of a sequential scan.
 full 26-migration chain run against a fresh PostgreSQL 15 database, after which
 both indexes exist and `alembic_version` reads `d1f7c3b9e205`.
 **Risk:** low. Two added indexes cost a little write throughput and disk.
-**⚠ Deployment:** Alembic does **not** run automatically on deploy in this
-project. This migration must be applied by hand to production. Until it is, both
-queries remain sequential scans — correct, but progressively slower.
+**Deployment: APPLIED, verified in production 20 November 2026.**
+`render.yaml` sets `startCommand: alembic upgrade head && uvicorn ...`, so the
+deploy triggered by this commit applied the migration automatically. Production
+reports `alembic_version = d1f7c3b9e205` and both indexes valid and ready. An
+earlier revision of this log claimed manual application was required; that was
+wrong and is corrected here.
 
 ### R2.5 · `GET /sos/track/{token}` — post-resolution redaction, expiry, rate limit
 

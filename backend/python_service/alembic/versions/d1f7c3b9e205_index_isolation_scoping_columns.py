@@ -11,8 +11,9 @@ the emergency desk's poll, which is the single endpoint in this system that
 must never be slow.
 
 This migration is index-only: it adds no column, drops nothing and changes no
-data, so it is safe to apply to a live database. Note that Alembic is not run
-automatically on deploy in this project — apply it by hand.
+data, so it is safe to apply to a live database. render.yaml runs
+`alembic upgrade head` as part of the service start command, so a deploy applies
+it automatically.
 
 Revision ID: d1f7c3b9e205
 Revises: b8d4f1a70c93
