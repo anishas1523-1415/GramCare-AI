@@ -21,6 +21,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, model_validator
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -221,12 +222,34 @@ async def list_recent_records(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(require_approved_doctor("ADMIN")),
 ):
-    """Recent records across all patients — feeds the doctor portal's
-    patient directory. (The directory page previously called this route
-    while it didn't exist; every request 404'd.)"""
+    """Recent records for patients this doctor actually has a relationship
+    with — the doctor portal's patient directory.
+
+    Found by the cross-tenant isolation matrix (research/experiments/exp_g):
+    this returned recent records across EVERY patient in the system to any
+    approved doctor, up to 200 at a time, with no care relationship and —
+    unlike GET /ehr/patient/{id} — no audit row. A doctor in one district
+    could page through the wallet contents of patients they had never met.
+
+    A relationship is an appointment with, or a prescription from, this
+    doctor. ADMIN keeps the unscoped view, which is the role's purpose.
+    """
+    q = db.query(models.EHRRecord)
+
+    if current_user.role != "ADMIN":
+        mine = (
+            db.query(models.Appointment.patient_id)
+            .filter(models.Appointment.doctor_id == current_user.id)
+            .union(
+                db.query(models.Prescription.patient_id)
+                .filter(models.Prescription.doctor_id == current_user.id)
+            )
+            .subquery()
+        )
+        q = q.filter(models.EHRRecord.patient_id.in_(select(mine)))
+
     return (
-        db.query(models.EHRRecord)
-        .order_by(models.EHRRecord.created_at.desc())
+        q.order_by(models.EHRRecord.created_at.desc())
         .offset(skip)
         .limit(limit)
         .all()

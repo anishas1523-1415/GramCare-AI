@@ -1,0 +1,19 @@
+{
+  "commit": "7c0117611174353a4b713dac934fb07854f475e2",
+  "started": "2026-11-19T18:34:47.584696+00:00",
+  "finished": "2026-11-19T18:34:54.178721+00:00",
+  "engine": "postgresql",
+  "db_version": "PostgreSQL 15.18 on x86_64-pc-linux-musl, compiled by gcc (Alpine 15.2.0) 15.2.0, 64-bit",
+  "default_transaction_isolation": "read committed",
+  "python": "3.14.2",
+  "sqlalchemy": "2.0.41",
+  "concurrency_level": 10,
+  "batch_size": 25,
+  "checks": 36,
+  "pass": 36,
+  "findings": 0,
+  "inconclusive": 0,
+  "skipped": 0,
+  "finding_labels": [],
+  "inconclusive_labels": []
+}

@@ -509,7 +509,24 @@ async def attach_voice_recording(
     return sos
 
 
-@router.get("/track/{token}", response_model=schemas.SosTrackingResponse)
+# How long a tracking link keeps working after the emergency is resolved.
+# The link is the only thing a relative has, so it must not die the instant
+# the desk marks the alert closed — they need to see that it closed. After
+# the window it stops resolving entirely.
+SOS_TRACK_GRACE_AFTER_RESOLVE = timedelta(hours=24)
+
+
+@router.get(
+    "/track/{token}",
+    response_model=schemas.SosTrackingResponse,
+    # Experiment G found this endpoint unthrottled while the equivalent
+    # health-passport view was limited. A 192-bit token is unguessable, so
+    # this is not what stops an attacker reading one alert — it stops the
+    # endpoint being hammered, and caps how fast a token that HAS leaked can
+    # be scraped. The tracking page polls every 15 s (20 per 5 min), so this
+    # leaves roughly six times the headroom a real viewer needs.
+    dependencies=[Depends(rate_limit("sos_track", 120, 300))],
+)
 async def track_sos(token: str, db: Session = Depends(get_db)):
     """Public tracking view for the patient's emergency contacts.
 
@@ -525,6 +542,27 @@ async def track_sos(token: str, db: Session = Depends(get_db)):
     )
     if not sos:
         raise HTTPException(status_code=404, detail="This tracking link is not valid.")
+
+    # Experiment G: this link kept serving the patient's name, GPS, their own
+    # description of the emergency and the audio recording INDEFINITELY after
+    # the emergency was resolved. The token travels by SMS and the schema's
+    # own docstring notes it "may be forwarded to anyone", so an unbounded
+    # lifetime means a one-off emergency becomes a permanent disclosure.
+    #
+    # Resolved alerts are therefore served in redacted form for a grace
+    # window, so a relative can still see that it closed, and stop resolving
+    # after it.
+    resolved_at = sos.resolved_at
+    if sos.status == "RESOLVED" and resolved_at is not None:
+        age = datetime.now(timezone.utc).replace(tzinfo=None) - resolved_at
+        if age > SOS_TRACK_GRACE_AFTER_RESOLVE:
+            raise HTTPException(
+                status_code=404,
+                detail="This tracking link has expired. The emergency was resolved.",
+            )
+        redacted = True
+    else:
+        redacted = False
 
     patient = db.query(models.User).filter(models.User.id == sos.patient_id).first()
     hospital = (
@@ -542,11 +580,15 @@ async def track_sos(token: str, db: Session = Depends(get_db)):
         patient_name=(patient.full_name or patient.username) if patient else "Patient",
         status=sos.status,
         severity=sos.severity,
-        location_lat=sos.location_lat,
-        location_lng=sos.location_lng,
-        location_text=sos.location_text,
-        voice_note=sos.voice_note,
-        voice_audio_url=sos.voice_audio_url,
+        # Redacted once resolved: where the patient was, what they said and
+        # the recording of them saying it are what the responder needed while
+        # help was on its way. Afterwards they are just a permanent record of
+        # someone's worst day, sitting behind a link that was texted around.
+        location_lat=None if redacted else sos.location_lat,
+        location_lng=None if redacted else sos.location_lng,
+        location_text=None if redacted else sos.location_text,
+        voice_note=None if redacted else sos.voice_note,
+        voice_audio_url=None if redacted else sos.voice_audio_url,
         hospital_name=hospital.name if hospital else None,
         hospital_phone=hospital.phone if hospital else None,
         hospital_lat=hospital.lat if hospital else None,

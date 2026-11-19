@@ -29,7 +29,7 @@ deployment will be described as a production result.**
 | D | Tamil voice and language | **No** | no | **yes — human speakers, consent** | ethics approval; dataset licensing |
 | E | API and system performance | **No** | **yes** | no | production-equivalent host |
 | F | End-to-end workflow | **Yes** | partly | no | depends on A, B |
-| G | Security, privacy, isolation | **Yes** | no | no | **nothing — start here** |
+| G | Security, privacy, isolation | **Yes** | no | no | **EXECUTED + PostgreSQL-validated, 19–20 Nov 2026 — `research/experiments/exp_g/EXPERIMENT_G_RESULTS.md`. Classified B: complete with documented limitations.** |
 
 **Run order: G → A → B → F → C → E → D.** G is free, needs nothing, and the
 work is half done already. D is last because it is the only one gated on an
@@ -353,7 +353,40 @@ not a clinical deployment and must never be described as one.
 
 ## Experiment G — Security, privacy and multi-tenant isolation
 
-**Status: CAN RUN NOW. Start here. Partially complete already.**
+**Status: EXECUTED AND CLOSED, 19–20 November 2026. Classified B — complete
+with documented limitations.**
+
+534 probes across five runs on two database engines (SQLite 3.50.4 and
+PostgreSQL 15.18), over 135 enumerated endpoints. **Seven confirmed cross-tenant
+exposures, all seven resolved and re-verified on both engines.** Three broad
+accesses remain, all deliberate policy and all now audited. Authentication and
+role enforcement were already flawless — 48 of 48 endpoints reject an anonymous
+caller, every wrong-role probe refused — and every confirmed finding sat *behind*
+a correct role check.
+
+Five findings were new to this experiment: `GET /ehr/records` (every patient's
+wallet to any doctor, unaudited), `POST /triage/analyze` (a clinical record
+writable onto another household's family profile), `GET /sos/track/{token}` (the
+SMSed emergency link served patient name, GPS and the audio recording
+indefinitely after resolution), `GET /files/{token}` (no rate limit), and
+`GET /assist/patient-summary/{id}` (AI clinical summary of any patient with no
+audit row). A sixth, **G-12, was introduced by this experiment's own
+remediations**: the new ownership filters select on two unindexed columns, so the
+emergency-desk poll became a sequential scan. Only the PostgreSQL run could have
+found that. All fixed; migration `d1f7c3b9e205` adds the indexes and **still
+needs applying to production by hand.**
+
+Also measured for the first time: the idempotent-sync race under ten concurrent
+identical batches on PostgreSQL — exactly 25 rows, **duplicate rate 0.0000** —
+which is the first real evidence for the project's headline offline-sync claim
+(Experiment A can now build on it rather than start from nothing).
+
+Project test suite after all remediations: **245 passed, 0 failed.** No
+regressions, no pre-existing failures.
+
+Remaining limitation: **63 of 135 endpoints — all writes — are unprobed.** Every
+read path was probed. Full detail in
+`research/experiments/exp_g/EXPERIMENT_G_RESULTS.md` §9.
 
 **Objective.** Build a complete cross-role isolation matrix for a seven-role
 shared-record health platform, and report what it finds.

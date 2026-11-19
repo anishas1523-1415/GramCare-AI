@@ -1,0 +1,136 @@
+method,path,path_params,auth_model,roles_required,rate_limit,probed_by_experiment_g,covered_by,outcome
+GET,/api/v1/ai/health,,authenticated+require_role,ADMIN,,yes,isolation_matrix,pass
+GET,/api/v1/ai/metrics,,authenticated+require_role,ADMIN,,yes,isolation_matrix,pass
+GET,/api/v1/analytics/health-clusters,,authenticated,,,yes,isolation_matrix,pass
+GET,/api/v1/analytics/overview,,authenticated,,,yes,isolation_matrix,pass
+GET,/api/v1/analytics/resource-forecasting,,authenticated,,,yes,isolation_matrix,pass
+POST,/api/v1/appointments/book,,authenticated+rate_limited+require_role,PATIENT,appointment_book:5/300s,no,,not probed
+GET,/api/v1/appointments/doctor/{doctor_id}/queue,doctor_id,authenticated+require_approved_doctor,DOCTOR|DOCTOR(APPROVED),,yes,isolation_matrix,pass
+GET,/api/v1/appointments/my,,authenticated,,,yes,isolation_matrix,pass
+PUT,/api/v1/appointments/{appointment_id},appointment_id,authenticated,,,yes,"isolation_matrix; phase2_tokens_and_gaps Part A: cross-tenant update as patient B and as a non-treating doctor, plus the treating doctor's own update",pass
+POST,/api/v1/assist/parse-prescription,,authenticated+require_approved_doctor,DOCTOR|DOCTOR(APPROVED),,no,,not probed
+GET,/api/v1/assist/patient-summary/{patient_id},patient_id,authenticated+require_approved_doctor,DOCTOR|DOCTOR(APPROVED),,yes,isolation_matrix; isolation_matrix axis 4 + phase2_postgres_validation P4: audited,finding (see register)
+POST,/api/v1/auth/fcm-token,,authenticated+rate_limited,,fcm_token:10/60s,no,,not probed
+POST,/api/v1/auth/fcm-token/test,,authenticated+rate_limited,,fcm_test:5/60s,no,,not probed
+POST,/api/v1/auth/forgot-password,,rate_limited,,forgot_password:3/3600s,no,,not probed
+GET,/api/v1/auth/government-whitelist,,authenticated,,,yes,isolation_matrix,pass
+POST,/api/v1/auth/government-whitelist,,authenticated,,,yes,isolation_matrix,pass
+DELETE,/api/v1/auth/government-whitelist/{entry_id},entry_id,authenticated,,,yes,"isolation_matrix; phase2_tokens_and_gaps Part A: non-admin delete, plus the admin's own",pass
+POST,/api/v1/auth/login,,rate_limited,,login:15/300s,no,,not probed
+POST,/api/v1/auth/logout,,authenticated,,,no,,not probed
+GET,/api/v1/auth/me,,authenticated,,,yes,isolation_matrix,pass
+PUT,/api/v1/auth/me/phone,,authenticated+rate_limited+require_role,PATIENT,update_phone:5/300s,no,,not probed
+POST,/api/v1/auth/phone/send-otp,,rate_limited,,phone_otp:5/3600s,no,,not probed
+POST,/api/v1/auth/phone/verify-otp,,rate_limited,,phone_otp_verify:10/3600s,no,,not probed
+POST,/api/v1/auth/refresh,,bearer_refresh_token_in_body,,,no,,not probed
+POST,/api/v1/auth/register,,rate_limited,,register:10/3600s,no,,not probed
+POST,/api/v1/auth/register/government,,rate_limited,,register:10/3600s,no,,not probed
+POST,/api/v1/auth/resend-verification,,rate_limited,,resend_verification:3/3600s,no,,not probed
+POST,/api/v1/auth/reset-password,,rate_limited,,reset_password:5/3600s,no,,not probed
+GET,/api/v1/auth/sessions,,authenticated,,,yes,isolation_matrix,pass
+DELETE,/api/v1/auth/sessions/{session_id},session_id,authenticated,,,yes,isolation_matrix; phase2_tokens_and_gaps Part A: cross-tenant session revocation,pass
+POST,/api/v1/auth/verify-email,,single_use_token_in_body,,,no,,not probed
+POST,/api/v1/cds/check,,authenticated+require_approved_doctor,DOCTOR|DOCTOR(APPROVED),,no,,not probed
+GET,/api/v1/chw/my-patients,,authenticated+require_role,CHW,,yes,isolation_matrix,pass
+POST,/api/v1/chw/patients/{patient_id}/book,patient_id,authenticated+rate_limited+require_role,CHW,chw_book_appointment:10/300s,no,,not probed
+POST,/api/v1/chw/patients/{patient_id}/triage,patient_id,authenticated+rate_limited+require_role,CHW,chw_triage:20/300s,no,,not probed
+POST,/api/v1/chw/register-patient,,authenticated+rate_limited+require_role,CHW,chw_register_patient:30/3600s,no,,not probed
+GET,/api/v1/doctors,,authenticated,,,yes,isolation_matrix,pass
+GET,/api/v1/doctors/,,authenticated,,,yes,isolation_matrix,pass
+GET,/api/v1/doctors/me,,authenticated+require_role,DOCTOR,,yes,isolation_matrix,pass
+PUT,/api/v1/doctors/me,,authenticated+require_role,DOCTOR,,yes,isolation_matrix,pass
+POST,/api/v1/doctors/me/license-document,,authenticated+require_role,DOCTOR,,no,,not probed
+POST,/api/v1/doctors/me/photo,,authenticated+require_role,DOCTOR,,no,,not probed
+POST,/api/v1/doctors/me/slots,,authenticated+require_approved_doctor,DOCTOR|DOCTOR(APPROVED),,no,,not probed
+DELETE,/api/v1/doctors/me/slots/{slot_id},slot_id,authenticated+require_role,DOCTOR,,yes,"phase2_tokens_and_gaps Part A: cross-tenant delete as doctor B and patient B, plus the owner's own delete",pass (see covered_by)
+GET,/api/v1/doctors/pending,,authenticated+require_role,ADMIN,,yes,isolation_matrix,pass
+PUT,/api/v1/doctors/{doctor_id}/approve,doctor_id,authenticated+require_role,ADMIN,,no,isolation_matrix,pass
+PUT,/api/v1/doctors/{doctor_id}/reject,doctor_id,authenticated+require_role,ADMIN,,no,isolation_matrix,pass
+GET,/api/v1/doctors/{doctor_id}/slots,doctor_id,authenticated,,,yes,isolation_matrix,pass
+GET,/api/v1/ehr/fhir-export,,authenticated+require_role,PATIENT,,yes,isolation_matrix,pass
+POST,/api/v1/ehr/issue_prescription,,authenticated+require_approved_doctor,DOCTOR|DOCTOR(APPROVED),,no,,not probed
+GET,/api/v1/ehr/patient/{patient_id},patient_id,authenticated,,,yes,"isolation_matrix; isolation_matrix axis 4 + phase2_postgres_validation P4: audited, denial writes no audit row",finding (see register)
+GET,/api/v1/ehr/prescriptions/my,,authenticated,,,yes,isolation_matrix,pass
+POST,/api/v1/ehr/record,,authenticated,,,no,,not probed
+GET,/api/v1/ehr/records,,authenticated+require_approved_doctor,ADMIN|DOCTOR|DOCTOR(APPROVED),,yes,"isolation_matrix; isolation_matrix axis 3 + phase2_postgres_validation P5: scoping, pagination, out-of-range rejection",pass
+POST,/api/v1/ehr/sync,,authenticated,,,yes,"phase2_postgres_validation P2: 10 concurrent identical batches, duplicate rate measured",pass (see covered_by)
+POST,/api/v1/ehr/upload,,authenticated,,,no,,not probed
+POST,/api/v1/ehr/vitals,,authenticated,,,no,,not probed
+GET,/api/v1/ehr/vitals/history,,authenticated,,,yes,isolation_matrix,pass
+GET,/api/v1/family,,authenticated,,,yes,isolation_matrix,pass
+POST,/api/v1/family,,authenticated,,,yes,isolation_matrix,pass
+GET,/api/v1/family/,,authenticated,,,yes,isolation_matrix,pass
+POST,/api/v1/family/,,authenticated,,,yes,isolation_matrix,pass
+DELETE,/api/v1/family/{profile_id},profile_id,authenticated,,,no,isolation_matrix,pass
+PUT,/api/v1/family/{profile_id},profile_id,authenticated,,,no,isolation_matrix,pass
+POST,/api/v1/family/{profile_id}/photo,profile_id,authenticated,,,no,isolation_matrix,pass
+GET,/api/v1/files/{token},token,rate_limited,,file_fetch:120/60s,yes,"phase2_tokens_and_gaps: entropy, rate limit, namespace confusion, error-body leakage",pass (see covered_by)
+GET,/api/v1/hospital/me,,authenticated+require_role,HOSPITAL,,yes,isolation_matrix,pass
+POST,/api/v1/hospital/me/license-document,,authenticated+require_role,HOSPITAL,,no,,not probed
+GET,/api/v1/hospital/pending,,authenticated+require_role,ADMIN,,yes,isolation_matrix,pass
+POST,/api/v1/hospital/register,,authenticated+require_role,HOSPITAL,,no,,not probed
+PUT,/api/v1/hospital/{hospital_id}/approve,hospital_id,authenticated+require_role,ADMIN,,no,isolation_matrix,pass
+PUT,/api/v1/hospital/{hospital_id}/reject,hospital_id,authenticated+require_role,ADMIN,,no,isolation_matrix,pass
+POST,/api/v1/lab/bookings,,authenticated+rate_limited+require_role,PATIENT,lab_booking:20/300s,no,,not probed
+GET,/api/v1/lab/bookings/mine,,authenticated+require_role,PATIENT,,yes,isolation_matrix,pass
+GET,/api/v1/lab/bookings/queue,,authenticated+require_role,LAB,,yes,isolation_matrix,pass
+PUT,/api/v1/lab/bookings/{booking_id}/complete,booking_id,authenticated,,,no,isolation_matrix,pass
+POST,/api/v1/lab/bookings/{booking_id}/report,booking_id,authenticated+require_role,LAB,,no,isolation_matrix,pass
+PUT,/api/v1/lab/bookings/{booking_id}/status,booking_id,authenticated+require_role,LAB,,no,isolation_matrix,pass
+GET,/api/v1/lab/centers,,authenticated,,,yes,isolation_matrix,pass
+GET,/api/v1/lab/me,,authenticated+require_role,LAB,,yes,isolation_matrix,pass
+POST,/api/v1/lab/register,,authenticated+require_role,LAB,,no,,not probed
+GET,/api/v1/lab/tests,,authenticated,,,yes,isolation_matrix,pass
+GET,/api/v1/navigator/next-steps,,authenticated+require_role,PATIENT,,yes,isolation_matrix,pass
+GET,/api/v1/passport/me,,authenticated+require_role,PATIENT,,yes,isolation_matrix,pass
+PUT,/api/v1/passport/me,,authenticated+require_role,PATIENT,,yes,isolation_matrix,pass
+POST,/api/v1/passport/me/regenerate-token,,authenticated+require_role,PATIENT,,no,,not probed
+GET,/api/v1/passport/{token},token,rate_limited,,passport_lookup:20/60s,yes,"isolation_matrix; phase2_tokens_and_gaps: entropy, rate limit, scope, rotation invalidates the old token",pass
+POST,/api/v1/payments/create-order,,authenticated+rate_limited,,payment_order:20/300s,no,,not probed
+GET,/api/v1/payments/my,,authenticated,,,yes,isolation_matrix,pass
+POST,/api/v1/payments/refund/{order_id},order_id,authenticated,,,yes,phase2_tokens_and_gaps Part A: cross-tenant refund and self-refund,pass (see covered_by)
+POST,/api/v1/payments/verify,,authenticated,,,no,,not probed
+POST,/api/v1/payments/webhook,,hmac_signature_verified,,,yes,"phase2_tokens_and_gaps Part C: unsigned and wrongly-signed forgery rejected, correct signature honoured, replay idempotent",pass (see covered_by)
+GET,/api/v1/payments/{order_id}/status,order_id,authenticated,,,yes,"isolation_matrix; phase2_tokens_and_gaps Part A: cross-tenant read as patient B and pharmacist B, plus the owner's own read",pass
+POST,/api/v1/pharmacy/decrement/{medicine_id},medicine_id,authenticated+require_role,PHARMACIST,,no,,not probed
+GET,/api/v1/pharmacy/expiring,,authenticated+require_role,PHARMACIST,,yes,isolation_matrix,pass
+PUT,/api/v1/pharmacy/fulfill/{prescription_id},prescription_id,authenticated+require_role,PHARMACIST,,yes,isolation_matrix axis 4b: cross-tenant dispense (documented residual),pass (see covered_by)
+POST,/api/v1/pharmacy/interactions/check,,authenticated,,,no,,not probed
+POST,/api/v1/pharmacy/items,,authenticated+require_role,PHARMACIST,,no,,not probed
+GET,/api/v1/pharmacy/me,,authenticated+require_role,PHARMACIST,,yes,isolation_matrix,pass
+GET,/api/v1/pharmacy/medicine-info,,authenticated,,,yes,isolation_matrix,pass
+GET,/api/v1/pharmacy/preorders,,authenticated+require_role,PHARMACIST,,yes,isolation_matrix,pass
+POST,/api/v1/pharmacy/preorders,,authenticated+rate_limited+require_role,PATIENT,preorder:20/300s,yes,isolation_matrix,pass
+GET,/api/v1/pharmacy/preorders/mine,,authenticated+require_role,PATIENT,,yes,isolation_matrix,pass
+PUT,/api/v1/pharmacy/preorders/{preorder_id}/fulfill,preorder_id,authenticated+require_role,PHARMACIST,,no,isolation_matrix,pass
+GET,/api/v1/pharmacy/queue,,authenticated+require_role,PHARMACIST,,yes,isolation_matrix,pass
+POST,/api/v1/pharmacy/recalls,,authenticated+require_role,ADMIN,,no,,not probed
+GET,/api/v1/pharmacy/recalls/affecting-me,,authenticated+require_role,PATIENT,,yes,isolation_matrix,pass
+GET,/api/v1/pharmacy/recalls/mine,,authenticated+require_role,PHARMACIST,,yes,isolation_matrix,pass
+POST,/api/v1/pharmacy/register,,authenticated+require_role,PHARMACIST,,no,,not probed
+GET,/api/v1/pharmacy/search,,authenticated,,,yes,isolation_matrix,pass
+POST,/api/v1/pharmacy/set_stock/{medicine_id},medicine_id,authenticated+require_role,PHARMACIST,,no,,not probed
+GET,/api/v1/pharmacy/stock,,authenticated+require_role,PHARMACIST,,yes,isolation_matrix,pass
+GET,/api/v1/pharmacy/substitutes,,authenticated,,,yes,isolation_matrix,pass
+POST,/api/v1/pharmacy/update_stock/{medicine_id},medicine_id,authenticated+require_role,PHARMACIST,,no,,not probed
+GET,/api/v1/preventive/reminders,,authenticated+require_role,PATIENT,,yes,isolation_matrix,pass
+POST,/api/v1/referrals,,authenticated+require_approved_doctor,DOCTOR|DOCTOR(APPROVED),,no,,not probed
+POST,/api/v1/referrals/,,authenticated+require_approved_doctor,DOCTOR|DOCTOR(APPROVED),,no,,not probed
+GET,/api/v1/referrals/incoming,,authenticated+require_approved_doctor,DOCTOR|DOCTOR(APPROVED),,yes,isolation_matrix,pass
+GET,/api/v1/referrals/mine,,authenticated+require_role,PATIENT,,yes,isolation_matrix,pass
+GET,/api/v1/referrals/sent,,authenticated+require_approved_doctor,DOCTOR|DOCTOR(APPROVED),,yes,isolation_matrix,pass
+PUT,/api/v1/referrals/{referral_id}/accept,referral_id,authenticated+require_approved_doctor,DOCTOR|DOCTOR(APPROVED),,no,isolation_matrix,pass
+PUT,/api/v1/referrals/{referral_id}/complete,referral_id,authenticated+require_approved_doctor,DOCTOR|DOCTOR(APPROVED),,no,isolation_matrix,pass
+PUT,/api/v1/referrals/{referral_id}/decline,referral_id,authenticated+require_approved_doctor,DOCTOR|DOCTOR(APPROVED),,no,isolation_matrix,pass
+GET,/api/v1/sos/active,,authenticated+require_approved_doctor,DOCTOR|DOCTOR(APPROVED)|HOSPITAL,,yes,isolation_matrix,pass
+GET,/api/v1/sos/contacts,,authenticated,,,yes,isolation_matrix,pass
+POST,/api/v1/sos/contacts,,authenticated,,,yes,isolation_matrix,pass
+DELETE,/api/v1/sos/contacts/{contact_id},contact_id,authenticated,,,no,isolation_matrix,pass
+GET,/api/v1/sos/mine,,authenticated,,,yes,isolation_matrix,pass
+GET,/api/v1/sos/track/{token},token,rate_limited,,sos_track:120/300s,yes,"phase2_tokens_and_gaps: entropy, rate limit, scope, namespace, post-resolution redaction, grace-window expiry",pass (see covered_by)
+POST,/api/v1/sos/trigger,,authenticated+rate_limited+require_role,PATIENT,sos_trigger:3/60s,no,,not probed
+PUT,/api/v1/sos/{sos_id}/resolve,sos_id,authenticated,,,no,isolation_matrix,pass
+PUT,/api/v1/sos/{sos_id}/respond,sos_id,authenticated+require_approved_doctor,DOCTOR|DOCTOR(APPROVED)|HOSPITAL,,no,isolation_matrix,pass
+POST,/api/v1/sos/{sos_id}/voice,sos_id,authenticated+require_role,PATIENT,,no,isolation_matrix,pass
+POST,/api/v1/triage/analyze,,optional_auth+rate_limited,,triage:20/300s,yes,"isolation_matrix axis 4b + phase2_postgres_validation P4: cross-tenant family_profile_id write rejected, no orphan row",pass (see covered_by)
+POST,/api/v1/triage/ocr,,authenticated+rate_limited,,ocr:10/300s,no,,not probed

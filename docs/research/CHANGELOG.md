@@ -31,3 +31,42 @@ module packages; 144 routed endpoints; 33/33 live demo-path checks.
 Still to do in Phase 1: full systematic literature review (25-40 works across
 the ten topic areas; a CRDT search is mandatory). Read ContinuityBench
 (arXiv 2607.15899) before any novelty claim about AI failover.
+
+## 2026-11-20 — Experiment G Phase 2: coverage, PostgreSQL, closure
+
+**Manuscript: still NOT MODIFIED.** Rewriting begins in Phase 3.
+
+Closed the nine unprobed path-parameter endpoints, validated on PostgreSQL 15,
+completed the regression run, and classified the experiment **B — complete with
+documented limitations**.
+
+Five findings new to this experiment, all fixed:
+- `GET /ehr/records` — every patient's wallet to any approved doctor, unaudited
+- `POST /triage/analyze` — a clinical record writable onto another household's
+  family profile
+- `GET /sos/track/{token}` — the SMSed emergency link served patient name, GPS
+  and the audio recording indefinitely after resolution
+- `GET /files/{token}` — no rate limit
+- `GET /assist/patient-summary/{id}` — AI clinical summary of any patient with
+  no audit row
+
+A sixth, G-12, was **introduced by this experiment's own remediations**: the new
+ownership filters select on two unindexed columns, so the emergency-desk poll
+became a sequential scan. Found only by the PostgreSQL run. Fixed by migration
+`d1f7c3b9e205`, which **still needs applying to production by hand** — Alembic
+does not run on deploy here.
+
+Also measured for the first time: the idempotent-sync race under ten concurrent
+identical batches on PostgreSQL — exactly 25 rows, duplicate rate 0.0000. That
+is the first real evidence behind the project's headline offline-sync claim, and
+Experiment A can build on it.
+
+Added `research/experiments/exp_g/`: six reports, two consolidated CSVs
+(534 probe rows, 135-endpoint inventory), per-run raw output with SHA, engine
+and version records, and six scripts.
+
+Project test suite after all remediations: 245 passed, 0 failed. No regressions.
+
+Remaining limitation: 63 of 135 endpoints — all writes — are unprobed. Every
+read path was probed. Nothing has been reproduced by an independent party, which
+is why the classification is B and not A.

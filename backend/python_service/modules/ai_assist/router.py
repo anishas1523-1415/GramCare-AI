@@ -206,6 +206,22 @@ async def patient_summary(
     except Exception as e:  # graceful degradation
         logger.warning("AI summary upgrade failed, using rules summary: %s", e)
 
+    # GET /ehr/patient/{id} records an audit row for every read of a
+    # patient's wallet; this endpoint returns a derived clinical summary of
+    # the same data — active medicines, recent conditions, latest vitals,
+    # allergies — and recorded nothing at all. Any approved doctor can read
+    # any patient here, which is a deliberate policy (see the same decision
+    # on /ehr/patient/{id}), so the mitigation that policy depends on is the
+    # trail. Found by the cross-tenant isolation matrix.
+    db.add(models.AuditLog(
+        user_id=current_user.id,
+        action="READ",
+        resource="PatientSummary",
+        resource_id=str(patient_id),
+        details={"patient_id": patient_id, "via": "ai_assist.patient_summary"},
+    ))
+    db.commit()
+
     return PatientSummary(
         patient_id=patient_id,
         patient_name=name,

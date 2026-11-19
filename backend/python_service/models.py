@@ -262,7 +262,10 @@ class Prescription(Base):
     appointment_id = Column(Integer, ForeignKey("appointments.id"), nullable=True)
     patient_id = Column(Integer, ForeignKey("users.id"), index=True)
     family_profile_id = Column(Integer, ForeignKey("family_profiles.id"), nullable=True)
-    doctor_id = Column(Integer, ForeignKey("users.id"))
+    # index: the /ehr/records scoping filter added by the G-6 remediation
+    # selects prescriptions by doctor, and Experiment G's PostgreSQL run found
+    # this column unindexed — the scoped query was a sequential scan.
+    doctor_id = Column(Integer, ForeignKey("users.id"), index=True)
     medicines = Column(JSON)  # list of {name, dosage, frequency, duration}
     dosage_instructions = Column(Text, nullable=True)
     diagnosis = Column(String, nullable=True)
@@ -317,7 +320,11 @@ class EmergencySOS(Base):
     # Escalation chain (planning doc: if the first hospital doesn't respond,
     # the alert moves to the next-nearest one).
     escalation_level = Column(Integer, default=0)
-    assigned_hospital_id = Column(Integer, ForeignKey("hospitals.id"), nullable=True)
+    # index: GET /sos/active filters on this on every emergency-desk poll
+    # after the G-1 remediation. Found unindexed by Experiment G's PostgreSQL
+    # run — a sequential scan on the one endpoint that must never be slow.
+    assigned_hospital_id = Column(Integer, ForeignKey("hospitals.id"),
+                                  nullable=True, index=True)
     created_at = Column(DateTime, default=_utcnow)
     # Escalation clock, kept separate so the true creation time is never
     # overwritten (preserves the medical-audit trail).

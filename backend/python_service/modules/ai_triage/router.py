@@ -328,6 +328,25 @@ async def analyze_symptoms(
     - Enforces strict medical disclaimer
     - Persists every analysis to TriageLog (attributed when authenticated)
     """
+    # A family_profile_id was accepted and persisted without checking who
+    # owns it, so an authenticated patient could attach a triage assessment
+    # to another household's family member — writing a clinical record onto
+    # a profile they have no relationship with. Found by the cross-tenant
+    # isolation matrix (research/experiments/exp_g).
+    if request.family_profile_id is not None and current_user is not None:
+        owns = (
+            db.query(models.FamilyProfile.id)
+            .filter(
+                models.FamilyProfile.id == request.family_profile_id,
+                models.FamilyProfile.user_id == current_user.id,
+            )
+            .first()
+        )
+        if not owns:
+            raise HTTPException(
+                status_code=403,
+                detail="That family member does not belong to your account.",
+            )
     return await run_triage_analysis(
         db,
         current_user,

@@ -1,0 +1,37 @@
+part,label,expected,observed,verdict,note
+P1,unique index on ehr_records.client_uuid (idempotent offline sync depends on it),unique index present,yes,pass,
+P1,unique index on users.passport_token (capability token must be unique),unique index present,yes,pass,
+P1,unique index on users.username (identity),unique index present,yes,pass,
+P1,unique index on users.email (identity),unique index present,yes,pass,
+P1,unique index on stored_files.token (capability token must be unique),unique index present,yes,pass,
+P1,unique index on emergency_sos.public_token (capability token must be unique),unique index present,yes,pass,
+P1,PostgreSQL rejects a duplicate ehr_records.client_uuid,IntegrityError,rejected,pass,the idempotency guarantee is enforced by the database
+P2,10 concurrent identical batches of 25 records,no 5xx,0 server error(s),pass,statuses=['200']
+P2,rows written for a batch sent 10 times concurrently,exactly 25,25,pass,duplicate rate = 0.0000
+P2,distinct client_uuids,25,25,pass,
+P3,cross-tenant reads during concurrent writes (36 reads),no canary,0 leak(s),pass,
+P3,server errors during the concurrent run,0,0,pass,
+P3,writer thread errors,0,0,pass,
+P4,denied cross-tenant triage leaves no TriageLog row,403 and 0 new rows for that profile,403 / 0 row(s),pass,
+P4,denied patient-to-patient wallet read,403,403,pass,
+P4,no audit row written for the denied read,0 new rows,0,pass,a denial is not a read
+P4,permitted doctor wallet read is audited,>=1 new row,1,pass,the break-glass policy depends on this trail
+P4,AI patient summary is audited (G-8 remediation),>=1 new row,1,pass,status=200
+P5,related doctor sees the patient's records,200 with canary,200 / canary,pass,
+P5,unrelated doctor sees none of them,200 without canary,200 / clean,pass,
+P5,pagination skip=0 limit=1,"200, <= limit rows",200 / 1 rows,pass,
+P5,pagination skip=0 limit=50,"200, <= limit rows",200 / 31 rows,pass,
+P5,pagination skip=0 limit=200,"200, <= limit rows",200 / 31 rows,pass,
+P5,pagination skip=3 limit=7,"200, <= limit rows",200 / 7 rows,pass,
+P5,pagination skip=10000 limit=5,"200, <= limit rows",200 / 0 rows,pass,
+P5,rejects out-of-range limit=0,422,422,pass,
+P5,rejects out-of-range limit=201,422,422,pass,
+P5,rejects out-of-range skip=-1,422,422,pass,
+P6,index covering ehr_records.patient_id,present,yes,pass,scoping filter would otherwise be a sequential scan
+P6,index covering prescriptions.patient_id,present,yes,pass,scoping filter would otherwise be a sequential scan
+P6,index covering prescriptions.doctor_id,present,yes,pass,scoping filter would otherwise be a sequential scan
+P6,index covering emergency_sos.assigned_hospital_id,present,yes,pass,scoping filter would otherwise be a sequential scan
+P6,index covering medicine_preorders.pharmacy_id,present,yes,pass,scoping filter would otherwise be a sequential scan
+P6,index covering medicine_preorders.patient_id,present,yes,pass,scoping filter would otherwise be a sequential scan
+P6,index covering hospitals.owner_user_id,present,yes,pass,scoping filter would otherwise be a sequential scan
+P6,index covering pharmacies.owner_user_id,present,yes,pass,scoping filter would otherwise be a sequential scan

@@ -1,0 +1,49 @@
+part,label,expected,status,verdict,note,excerpt
+A,DELETE /doctors/me/slots/{A's slot} as doctor B,403/404,404,pass,,"{""detail"":""Slot not found""}"
+A,DELETE /doctors/me/slots/{A's slot} as patient B,403/404,403,pass,,"{""detail"":""Not enough permissions""}"
+A,DELETE /doctors/me/slots/{own slot} as doctor A (must still work),204,204,pass,,
+A,DELETE /auth/sessions/{A's session} as patient B,403/404,404,pass,,"{""detail"":""Session not found""}"
+A,DELETE /auth/sessions/{A's session} as doctor B,403/404,404,pass,,"{""detail"":""Session not found""}"
+A,DELETE /auth/government-whitelist/{id} as patient B,403,403,pass,,"{""detail"":""Admin accounts only.""}"
+A,DELETE /auth/government-whitelist/{id} as doctor B,403,403,pass,,"{""detail"":""Admin accounts only.""}"
+A,DELETE /auth/government-whitelist/{id} as admin (must still work),200/204,200,pass,,"{""message"":""Whitelist entry removed.""}"
+A,GET /payments/{A's order}/status as patient B,403/404,403,pass,,"{""detail"":""Not your payment order.""}"
+A,GET /payments/{A's order}/status as pharmacist B,403/404,403,pass,,"{""detail"":""Not your payment order.""}"
+A,GET /payments/{own order}/status as patient A (must still work),200,200,pass,,"{""id"":1,""order_id"":""order_a23bf7056b724a"",""patient_id"":1,""amount"":150.0,""currency"":""INR"",""status"":""CREATED"",""gateway"":""mock"",""created_at"":""2026-11-19T18:42:37.140285Z""}"
+A,POST /payments/refund/{A's order} as patient B,403/404,403,pass,,"{""detail"":""Not authorized to refund this payment.""}"
+A,POST /payments/refund/{A's order} as patient A (self-refund),400/403/404/409,400,pass,(a patient must not be able to refund themselves at will),"{""detail"":""Payment not refundable (status CREATED).""}"
+A,PUT /appointments/{A's appt} as patient B,403/404,403,pass,,"{""detail"":""Not your appointment.""}"
+A,PUT /appointments/{A's appt} as doctor B (not the treating doctor),403/404,403,pass,,"{""detail"":""Not authorized to update this appointment.""}"
+A,PUT /appointments/{A's appt} as doctor A (must still work),200,200,pass,,"{""id"":1,""patient_id"":1,""family_profile_id"":null,""doctor_id"":3,""scheduled_at"":""2026-11-21T18:42:37.227649Z"",""status"":""COMPLETED"",""triage_summary"":""CANARYALPHA booking"",""triage_severity_score"":null,""con"
+B,"entropy /sos/track (len=32, distinct chars=24, generator=secrets.token_urlsafe(24))",>=128 bits,192 bits,pass,cryptographically unguessable,
+B,"entropy /passport (len=32, distinct chars=28, generator=secrets.token_urlsafe(24))",>=128 bits,192 bits,pass,cryptographically unguessable,
+B,"entropy /files (len=32, distinct chars=27, generator=secrets.token_urlsafe(24))",>=128 bits,192 bits,pass,cryptographically unguessable,
+B,rate limit on /sos/track/{bad token},429 within 140 attempts,429@121,pass,throttled,
+B,rate limit on /passport/{bad token},429 within 140 attempts,429@21,pass,throttled,
+B,rate limit on /files/{bad token},429 within 140 attempts,429@121,pass,throttled,
+B,"/sos/track discloses: created_at,distance_km,escalation_level,eta_is_estimate,eta_minutes,hospital_lat,hospital_lng,hospit",minimal,200,pass,voice_audio_url present,
+B,/sos/track on an ACTIVE alert discloses voice note + recording,deliberate per schema,200,pass,"INTENDED - flagged for author review, scope exceeds the schema's own minimality claim","{""patient_name"":""DIRNAMEALPHA PATIENT"",""status"":""ACTIVE"",""severity"":""CRITICAL"",""location_lat"":11.0,""location_lng"":77.0,""location_text"":""CANARYALPHA village"",""voice_note"":""CANARYALPHA collapsed"",""voice"
+B,"/passport discloses: allergies,blood_group,chronic_conditions,emergency_contacts,full_name,recent_medicines",minimal + emergency-relevant,200,pass,,"{""full_name"":""DIRNAMEALPHA PATIENT"",""blood_group"":null,""allergies"":null,""chronic_conditions"":null,""emergency_contacts"":[],""recent_medicines"":[]}"
+B,/sos/track/{/passport's token},404,404,pass,must not resolve across namespaces,"{""detail"":""This tracking link is not valid.""}"
+B,/sos/track/{/files's token},404,404,pass,must not resolve across namespaces,"{""detail"":""This tracking link is not valid.""}"
+B,/passport/{/sos/track's token},404,404,pass,must not resolve across namespaces,"{""detail"":""Passport not found.""}"
+B,/passport/{/files's token},404,404,pass,must not resolve across namespaces,"{""detail"":""Passport not found.""}"
+B,/files/{/sos/track's token},404,404,pass,must not resolve across namespaces,"{""detail"":""File not found.""}"
+B,/files/{/passport's token},404,404,pass,must not resolve across namespaces,"{""detail"":""File not found.""}"
+B,old passport token after rotate,404,404,pass,rotation must invalidate the old link,"{""detail"":""Passport not found.""}"
+B,new passport token after rotate (must work),200,200,pass,,"{""full_name"":""DIRNAMEALPHA PATIENT"",""blood_group"":null,""allergies"":null,""chronic_conditions"":null,""emergency_contacts"":[],""recent_medicines"":[]}"
+B,/sos/track inside the grace window after RESOLVED is redacted,no location/voice fields,200,pass,location and voice withheld; status still visible,"{""patient_name"":""DIRNAMEALPHA PATIENT"",""status"":""RESOLVED"",""severity"":""CRITICAL"",""location_lat"":null,""location_lng"":null,""location_text"":null,""voice_note"":null,""voice_audio_url"":null,""hospital_name"":"""
+B,  and the clinical canary is gone from the body,absent,200,pass,,"{""patient_name"":""DIRNAMEALPHA PATIENT"",""status"":""RESOLVED"",""severity"":""CRITICAL"",""location_lat"":null,""location_lng"":null,""location_text"":null,""voice_note"":null,""voice_audio_url"":null,""hospital_name"":"""
+B,/sos/track past the grace window,404,404,pass,an SMSed link must not live forever,"{""detail"":""This tracking link has expired. The emergency was resolved.""}"
+C,forged payment.captured with NO signature header,400/503,400,pass,must not mark the order PAID,"{""detail"":""Missing X-Razorpay-Signature header.""}"
+C,  order status unchanged after the unsigned attempt,CREATED,CREATED,pass,,
+C,forged payment.captured with a WRONG signature,400/503,400,pass,must not mark the order PAID,"{""detail"":""Invalid webhook signature.""}"
+C,  order status unchanged after the bad-signature attempt,CREATED,CREATED,pass,,
+C,correctly signed payment.captured IS honoured,PAID,PAID (http 200),pass,"the signature is the control, and it works in both directions",
+C,replaying the signed event is idempotent,"PAID, http < 500",PAID (http 200),pass,,
+D,bad token /files,no internals,404,pass,clean,"{""detail"":""File not found.""}"
+D,bad token /passport,no internals,404,pass,clean,"{""detail"":""Passport not found.""}"
+D,bad token /sos/track,no internals,404,pass,clean,"{""detail"":""This tracking link is not valid.""}"
+D,malformed id /payments/status,no internals,404,pass,clean,"{""detail"":""Unknown order id.""}"
+D,negative id /appointments,no internals,404,pass,clean,"{""detail"":""Appointment not found.""}"
+D,huge id /ehr/patient,no internals,200,pass,clean,[]

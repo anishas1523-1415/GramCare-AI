@@ -13,13 +13,22 @@ the store cannot be enumerated.
 from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.orm import Session
 
+from core.ratelimit import rate_limit
 from database import get_db
 import models
 
 router = APIRouter()
 
 
-@router.get("/{token}")
+@router.get(
+    "/{token}",
+    # Experiment G found this endpoint unthrottled, unlike the health-passport
+    # view it is modelled on. The 192-bit token is what makes the store
+    # unenumerable; this caps how fast it can be hammered, and how fast a
+    # leaked token can be scraped. Generous, because a single page may embed
+    # several of these (a profile photo, a licence scan, an OCR source).
+    dependencies=[Depends(rate_limit("file_fetch", 120, 60))],
+)
 def get_file(token: str, db: Session = Depends(get_db)):
     stored = db.query(models.StoredFile).filter(models.StoredFile.token == token).first()
     if not stored:
