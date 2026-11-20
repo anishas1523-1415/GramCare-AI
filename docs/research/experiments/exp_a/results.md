@@ -288,12 +288,12 @@ contribution than the unqualified claim it currently makes.
 
 ## 6. Limitations
 
-1. **The client is a reimplementation.** `ClientSim` mirrors
-   `sync_service.dart` line by line — unchunked whole-queue push, acknowledgement
-   on `synced ∪ duplicates`, no retry accounting, `pullRemote` skip-if-cached —
-   but it is Python, not the shipped Dart. Divergence is possible. The server-side
-   findings (F-A2, F-A3, F-A4) do not depend on it; **F-A1 does**, and should be
-   confirmed on a device before publication.
+1. **The client is a reimplementation — except for F-A1, which was confirmed on
+   real hardware.** `ClientSim` mirrors `sync_service.dart` closely but is
+   Python, so divergence is possible in principle. The server-side findings
+   (F-A2, F-A3, F-A4) do not depend on it. **F-A1 was the one that did, and it
+   has since been verified on a device** — see §8. F-A5 and F-A6 are still
+   reimplementation-only and are the remaining exposure.
 2. **In-process ASGI.** No TLS, no proxy, no real network. Latency figures are
    server-side processing only.
 3. **Fault injection is at the session boundary.** "Connection dies before
@@ -374,3 +374,87 @@ data problem rather than half-applying.
 
 Full backend suite after all six fixes, and the scenario and metrics harnesses
 re-run from clean databases. Results in §2 and §3.
+
+---
+
+## 8. On-device verification of F-A1
+
+The queue-ceiling finding was the one result that depended on the Python
+reimplementation of the client, so it was re-tested against the **real Dart
+code on real hardware**: the real encrypted Hive box, the real `SyncService`,
+the real Dio client and its interceptors.
+
+| | |
+|---|---|
+| Device | Motorola Edge 70 (`ZD222W9GN6`), Android 17 (API 37), arm64 |
+| Build | debug APK via `flutter test integration_test/` |
+| Test | `mobile/patient_app/integration_test/offline_queue_test.dart` |
+| Backend | local FastAPI on the development machine, reached from the handset through `adb reverse tcp:8010` |
+| Database | isolated PostgreSQL 15 container, table truncated for a clean baseline |
+| Data | 150 synthetic records, all synthetic accounts. **No production write.** |
+
+### Result — all three tests passed
+
+```
+[exp-a] backlog=150  still_queued=0  marked_synced=150  elapsed_ms=1087
+[exp-a] server-side rows for this run: 150
+[exp-a] 101-record single request -> HTTP 422
+All tests passed!
+```
+
+Independently confirmed by querying the database directly rather than trusting
+the test's own assertion:
+
+| Check | Value |
+|---|---|
+| rows persisted | **150** |
+| distinct `client_uuid` | **150** |
+| **duplicates** | **0** |
+| distinct patients | 1 |
+| records from this run | 150 of 150 |
+| `record_date` span | 07:40:42 → 10:09:43 — the backdating survived, confirming F-A4 bounds only the future |
+
+### What this establishes
+
+- **A 150-record backlog drains completely on a real handset, in 1087 ms.**
+  Before the fix the same queue produced HTTP 422 on every attempt with nothing
+  persisted, forever.
+- **The fix is the client's chunking, not a relaxed server cap.** The third test
+  sends 101 records in a *single* request from the same device and still gets
+  **422**. Since 150 records nonetheless persisted, the client must have issued
+  more than one request — which is the chunking doing its job.
+- **An HTTP 200 was not accepted as proof.** The count came back from the
+  database.
+- Re-pushing a drained queue is a no-op, so the acknowledgement bookkeeping
+  holds on the device too.
+
+### Two changes this required, both debug-only
+
+Recorded because they touch shipped files:
+
+- `ApiService.baseUrl` now reads `String.fromEnvironment('GRAMCARE_API_BASE')`
+  with the production URL as its default, so a normal build is byte-identical in
+  behaviour and only a `--dart-define` at compile time can point it elsewhere.
+  This is what let the test drive a local backend instead of writing 150
+  synthetic clinical records into production.
+- `android/app/src/debug/AndroidManifest.xml` permits cleartext HTTP. It lives
+  in `src/debug/`, so it is merged into debug APKs and **never** into a release
+  one; a release build still refuses cleartext. Needed because Android blocks
+  cleartext from API 28 onwards, loopback included.
+
+### Honest notes from the run
+
+- The first two attempts failed on my own test code, not the product: the
+  verification step called `GET /ehr/records`, which is scoped to approved
+  doctors and admins (Experiment G, finding G-6), so a patient token correctly
+  got a 403; and the server-side count read a single 200-row page while an
+  earlier run's records were still in the table. Both fixed — the count now
+  pages through, and the table is truncated for a clean baseline.
+- Two further attempts failed on transport, not on the code: an `adb reverse`
+  tunnel goes stale across the install/uninstall cycle, and the host's LAN route
+  timed out on sustained POSTs while small GETs succeeded. Re-establishing the
+  tunnel immediately before the run gives a reproducible result; a 100-record
+  POST issued from the handset over a fresh tunnel completes in **0.245 s**.
+- **F-A5 and F-A6 have not been device-verified.** They are Dart changes still
+  resting on the Python reimplementation, and the same integration-test harness
+  is now in place to cover them.

@@ -11,9 +11,21 @@ class ApiService {
     return _instance;
   }
 
-  static String get baseUrl {
-    return 'https://gramcare-fastapi.onrender.com/api/v1';
-  }
+  /// The API root.
+  ///
+  /// Defaults to production, so a normal build is unchanged. An integration
+  /// test overrides it with
+  /// `--dart-define=GRAMCARE_API_BASE=http://localhost:8000/api/v1` so the
+  /// test drives a backend on the developer's machine (reached through
+  /// `adb reverse`) instead of writing synthetic records into production.
+  /// `String.fromEnvironment` is const-folded at compile time, so a release
+  /// build has no way to point this anywhere else at runtime.
+  static const String _envBase = String.fromEnvironment(
+    'GRAMCARE_API_BASE',
+    defaultValue: 'https://gramcare-fastapi.onrender.com/api/v1',
+  );
+
+  static String get baseUrl => _envBase;
 
   ApiService._internal() {
     _dio = Dio(
