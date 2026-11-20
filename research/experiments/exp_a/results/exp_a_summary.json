@@ -1,0 +1,40 @@
+{
+  "commit": "505799a1ff53aff30f680d1d64eb7120921b499d",
+  "started": "2026-11-20T03:04:07.521064+00:00",
+  "finished": "2026-11-20T03:04:26.609372+00:00",
+  "engine": "postgresql",
+  "db_version": "PostgreSQL 15.18 on x86_64-pc-linux-musl, compiled by gcc (Alpine 15.2.0) 15.2.0, 64-bit",
+  "default_transaction_isolation": "read committed",
+  "python": "3.14.2",
+  "sqlalchemy": "2.0.41",
+  "server_batch_cap": 100,
+  "concurrency_repeats": 10,
+  "scenarios": 46,
+  "PASSED": 37,
+  "FAILED": 6,
+  "INCONCLUSIVE": 0,
+  "NOT_APPLICABLE": 3,
+  "group_controls": {
+    "A": true,
+    "B": true,
+    "C": true,
+    "D": true,
+    "E": true,
+    "F": true,
+    "G": true
+  },
+  "failed": [
+    "A3c client with 150 queued records drains the queue",
+    "A4 record_date: now, +10 years, -10 years",
+    "E3 server-side change after the client has pulled",
+    "F4 7 days offline: 120 queued records reconnect",
+    "G4 queue contains 1 record for a DELETED profile",
+    "G5 B submits a client_uuid that A already used"
+  ],
+  "inconclusive": [],
+  "not_applicable": [
+    "A6b payload survives the OFFLINE queue path",
+    "E1 local update vs server update of one record",
+    "F5 local durability across a process restart"
+  ]
+}

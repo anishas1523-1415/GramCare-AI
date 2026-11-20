@@ -1,0 +1,47 @@
+group,scenario,title,expected,observed,verdict,submitted,persisted,unique_persisted,duplicates,missing,unexpected,overwritten,cross_tenant,note
+A,A0,"CONTROL: one record, stable connection","1 persisted, clean",http 200,PASSED,1,1,1,0,0,0,0,0,control for group A
+A,A1,1 record,"1 persisted, clean",http 200,PASSED,1,1,1,0,0,0,0,0,
+A,A2,10 records in one batch,"10 persisted, clean",http 200,PASSED,10,10,10,0,0,0,0,0,
+A,A3,100 records (the schema cap),"100 persisted, clean",http 200,PASSED,100,100,100,0,0,0,0,0,
+A,A3b,101 records (one over the cap),422 and 0 persisted,"http 422, persisted=0",PASSED,101,0,0,0,101,0,0,0,server correctly enforces its cap
+A,A3c,client with 150 queued records drains the queue,queue drains to 0,150 still queued after 5 attempts (last http 422),FAILED,150,0,0,0,150,0,0,0,"DEADLOCK: pushUnsynced sends the whole queue in one request with no chunking, so a queue over the cap can never drain"
+A,A4,"record_date: now, +10 years, -10 years",implausible dates rejected or clamped,"http 200, all 3 accepted as sent",FAILED,3,3,3,0,0,0,0,0,"no bound, no sanity check against created_at; wallet orders by record_date desc so a skewed device clock reorders the wallet"
+A,A5,one record of each of the 6 types,"6 persisted, types preserved","http 200, 6 persisted, types_preserved=True",PASSED,6,6,6,0,0,0,0,0,
+A,A6,payload accepted by the API contract,payload stored,"http 200, payload={'image_url': 'https://example.invalid/scan.png', 'medicines': ['X']}",PASSED,1,1,1,0,0,0,0,0,"API stores it - but the Hive model has no payload field and pushUnsynced never sends one, so this is unreachable from the offline queue (audit A6)"
+A,A6b,payload survives the OFFLINE queue path,payload stored,the local model has no payload field,NOT_APPLICABLE,,,,,,,,,HealthRecord (health_record.dart:12-60) has no payload field; sync_service.dart:74-82 does not send one. Silent field-level loss on the offline path.
+B,B0,CONTROL: 5 records persist cleanly once,"5 persisted, clean",persisted=5,PASSED,5,5,5,0,0,0,0,0,control for group B
+B,B1,identical batch submitted twice,"10 reported duplicate, 10 rows","http 200, duplicates_reported=10",PASSED,10,10,10,0,0,0,0,0,
+B,B2,same UUID submitted 5 times sequentially,1 row,persisted=1,PASSED,1,1,1,0,0,0,0,0,
+B,B3,retry after the ack was lost (client never marked synced),"8 rows, all acknowledged as duplicates on retry","http 200, still_queued=0",PASSED,8,8,8,0,0,0,0,0,this is the case the whole idempotency design exists for
+B,B4,restarted client resubmits records already on the server,"6 rows, queue drains",still_queued=0,PASSED,6,6,6,0,0,0,0,0,
+B,B5,same UUIDs resubmitted with different content,rows unchanged (first write wins),"http 200, overwritten=0",PASSED,5,5,5,0,0,0,0,0,"documented as first-write-wins; there is no update path, so this is not conflict resolution"
+C,C0,CONTROL: 3 records persist on a stable connection,3 persisted,persisted=3,PASSED,3,3,3,0,0,0,0,0,control for group C
+C,C1,"records queued, request never sent","0 persisted, 10 queued","persisted=0, queued=10",PASSED,10,0,0,0,10,0,0,0,
+C,C2,connection dies before the server commits,0 persisted,"http 500 (injected), persisted=0",PASSED,10,0,0,0,10,0,0,0,"commit failure injected at the session boundary; the 5xx is the injected fault, and the verdict is decided by persisted state"
+C,C4,reconnect and retry the aborted batch,"10 persisted, clean","http 200, persisted=10",PASSED,10,10,10,0,0,0,0,0,
+C,C3,"server commits, response lost, client retries","12 rows, no duplicate, queue drains","committed=12, after_retry=12, queued=0",PASSED,12,12,12,0,0,0,0,0,the scenario the idempotency design exists for
+C,C5,5 connect/abort cycles around one batch,exactly 10 rows after convergence,"persisted=10, attempts=2",PASSED,10,10,10,0,0,0,0,0,retries to convergence = 2
+D,D0,CONTROL: sequential batch before concurrency,4 persisted,persisted=4,PASSED,4,4,4,0,0,0,0,0,control for group D
+D,D1,10x concurrent identical 25-record batches (n=10),"exactly 25 rows every run, no 5xx","failed_runs=0/10, server_errors=0",PASSED,25,25,25,0,0,0,0,0,duplicate rate 0/10 batches
+D,D2,4 concurrent batches overlapping by 50% (n=10),exactly |union| rows,failed_runs=0/10,PASSED,30,30,30,0,0,0,0,0,
+D,D3,"2 concurrent batches, same UUID, different content (n=10)",exactly 1 row each run,failed_runs=0/10,PASSED,,,,,,,,,one of the two contents wins; which one is not specified by the design
+D,D4,8 concurrent resubmissions of one existing UUID,1 row,persisted=1,PASSED,1,1,1,0,0,0,0,0,
+D,D5,20 concurrent POST /ehr/record with the same UUID,"1 row, no 5xx","rows=1, server_errors=0",PASSED,,,,,,,,,"exercises the single-record IntegrityError branch, which D1 does not reach"
+E,E1,local update vs server update of one record,a conflict-resolution policy,no update path exists on either side,NOT_APPLICABLE,,,,,,,,,"no PUT/PATCH for EHRRecord, no version column, no updated_at. Records are append-only, so conflicts are avoided rather than resolved."
+E,E2,two offline entries for the same fact,"2 separate rows, neither overwritten","persisted=2, overwritten=0",PASSED,2,2,2,0,0,0,0,0,design cost: a wrong entry and its correction both persist with no link between them
+E,E3,server-side change after the client has pulled,local copy updated,local content='e3 content 0',FAILED,,,,,,,,,"pullRemote skips any srv-<id> already cached (sync_service.dart:116-117), so the local copy is permanently stale"
+E,E4,"two devices, same account, same UUIDs","5 rows, both devices converge","persisted=5, dev1_queued=0, dev2_queued=0",PASSED,5,5,5,0,0,0,0,0,
+E,E5,"two devices, different UUIDs for the same fact",2 rows (the system cannot tell they are the same),persisted=2,PASSED,2,2,2,0,0,0,0,0,"documented design cost, not a defect"
+F,F0,CONTROL: baseline batch,3 persisted,persisted=3,PASSED,3,3,3,0,0,0,0,0,control for group F
+F,F1,"sync killed mid-flight, client restarts, syncs again",exactly 20 rows,"persisted=20, queued=0",PASSED,20,20,20,0,0,0,0,0,
+F,F2,10 of 20 already committed but unacknowledged,"20 rows, first 10 returned as duplicates","persisted=20, queued=0",PASSED,20,20,20,0,0,0,0,0,
+F,F3,batch overlapping an already-committed slice,all 15 present exactly once,"http 200, persisted=15",PASSED,15,15,15,0,0,0,0,0,
+F,F4,7 days offline: 120 queued records reconnect,"queue drains, 120 rows","persisted=0, still_queued=120, last http 422",FAILED,120,0,0,0,120,0,0,0,real-world consequence of the un-chunked push against the 100 cap
+F,F5,local durability across a process restart,records survive in the encrypted box,requires a Flutter runtime,NOT_APPLICABLE,,,,,,,,,Hive durability and HiveAesCipher cannot be exercised from this harness; tested in mobile/patient_app/test/ instead
+G,G0,CONTROL: baseline batch,3 persisted,persisted=3,PASSED,3,3,3,0,0,0,0,0,control for group G
+G,G1,two patients each sync 10 records,each sees only their own,"A cross_tenant=0, B cross_tenant=0, A sees B's records=False",PASSED,10,10,10,0,0,0,0,0,
+G,G2,B submits a batch scoped to A's family profile,"403, nothing persisted","http 403, persisted=0",PASSED,5,0,0,0,5,0,0,0,
+G,G3,A submits scoped to A's own profile,5 persisted and scoped,"http 200, persisted=5, scoped=True",PASSED,5,5,5,0,0,0,0,0,
+G,G4,queue contains 1 record for a DELETED profile,valid records still sync,"http 404, valid_persisted=0 of 9",FAILED,10,0,0,0,10,0,0,0,"the ownership guard raises inside the per-item loop before the single commit, so one unresolvable record discards the entire batch - and the client cannot tell this from a transient failure, so the queue is blocked indefinitely"
+G,G5,B submits a client_uuid that A already used,"B's record stored, or B told it was rejected","rows=1, owners=[(1, 'PATIENT_A_CONTENT')], B_told_acknowledged=True, B_has_record=False",FAILED,,,,,,,,,"SILENT CROSS-TENANT RECORD LOSS: client_uuid is unique across the whole table, not per patient, and the pre-check filters on client_uuid alone with no patient_id. B is told the record synced and nothing is stored for B."
+G,G6,patient_id injected in the payload,ignored; rows belong to the token's owner,"http 200, cross_tenant=0",PASSED,3,3,3,0,0,0,0,0,patient_id is taken from current_user.id and the schema does not accept it from the client
