@@ -13,11 +13,20 @@
 //   * a 101-record single request is still refused by the server, so the fix
 //     is the client's chunking and not a loosened cap
 //
-// Run against a backend on the developer's machine, never production:
+// SAFETY: `flutter test integration_test/...` installs a debug APK, runs it,
+// and then UNINSTALLS it - which on Android deletes that app's data. The
+// debug build therefore carries applicationIdSuffix ".debug", so it installs
+// as com.gramcare.mobile_app.debug and can never replace or remove the
+// release app on a real phone. Do not run this with GRAMCARE_SAME_APP_ID=1.
 //
-//   adb reverse tcp:8000 tcp:8000
+// Run against a backend on the developer's machine, never production.
+// Re-create the reverse tunnel immediately before each run: it goes stale
+// across the install cycle, and the symptom is a connectionError from the
+// app while `adb shell curl` still works.
+//
+//   adb -s <device-id> reverse tcp:8010 tcp:8010
 //   flutter test integration_test/offline_queue_test.dart -d <device-id> \
-//     --dart-define=GRAMCARE_API_BASE=http://localhost:8000/api/v1 \
+//     --dart-define=GRAMCARE_API_BASE=http://localhost:8010/api/v1 \
 //     --dart-define=EXPA_USER=expa_device --dart-define=EXPA_PASS=strongpass123
 //
 // All data is synthetic.

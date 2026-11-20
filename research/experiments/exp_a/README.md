@@ -57,3 +57,27 @@ on the reported run.
 The first run of the scenario harness produced 20 spurious failures because the
 fixture `client_uuid` values were 7 characters and `EHRSyncItem` requires 8. That
 was a harness defect, not a product defect; the generator now asserts the length.
+
+## On-device verification (F-A1)
+
+`mobile/patient_app/integration_test/offline_queue_test.dart` re-tests the
+queue-ceiling finding against the real Dart code on real hardware. Result on a
+Motorola Edge 70 (Android 17):
+
+```
+[exp-a] backlog=150  still_queued=0  marked_synced=150  elapsed_ms=1087
+[exp-a] server-side rows for this run: 150
+[exp-a] 101-record single request -> HTTP 422
+```
+
+Confirmed by querying the database directly: 150 rows, 150 distinct
+`client_uuid`s, 0 duplicates. The third assertion is what makes the first one
+mean something - 101 records in a *single* request from the same device still
+get 422, so the 150 that persisted must have arrived across more than one
+request.
+
+**Safety.** Debug builds install as `com.gramcare.mobile_app.debug`
+(`applicationIdSuffix` in `android/app/build.gradle.kts`), because
+`flutter test integration_test/` installs over the existing app and then
+uninstalls it, which deletes its data. Run instructions and the Firebase caveat
+are in `mobile/patient_app/android/app/src/debug/README.md`.

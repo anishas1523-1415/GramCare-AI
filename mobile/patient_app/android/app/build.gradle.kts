@@ -80,6 +80,29 @@ android {
         release {
             signingConfig = signingConfigs.getByName("release")
         }
+        debug {
+            // A debug build installs under its OWN application id, so it can
+            // never replace or uninstall the release app on a real phone.
+            //
+            // This exists because `flutter test integration_test/...` builds a
+            // debug APK, installs it over whatever is already there, runs, and
+            // then UNINSTALLS it — which on Android deletes the app's private
+            // data. That is how a device test wiped the installed patient app
+            // and its encrypted health-wallet box.
+            //
+            // Set GRAMCARE_SAME_APP_ID=1 to opt out, which you need only when
+            // testing push on a debug build: Firebase registration is tied to
+            // the package name, so a suffixed debug build cannot receive FCM.
+            if (System.getenv("GRAMCARE_SAME_APP_ID") != "1") {
+                applicationIdSuffix = ".debug"
+                versionNameSuffix = "-debug"
+            } else {
+                logger.lifecycle(
+                    "GRAMCARE_SAME_APP_ID=1: this debug build uses the RELEASE " +
+                    "application id and will replace the installed app."
+                )
+            }
+        }
     }
 }
 
