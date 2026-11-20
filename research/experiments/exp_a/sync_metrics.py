@@ -182,8 +182,12 @@ def mk(username):
 
 class ClientSim:
     """Same reimplementation of sync_service.dart used by the scenario
-    harness: unchunked whole-queue push, ack on synced OR duplicates, no
-    retry accounting."""
+    harness, including the Experiment A fixes: the queue is sliced into
+    SYNC_BATCH_LIMIT-record requests (F-A1), records named in rejected[] stop
+    being retried without being claimed synced (F-A2), and acknowledgement is
+    on synced OR duplicates. Still no retry counter and no backoff."""
+
+    SYNC_BATCH_LIMIT = 100          # SyncService.syncBatchLimit
 
     def __init__(self, token):
         self.token = token
@@ -195,21 +199,33 @@ class ClientSim:
             self.queue.append(dict(r, synced=False))
 
     def unsynced(self):
-        return [r for r in self.queue if not r["synced"]]
+        return [r for r in self.queue
+                if not r["synced"] and not r.get("rejected")]
 
     def push(self):
         pending = self.unsynced()
         if not pending:
             return None, 0.0
         self.attempts += 1
-        payload = [{k: v for k, v in r.items() if k != "synced"} for r in pending]
-        st, body, dt = post_sync(self.token, payload)
-        if st == 200 and isinstance(body, dict):
-            ack = set(body.get("synced") or []) | set(body.get("duplicates") or [])
-            for r in pending:
+        st = None
+        total_dt = 0.0
+        for start in range(0, len(pending), self.SYNC_BATCH_LIMIT):
+            slice_ = pending[start:start + self.SYNC_BATCH_LIMIT]
+            payload = [{k: v for k, v in r.items()
+                        if k not in ("synced", "rejected")} for r in slice_]
+            st, body, dt = post_sync(self.token, payload)
+            total_dt += dt
+            if st != 200 or not isinstance(body, dict):
+                return st, total_dt
+            ack = (set(body.get("synced") or [])
+                   | set(body.get("duplicates") or []))
+            refused = {x["client_uuid"] for x in (body.get("rejected") or [])}
+            for r in slice_:
                 if r["client_uuid"] in ack:
                     r["synced"] = True
-        return st, dt
+                elif r["client_uuid"] in refused:
+                    r["rejected"] = True
+        return st, total_dt
 
     def drain(self, max_attempts=6):
         total_ms = 0.0
@@ -441,7 +457,7 @@ emit("M10b", "server errors under concurrency",
 
 # ------------------------------------------- M11: the deadlock, quantified
 log("")
-log("M11 - queue-depth ceiling (the deadlock found in Phase 3)")
+log("M11 - queue depth: the ceiling found in Phase 3, after the chunking fix")
 depths = [50, 90, 100, 101, 120, 150, 300]
 ceiling_rows = []
 for d in depths:
@@ -457,11 +473,12 @@ for d in depths:
 max_ok = max([d for d, ok, _, _ in ceiling_rows if ok], default=0)
 min_bad = min([d for d, ok, _, _ in ceiling_rows if not ok], default=None)
 emit("M11", "maximum drainable queue depth",
-     "largest tested queue depth the shipped client algorithm can fully "
-     "synchronise; above it every attempt is rejected 422 and the queue "
-     "cannot drain",
+     "largest tested queue depth the client algorithm can fully synchronise. "
+     "Before the chunking fix this was exactly 100, the server's list cap, "
+     "and every larger depth persisted nothing on every attempt",
      value=str(max_ok), unit="records", n=len(depths),
-     note="first failing depth tested: %s" % min_bad)
+     note=("no ceiling within the tested range"
+           if min_bad is None else "first failing depth tested: %s" % min_bad))
 emit("M11b", "queue depths that deadlock",
      "tested depths where the queue never drained, over depths tested",
      sum(1 for _, ok, _, _ in ceiling_rows if not ok), len(depths),
@@ -496,9 +513,10 @@ emit("M12", "silent cross-tenant record-loss rate",
      "trials where patient B submitted a client_uuid already used by patient "
      "A, B was told the record synced, and no row exists for B, over trials",
      m12_loss, REPS, n=REPS,
-     note="client_uuid is UNIQUE across the whole table rather than per "
-          "patient, and the pre-check filters on client_uuid with no "
-          "patient_id predicate")
+     note="before the fix this was 30/30: client_uuid was UNIQUE across the "
+          "whole table and the pre-check had no patient_id predicate. "
+          "Uniqueness is now scoped to (patient_id, client_uuid) and both "
+          "predicates include the caller")
 
 # ------------------------------------------------------------------- output
 FINISHED = datetime.now(timezone.utc).isoformat()

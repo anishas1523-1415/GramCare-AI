@@ -375,9 +375,24 @@ class EHRSyncItem(EHRRecordCreate):
 class EHRSyncRequest(BaseModel):
     records: List[EHRSyncItem] = Field(..., max_length=100)
 
+class EHRSyncRejection(BaseModel):
+    """One queued record the server will never accept, and why."""
+    client_uuid: str
+    reason: str
+
+
 class EHRSyncResult(BaseModel):
     synced: List[str]      # client_uuids newly stored
     duplicates: List[str]  # client_uuids already present (safe no-ops)
+    # Records the server permanently refuses — e.g. scoped to a family profile
+    # that has since been deleted. Experiment A (finding F-A2) measured the
+    # cost of not having this: the ownership guard raised mid-batch, the whole
+    # transaction was discarded, and the client could not tell a permanent
+    # rejection from a transient failure, so it retried the same batch
+    # forever. One stale record blocked 9 valid ones indefinitely.
+    #
+    # A client must stop retrying these and must NOT mark them synced.
+    rejected: List[EHRSyncRejection] = []
 
 # ==========================================
 # Payment Schemas

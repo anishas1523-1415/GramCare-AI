@@ -29,13 +29,19 @@ class HealthRecordAdapter extends TypeAdapter<HealthRecord> {
       doctorName: fields[7] as String?,
       clientUuid: fields[8] as String?,
       synced: fields[9] as bool? ?? false,
+      // Added after the 10-field version. Absent in older boxes, so both
+      // read as their defaults rather than throwing.
+      payload: fields[10] == null
+          ? null
+          : Map<String, dynamic>.from(fields[10] as Map),
+      syncRejected: fields[11] as bool? ?? false,
     );
   }
 
   @override
   void write(BinaryWriter writer, HealthRecord obj) {
     writer
-      ..writeByte(10)
+      ..writeByte(12)
       ..writeByte(0)
       ..write(obj.patientName)
       ..writeByte(1)
@@ -55,7 +61,11 @@ class HealthRecordAdapter extends TypeAdapter<HealthRecord> {
       ..writeByte(8)
       ..write(obj.clientUuid)
       ..writeByte(9)
-      ..write(obj.synced);
+      ..write(obj.synced)
+      ..writeByte(10)
+      ..write(obj.payload)
+      ..writeByte(11)
+      ..write(obj.syncRejected);
   }
 
   @override

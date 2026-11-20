@@ -1,7 +1,8 @@
 # Experiment A — Results
 
-**Executed:** 20 November 2026
-**Code under test:** `505799a1ff53aff30f680d1d64eb7120921b499d`
+**Executed:** 20 November 2026 · **re-measured after remediation the same day**
+**Code under test (before):** `505799a1ff53aff30f680d1d64eb7120921b499d`
+**Code under test (after):** the six fixes in §7, same harnesses, same engine
 **Engine:** PostgreSQL 15.18 (`postgres:15-alpine`), isolated container, `read committed`
 **Python / SQLAlchemy:** 3.14.2 / 2.0.41
 **Data:** synthetic only. No real patient data. No production database touched.
@@ -39,33 +40,55 @@ patients **destroys the second patient's record silently, at a measured rate of
 30/30**.
 
 The honest one-line answer: *the idempotency mechanism is sound; the queue
-management around it is not, and the uniqueness scope is wrong.*
+management around it was not, and the uniqueness scope was wrong.*
+
+**All six findings have since been fixed and re-measured with the same
+harnesses on the same engine.** The scenario suite goes from 37 passed / 6
+failed to **44 passed / 0 failed**, the queue ceiling from 100 records to no
+ceiling within the tested range (300), and the silent cross-tenant record-loss
+rate from **30/30** to **0/30**. The before-and-after numbers are kept side by
+side below rather than overwritten, because the before state is the result.
 
 ---
 
 ## 2. Scenario results — 46 scenarios
 
-| Verdict | Count |
-|---|---|
-| **PASSED** | **37** |
-| **FAILED** | **6** |
-| INCONCLUSIVE | **0** |
-| NOT_APPLICABLE | 3 |
-| Positive controls passed | **7 of 7** (A, B, C, D, E, F, G) |
+| Verdict | Before fixes | **After fixes** |
+|---|---|---|
+| PASSED | 37 | **44** |
+| **FAILED** | **6** | **0** |
+| INCONCLUSIVE | 0 | **0** |
+| NOT_APPLICABLE | 3 | 2 |
+| Positive controls passed | 7 of 7 | **7 of 7** |
+
+The two remaining `NOT_APPLICABLE` are genuine capability absences, not gaps in
+the experiment: **E1** (no update path exists, so there is no conflict to
+resolve — by design) and **F5** (Hive durability needs a Flutter runtime). The
+third, **A6b**, became testable once the Hive model gained a `payload` field and
+now passes.
 
 Every group's control passed, so no result in this report is suppressed as
 untrustworthy. No scenario produced an unexplained 5xx.
 
 ### The six failures
 
-| # | Scenario | Measured outcome | Root cause (predicted in Phase 1) |
+| # | Scenario | Measured outcome, before | **After the fix** |
 |---|---|---|---|
-| **A3c** | client with 150 queued records drains the queue | 150 still queued after 5 attempts, **0 persisted**, HTTP 422 every time | A1 — `pushUnsynced` posts the whole queue in one request; the server caps the list at 100 |
-| **F4** | 7 days offline (120 records) reconnects | 120 still queued, **0 persisted** | same as A3c; this is its real-world shape |
-| **G4** | queue contains 1 record for a **deleted** family profile | HTTP 404, **0 of 9 valid records persisted** | A2 — the ownership guard raises inside the per-item loop before the single commit, discarding the batch |
-| **G5** | patient B submits a `client_uuid` patient A already used | 1 row, owned by **A**; B told the record synced; **nothing stored for B** | P7 — `client_uuid` is unique table-wide, not per patient |
-| **A4** | `record_date` of now, +10 years, −10 years | all three accepted exactly as sent | A7 — no bound, no sanity check |
-| **E3** | server-side change after the client pulled | local copy still `'e3 content 0'` | A4 — `pullRemote` skips any `srv-<id>` already cached |
+| **A3c** | client with 150 queued records drains the queue | 150 still queued after 5 attempts, **0 persisted**, HTTP 422 every time | **PASS** — drains in **1 attempt**, 150 persisted |
+| **F4** | 7 days offline (120 records) reconnects | 120 still queued, **0 persisted** | **PASS** — 120 persisted, queue empty |
+| **G4** | queue contains 1 record for a **deleted** family profile | HTTP 404, **0 of 9 valid records persisted** | **PASS** — HTTP 200, **9 of 9** valid persisted, the stale one reported in `rejected[]`, queue unblocked |
+| **G5** | patient B submits a `client_uuid` patient A already used | 1 row, owned by **A**; B told the record synced; **nothing stored for B** | **PASS** — **2 rows**, one per patient, both contents intact |
+| **A4** | `record_date` of now, +10 years, −10 years | all three accepted exactly as sent | **PASS** — future clamped to now, past preserved |
+| **E3** | server-side change after the client pulled | local copy still `'e3 content 0'` | **PASS** — local copy reads `SERVER_SIDE_CORRECTION` |
+
+A seventh scenario, **G2** (patient B submits a batch scoped to patient A's
+family profile), **regressed during remediation and was caught by the same
+harness.** The first version of the F-A2 fix turned every ownership failure into
+a per-item rejection, which downgraded that authorization refusal from 403 to a
+200 with a reason string — and would have let a client enumerate other
+households' profile ids in bulk. The fix was narrowed so that a **404** (the
+profile is gone) rejects one item while a **403** (it belongs to someone else)
+still refuses the whole request. G2 is back to 403 with nothing persisted.
 
 ### The three NOT_APPLICABLE
 
@@ -128,23 +151,29 @@ than that, and the report does not claim it.
 
 ### What breaks
 
-| | Metric | Result | 95% CI | Meaning |
-|---|---|---|---|---|
-| **M11** | **maximum drainable queue depth** | **100 records** | — | a sharp cliff, not a degradation |
-| M11b | tested depths that deadlock | 4/7 = 0.5714 | 0.2505–0.8418 | depths 101, 120, 150, 300 |
-| **M12** | **silent cross-tenant record-loss rate** | **30/30 = 1.0000** | **0.8865–1.0000** | deterministic, every attempt |
+| | Metric | Before | 95% CI | **After** | 95% CI |
+|---|---|---|---|---|---|
+| **M11** | maximum drainable queue depth | **100 records** | — | **300+ (no ceiling in range)** | — |
+| M11b | tested depths that deadlock | 4/7 = 0.5714 | 0.2505–0.8418 | **0/7 = 0.0000** | 0.0000–0.3543 |
+| **M12** | **silent cross-tenant record-loss rate** | **30/30 = 1.0000** | 0.8865–1.0000 | **0/30 = 0.0000** | 0.0000–0.1135 |
+
+M12's after-interval is the honest limit of 30 trials: it bounds the true rate
+below **11.4%**, not at zero. What makes the fix credible is not the interval but
+the mechanism — uniqueness is now `(patient_id, client_uuid)` enforced by the
+database, and both dedupe predicates filter on the caller — together with the
+30/30 before-measurement of the behaviour it replaced.
 
 **M11, measured depth by depth:**
 
-| Queue depth | Drained? | Persisted | Still queued |
-|---|---|---|---|
-| 50 | yes | 50 | 0 |
-| 90 | yes | 90 | 0 |
-| **100** | **yes** | **100** | **0** |
-| **101** | **no** | **0** | **101** |
-| 120 | no | 0 | 120 |
-| 150 | no | 0 | 150 |
-| 300 | no | 0 | 300 |
+| Queue depth | Drained, before? | Persisted | **Drained, after?** | **Persisted** |
+|---|---|---|---|---|
+| 50 | yes | 50 | yes | 50 |
+| 90 | yes | 90 | yes | 90 |
+| **100** | **yes** | **100** | yes | 100 |
+| **101** | **no** | **0** | **yes** | **101** |
+| 120 | no | 0 | **yes** | **120** |
+| 150 | no | 0 | **yes** | **150** |
+| 300 | no | 0 | **yes** | **300** |
 
 The cliff is exactly at the server's `max_length=100`. At 101 records **nothing
 persists at all** — it is not a partial sync, it is a total one, and it repeats
@@ -280,23 +309,68 @@ contribution than the unqualified claim it currently makes.
 
 ---
 
-## 7. Remediation status
+## 7. Remediation — all six applied
 
-**No application code was changed by this experiment.** The findings and their
-fixes are recorded; applying them is a separate decision, because two of the
-three touch things this brief told me to protect:
+Applied after the measurements above, then re-measured with the same harnesses
+on the same engine.
 
-| Finding | Fix | Why it needs a decision |
-|---|---|---|
-| F-A1 | chunk `pushUnsynced` into ≤100-record slices | changes the Flutter client |
-| F-A2 | return `rejected[]` and commit the valid items | changes the server's response contract, which the client reads |
-| **F-A3** | composite unique on `(patient_id, client_uuid)` + `patient_id` in the pre-check | **a production migration that alters a unique constraint** |
-| F-A4 | bound `record_date` against `created_at` | server-side only, low risk |
-| F-A5 | update cached `srv-<id>` records on pull instead of skipping | changes the Flutter client |
-| F-A6 | add `payload` to the Hive model and the push body | changes the Flutter client and the local schema |
+| Finding | Fix | Where | Verified by |
+|---|---|---|---|
+| **F-A3** | uniqueness scoped to the patient: `UNIQUE (patient_id, client_uuid)` replaces the table-wide unique index, and **all four** dedupe predicates gained a `patient_id` filter | `models.py`, `modules/ehr_sync/router.py`, migration `e4a9d2c7b118` | G5 (2 rows, one per patient); M12 **30/30 → 0/30**; B1–B5 confirm each patient's own dedupe still works |
+| **F-A1** | `pushUnsynced` slices the queue into `syncBatchLimit` (100) requests, acknowledging each slice independently | `mobile/patient_app/lib/services/sync_service.dart` | A3c (150 drains in 1 attempt), F4 (120 drains); M11 **100 → 300+** |
+| **F-A2** | `POST /ehr/sync` returns `rejected[]` for records it will never accept; a **404** rejects that item, a **403** still refuses the request | `schemas.py`, `modules/ehr_sync/router.py`, client honours `rejected[]` without claiming synced | G4 (9 of 9 valid persist, stale one rejected); **G2 still 403** |
+| **F-A4** | `record_date` clamped to now when it is more than 24 h ahead of the server clock; past dates preserved | `modules/ehr_sync/router.py` | A4 (future clamped, past preserved) |
+| **F-A5** | `pullRemote` updates a cached `srv-<id>` record instead of skipping it | `sync_service.dart` | E3 (local copy reads the correction) |
+| **F-A6** | `payload` added to the Hive model and the push body | `health_record.dart`, `health_record.g.dart`, `sync_service.dart` | A6b (payload stored via the offline queue) |
 
-F-A3 is the one I would do first: it is silent clinical data loss, measured at
-100%, and the fix is well understood. It needs a migration plan because the
-existing global unique index has to be dropped and replaced, and the production
-table must be checked for cross-patient duplicates before the composite
-constraint can be created.
+### Design decisions taken along the way
+
+**F-A4 bounds only the future.** A patient legitimately records something that
+happened days ago while offline, so there is no defensible lower bound on a
+clinical history. A 24-hour forward tolerance covers ordinary clock drift
+without letting a record claim to be from the future.
+
+**F-A2 distinguishes 404 from 403**, and that distinction was not in the first
+attempt. See the G2 regression note in §2: collapsing both into a per-item
+rejection downgraded an authorization refusal to a 200 and would have handed a
+client a bulk oracle for other households' profile ids.
+
+**F-A2's `rejected[]` is not an acknowledgement.** A rejected record stops being
+retried but is never marked `synced`, because it never reached the server.
+Claiming otherwise would be the same class of lie as the F-A3 bug.
+
+### Migration safety
+
+`e4a9d2c7b118` alters a unique constraint on a live table, so it is written to
+refuse rather than corrupt:
+
+- It **counts cross-patient `client_uuid` duplicates first** and raises with the
+  diagnostic query if any exist, instead of failing on a cryptic index error.
+  Production was checked: **21 `ehr_records`, 19 with a UUID, 19 distinct, 0
+  shared across patients.**
+- It **adds the per-patient constraint before dropping the global index**, so
+  the table is never without an idempotency guarantee.
+- Every step inspects before acting, so a partial state is recoverable by
+  re-running.
+- `NULL` client_uuid rows — server-created records such as doctor-issued
+  prescriptions — are unaffected: PostgreSQL treats NULLs as distinct in a
+  unique constraint.
+- `downgrade()` **refuses** if any `client_uuid` has since been used by more than
+  one patient, because restoring the global index would mean deleting a
+  patient's record and there is no safe automatic way to choose which.
+
+Tested on two paths against PostgreSQL 15.18:
+
+| Path | Result |
+|---|---|
+| fresh database, full chain | 27 migrations clean, head `e4a9d2c7b118`, `ix_ehr_records_client_uuid` non-unique + `uq_ehr_records_patient_client_uuid` unique |
+| **upgrade from `d1f7c3b9e205`** (the production revision) with seeded data including NULL-uuid rows | clean; **all 4 rows preserved**; indexes correct |
+
+`render.yaml` runs `alembic upgrade head` in the service start command, before
+uvicorn, so the deploy applies it. That is also why it fails loudly on a real
+data problem rather than half-applying.
+
+### Regression
+
+Full backend suite after all six fixes, and the scenario and metrics harnesses
+re-run from clean databases. Results in §2 and §3.

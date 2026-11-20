@@ -43,6 +43,23 @@ class HealthRecord extends HiveObject {
   @HiveField(9)
   bool synced;
 
+  /// Structured data alongside the human-readable [content] - a scanned
+  /// prescription's image URL, a parsed medicine list.
+  ///
+  /// The server has accepted and stored `payload` on both sync paths all
+  /// along; this model had no field for it and the push body never sent one,
+  /// so anything structured created offline was silently dropped
+  /// (Experiment A, finding F-A6).
+  @HiveField(10)
+  Map<String, dynamic>? payload;
+
+  /// True when the server has permanently refused this record - for example
+  /// it is scoped to a family member deleted on another device. Such a
+  /// record must stop being retried, and must NOT be reported as synced,
+  /// because it never reached the server (Experiment A, finding F-A2).
+  @HiveField(11)
+  bool syncRejected;
+
   HealthRecord({
     required this.patientName,
     required this.symptoms,
@@ -54,6 +71,8 @@ class HealthRecord extends HiveObject {
     this.doctorName,
     this.clientUuid,
     this.synced = false,
+    this.payload,
+    this.syncRejected = false,
   });
 
   String get content => symptoms;

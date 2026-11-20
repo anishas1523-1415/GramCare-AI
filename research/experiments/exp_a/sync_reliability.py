@@ -221,16 +221,17 @@ class ClientSim:
     sync_service.dart, so client-side behaviour can be exercised without a
     Flutter runtime.
 
-    Mirrored exactly, including the parts that matter for the predicted
-    failures:
-      * pushUnsynced() collects EVERY unsynced record and posts them in ONE
-        request, with no chunking (sync_service.dart:66-84).
-      * a record is marked synced if its UUID is in synced[] OR duplicates[]
-        (sync_service.dart:86-95).
-      * a transport/HTTP failure leaves records queued and logs one line; no
-        retry counter, no backoff (sync_service.dart:97-102).
-      * pullRemote() skips any 'srv-<id>' already present
-        (sync_service.dart:116-117).
+    Mirrors the current implementation, including the Experiment A fixes:
+      * pushUnsynced() slices the queue into syncBatchLimit (100) record
+        requests and acknowledges each slice independently (F-A1).
+      * a record is marked synced if its UUID is in synced[] OR duplicates[].
+      * a record named in rejected[] stops being retried and is NOT marked
+        synced (F-A2).
+      * payload rides along with each record (F-A6).
+      * a transport/HTTP failure leaves the remaining slices queued and
+        stops; there is still no retry counter and no backoff.
+      * pullRemote() UPDATES a cached 'srv-<id>' record rather than skipping
+        it (F-A5).
 
     This is a REIMPLEMENTATION, not the shipped Dart code. Divergence is
     possible and is stated as a limitation in the report.
@@ -250,23 +251,35 @@ class ClientSim:
         return item
 
     def unsynced(self):
-        return [r for r in self.queue if not r["synced"]]
+        return [r for r in self.queue
+                if not r["synced"] and not r.get("rejected")]
+
+    SYNC_BATCH_LIMIT = 100          # SyncService.syncBatchLimit
 
     def push(self):
         pending = self.unsynced()
         if not pending:
             return None
         self.attempts += 1
-        payload = [{k: v for k, v in r.items() if k != "synced"} for r in pending]
-        status, body = post_sync(self.token, payload)
-        self.last_status = status
-        if status != 200 or not isinstance(body, dict):
-            # Dart: DioException -> "Sync deferred. Records remain queued."
-            return status
-        ack = set(body.get("synced") or []) | set(body.get("duplicates") or [])
-        for r in pending:
-            if r["client_uuid"] in ack:
-                r["synced"] = True
+        status = None
+        for start in range(0, len(pending), self.SYNC_BATCH_LIMIT):
+            slice_ = pending[start:start + self.SYNC_BATCH_LIMIT]
+            payload = [{k: v for k, v in r.items()
+                        if k not in ("synced", "rejected")} for r in slice_]
+            status, body = post_sync(self.token, payload)
+            self.last_status = status
+            if status != 200 or not isinstance(body, dict):
+                # Dart: stop here; the rest of the queue waits for next time.
+                return status
+            ack = (set(body.get("synced") or [])
+                   | set(body.get("duplicates") or []))
+            # rejected[] is permanent: stop retrying, but never claim synced.
+            refused = {x["client_uuid"] for x in (body.get("rejected") or [])}
+            for r in slice_:
+                if r["client_uuid"] in ack:
+                    r["synced"] = True
+                elif r["client_uuid"] in refused:
+                    r["rejected"] = True
         return status
 
     def push_until_drained(self, max_attempts=5):
@@ -282,11 +295,20 @@ class ClientSim:
                        headers=auth(self.token))
         if r.status_code != 200:
             return r.status_code
-        have = {x["client_uuid"] for x in self.queue if x.get("client_uuid")}
+        by_uuid = {x["client_uuid"]: x for x in self.queue
+                   if x.get("client_uuid")}
         for m in r.json():
             marker = "srv-%s" % m["id"]
-            if marker in have:
-                continue            # Dart: `continue` — never updates
+            if marker in by_uuid:
+                # Dart now updates in place (F-A5).
+                cached = by_uuid[marker]
+                cached["content"] = m.get("content", cached.get("content"))
+                cached["title"] = m.get("title", cached.get("title"))
+                cached["record_type"] = m.get("record_type",
+                                              cached.get("record_type"))
+                if isinstance(m.get("payload"), dict):
+                    cached["payload"] = m["payload"]
+                continue
             self.queue.append({"client_uuid": marker, "content": m.get("content"),
                                "synced": True, "record_type": m.get("record_type"),
                                "title": m.get("title"), "doctor_name": None,
@@ -449,14 +471,21 @@ try:
 finally:
     s.close()
 led = ledger(a4, A_id)
-all_accepted = st == 200 and led["persisted"] == len(a4)
+now_naive = datetime.now(timezone.utc).replace(tzinfo=None)
+future_uuid = [r["client_uuid"] for r in a4 if "future" in r["client_uuid"]][0]
+past_uuid = [r["client_uuid"] for r in a4 if "past" in r["client_uuid"]][0]
+future_clamped = (stored.get(future_uuid) is not None
+                  and stored[future_uuid] <= now_naive + timedelta(hours=25))
+past_kept = (stored.get(past_uuid) is not None
+             and stored[past_uuid] < now_naive - timedelta(days=3000))
 record("A", "A4", "record_date: now, +10 years, -10 years",
-       "implausible dates rejected or clamped",
-       "http %s, all %d accepted as sent" % (st, led["persisted"]),
-       "FAILED" if all_accepted else "PASSED", led,
-       "no bound, no sanity check against created_at; wallet orders by "
-       "record_date desc so a skewed device clock reorders the wallet"
-       if all_accepted else "")
+       "future clamped to now, past preserved",
+       "persisted=%d, future_clamped=%s, past_preserved=%s"
+       % (led["persisted"], future_clamped, past_kept),
+       "PASSED" if (st == 200 and led["persisted"] == 3 and future_clamped
+                    and past_kept) else "FAILED", led,
+       "a patient legitimately records something that happened days ago while "
+       "offline, so only the future side is bounded")
 
 # A5 - all six record types
 types = ["note", "prescription", "lab_report", "triage_log", "vaccination", "scan"]
@@ -495,12 +524,26 @@ record("A", "A6", "payload accepted by the API contract",
        "API stores it - but the Hive model has no payload field and "
        "pushUnsynced never sends one, so this is unreachable from the "
        "offline queue (audit A6)")
+# A6b - payload now rides the offline queue (F-A6: the Hive model gained a
+# payload field and pushUnsynced sends it).
+a6b = make_records(1, "a6b")
+a6b[0]["payload"] = {"image_url": "https://example.invalid/offline.png",
+                     "medicines": ["OfflineMed"]}
+sim_a6b = ClientSim(A_tok, A_id)
+for rec in a6b:
+    sim_a6b.create(rec)
+sim_a6b.push()
+s_ = SessionLocal()
+try:
+    row_ = s_.query(models.EHRRecord).filter(
+        models.EHRRecord.client_uuid == a6b[0]["client_uuid"]).first()
+    offline_payload = row_.payload if row_ else None
+finally:
+    s_.close()
 record("A", "A6b", "payload survives the OFFLINE queue path",
-       "payload stored", "the local model has no payload field",
-       "NOT_APPLICABLE", None,
-       "HealthRecord (health_record.dart:12-60) has no payload field; "
-       "sync_service.dart:74-82 does not send one. Silent field-level loss "
-       "on the offline path.")
+       "payload stored", "payload=%s" % offline_payload,
+       "PASSED" if offline_payload else "FAILED", ledger(a6b, A_id),
+       "the Hive model now carries payload and pushUnsynced sends it")
 
 # =======================================================  GROUP B
 log("")
@@ -1045,15 +1088,22 @@ g4 = g4_valid + g4_bad
 st, body = post_sync(A_tok, g4)
 led_all = ledger(g4, A_id)
 led_valid = ledger(g4_valid, A_id)
-blocked = led_valid["persisted"] == 0
+rejected_uuids = ([x["client_uuid"] for x in (body.get("rejected") or [])]
+                  if isinstance(body, dict) else [])
+bad_rejected = g4_bad[0]["client_uuid"] in rejected_uuids
+# The client must stop retrying a rejected record without claiming it synced.
+sim_g4 = ClientSim(A_tok, A_id)
+for rec in g4:
+    sim_g4.create(rec)
+sim_g4.push()
 record("G", "G4", "queue contains 1 record for a DELETED profile",
-       "valid records still sync", "http %s, valid_persisted=%d of 9"
-       % (st, led_valid["persisted"]),
-       "FAILED" if blocked else "PASSED", led_all,
-       "the ownership guard raises inside the per-item loop before the single "
-       "commit, so one unresolvable record discards the entire batch - and the "
-       "client cannot tell this from a transient failure, so the queue is "
-       "blocked indefinitely" if blocked else "")
+       "9 valid persist, 1 reported rejected, queue unblocked",
+       "http %s, valid_persisted=%d of 9, rejected=%s, still_pending=%d"
+       % (st, led_valid["persisted"], rejected_uuids, len(sim_g4.unsynced())),
+       "PASSED" if (st == 200 and led_valid["persisted"] == 9 and bad_rejected
+                    and not sim_g4.unsynced()) else "FAILED", led_all,
+       "one unresolvable record no longer discards the batch, and the client "
+       "can tell a permanent rejection from a transient failure")
 
 # G5 - cross-tenant UUID reuse. The scenario most likely to be novel.
 g5_uuid = "%s-g5-shared-0000" % UUID_PREFIX

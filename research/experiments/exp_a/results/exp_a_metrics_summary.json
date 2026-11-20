@@ -1,7 +1,7 @@
 {
-  "commit": "505799a1ff53aff30f680d1d64eb7120921b499d",
-  "started": "2026-11-20T03:06:24.685847+00:00",
-  "finished": "2026-11-20T03:07:07.453755+00:00",
+  "commit": "ba1f1b1fb9f31a3ee0fdddd416a85dcdac87acde",
+  "started": "2026-11-20T03:27:14.285112+00:00",
+  "finished": "2026-11-20T03:27:50.070534+00:00",
   "engine": "postgresql",
   "db_version": "PostgreSQL 15.18 on x86_64-pc-linux-musl, compiled by gcc (Alpine 15.2.0) 15.2.0, 64-bit",
   "default_transaction_isolation": "read committed",
@@ -44,7 +44,7 @@
       "rate": "",
       "ci95_low": "",
       "ci95_high": "",
-      "value": "80.3",
+      "value": "61.7",
       "unit": "ms",
       "sample_size": 30,
       "note": ""
@@ -58,7 +58,7 @@
       "rate": "",
       "ci95_low": "",
       "ci95_high": "",
-      "value": "89.0",
+      "value": "72.1",
       "unit": "ms",
       "sample_size": 30,
       "note": ""
@@ -72,7 +72,7 @@
       "rate": "",
       "ci95_low": "",
       "ci95_high": "",
-      "value": "94.3",
+      "value": "73.7",
       "unit": "ms",
       "sample_size": 30,
       "note": "UNDERPOWERED at n=30"
@@ -142,7 +142,7 @@
       "rate": "",
       "ci95_low": "",
       "ci95_high": "",
-      "value": "149.6",
+      "value": "110.6",
       "unit": "ms",
       "sample_size": 30,
       "note": ""
@@ -156,7 +156,7 @@
       "rate": "",
       "ci95_low": "",
       "ci95_high": "",
-      "value": "177.9",
+      "value": "133.0",
       "unit": "ms",
       "sample_size": 30,
       "note": ""
@@ -248,26 +248,26 @@
     {
       "id": "M11",
       "metric": "maximum drainable queue depth",
-      "definition": "largest tested queue depth the shipped client algorithm can fully synchronise; above it every attempt is rejected 422 and the queue cannot drain",
+      "definition": "largest tested queue depth the client algorithm can fully synchronise. Before the chunking fix this was exactly 100, the server's list cap, and every larger depth persisted nothing on every attempt",
       "numerator": null,
       "denominator": null,
       "rate": "",
       "ci95_low": "",
       "ci95_high": "",
-      "value": "100",
+      "value": "300",
       "unit": "records",
       "sample_size": 7,
-      "note": "first failing depth tested: 101"
+      "note": "no ceiling within the tested range"
     },
     {
       "id": "M11b",
       "metric": "queue depths that deadlock",
       "definition": "tested depths where the queue never drained, over depths tested",
-      "numerator": 4,
+      "numerator": 0,
       "denominator": 7,
-      "rate": "0.571429",
-      "ci95_low": "0.250454",
-      "ci95_high": "0.841783",
+      "rate": "0.000000",
+      "ci95_low": "0.000000",
+      "ci95_high": "0.354339",
       "value": "",
       "unit": "",
       "sample_size": 7,
@@ -277,15 +277,15 @@
       "id": "M12",
       "metric": "silent cross-tenant record-loss rate",
       "definition": "trials where patient B submitted a client_uuid already used by patient A, B was told the record synced, and no row exists for B, over trials",
-      "numerator": 30,
+      "numerator": 0,
       "denominator": 30,
-      "rate": "1.000000",
-      "ci95_low": "0.886483",
-      "ci95_high": "1.000000",
+      "rate": "0.000000",
+      "ci95_low": "0.000000",
+      "ci95_high": "0.113517",
       "value": "",
       "unit": "",
       "sample_size": 30,
-      "note": "client_uuid is UNIQUE across the whole table rather than per patient, and the pre-check filters on client_uuid with no patient_id predicate"
+      "note": "before the fix this was 30/30: client_uuid was UNIQUE across the whole table and the pre-check had no patient_id predicate. Uniqueness is now scoped to (patient_id, client_uuid) and both predicates include the caller"
     }
   ]
 }

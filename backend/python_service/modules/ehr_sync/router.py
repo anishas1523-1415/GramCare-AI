@@ -25,13 +25,39 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import models
 import schemas
 from database import get_db
 from modules.auth.router import get_current_user, require_role, require_approved_doctor
 from modules.family.router import resolve_owned_profile
+
+# How far ahead of the server's clock a client-supplied record_date may sit.
+# A device whose clock is wrong produces wrong clinical dates, and the wallet
+# orders by record_date desc, so a skewed clock silently reorders a patient's
+# history. Experiment A (finding F-A4) measured dates ten years either way
+# being accepted verbatim. A small forward tolerance covers ordinary clock
+# drift without letting a record claim to be from the future.
+RECORD_DATE_FUTURE_TOLERANCE = timedelta(hours=24)
+
+
+def clamp_record_date(value, now=None):
+    """Return a record_date that cannot be in the future beyond tolerance.
+
+    A missing date becomes the server's now. A date further ahead than the
+    tolerance is pulled back to now. Past dates are left alone: a patient
+    legitimately records something that happened days ago while offline, and
+    there is no defensible lower bound to impose on a clinical history.
+    """
+    now = now or datetime.now(timezone.utc).replace(tzinfo=None)
+    if value is None:
+        return now
+    naive = value.replace(tzinfo=None) if value.tzinfo else value
+    if naive > now + RECORD_DATE_FUTURE_TOLERANCE:
+        return now
+    return naive
+
 from core.drug_interactions import check_interactions
 from core.cloudinary_service import cloudinary_client
 from core.fhir_export import build_fhir_bundle
@@ -289,9 +315,13 @@ async def create_record(
     resolve_owned_profile(record.family_profile_id, current_user, db)
 
     if record.client_uuid:
+        # Scoped to the caller. Without the patient_id predicate this matched
+        # another patient's row and silently swallowed this one (Experiment A,
+        # finding F-A3).
         existing = (
             db.query(models.EHRRecord)
-            .filter(models.EHRRecord.client_uuid == record.client_uuid)
+            .filter(models.EHRRecord.patient_id == current_user.id,
+                    models.EHRRecord.client_uuid == record.client_uuid)
             .first()
         )
         if existing:
@@ -306,7 +336,7 @@ async def create_record(
         payload=record.payload,
         doctor_name=record.doctor_name,
         client_uuid=record.client_uuid,
-        record_date=record.record_date,
+        record_date=clamp_record_date(record.record_date),
     )
     db.add(db_record)
     try:
@@ -319,7 +349,8 @@ async def create_record(
         db.rollback()
         existing = (
             db.query(models.EHRRecord)
-            .filter(models.EHRRecord.client_uuid == record.client_uuid)
+            .filter(models.EHRRecord.patient_id == current_user.id,
+                    models.EHRRecord.client_uuid == record.client_uuid)
             .first()
         )
         if existing is None:
@@ -357,12 +388,39 @@ async def sync_offline_records(
     """
     synced: List[str] = []
     duplicates: List[str] = []
+    rejected: List[schemas.EHRSyncRejection] = []
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
 
     for item in batch.records:
-        resolve_owned_profile(item.family_profile_id, current_user, db)
+        # Two different failures hide behind resolve_owned_profile, and they
+        # deserve opposite treatment (Experiment A, finding F-A2):
+        #
+        #   404 - the profile is GONE. Ordinary: a family member deleted on
+        #         another device while this one was offline. The record is
+        #         unresolvable forever, so reject that one item and let the
+        #         rest of the queue through. Letting this propagate is what
+        #         discarded 9 valid records behind 1 stale one and blocked
+        #         the queue indefinitely.
+        #
+        #   403 - the profile belongs to SOMEONE ELSE. A legitimate client
+        #         never does this. Refuse the whole request, as before, so
+        #         the authorization signal is not downgraded to a 200 and the
+        #         response cannot be used to enumerate other households'
+        #         profile ids in bulk.
+        try:
+            resolve_owned_profile(item.family_profile_id, current_user, db)
+        except HTTPException as exc:
+            if exc.status_code != 404:
+                raise
+            rejected.append(schemas.EHRSyncRejection(
+                client_uuid=item.client_uuid,
+                reason="That family member no longer exists on this account.",
+            ))
+            continue
         existing = (
             db.query(models.EHRRecord)
-            .filter(models.EHRRecord.client_uuid == item.client_uuid)
+            .filter(models.EHRRecord.patient_id == current_user.id,
+                    models.EHRRecord.client_uuid == item.client_uuid)
             .first()
         )
         if existing:
@@ -378,7 +436,7 @@ async def sync_offline_records(
                 payload=item.payload,
                 doctor_name=item.doctor_name,
                 client_uuid=item.client_uuid,
-                record_date=item.record_date,
+                record_date=clamp_record_date(item.record_date, now),
             )
         )
         synced.append(item.client_uuid)
@@ -393,7 +451,10 @@ async def sync_offline_records(
         db.rollback()
         synced, duplicates = [], []
         for item in batch.records:
+            if any(r.client_uuid == item.client_uuid for r in rejected):
+                continue
             if db.query(models.EHRRecord).filter(
+                    models.EHRRecord.patient_id == current_user.id,
                     models.EHRRecord.client_uuid == item.client_uuid).first():
                 duplicates.append(item.client_uuid)
                 continue
@@ -406,7 +467,7 @@ async def sync_offline_records(
                 payload=item.payload,
                 doctor_name=item.doctor_name,
                 client_uuid=item.client_uuid,
-                record_date=item.record_date,
+                record_date=clamp_record_date(item.record_date, now),
             ))
             try:
                 db.commit()
@@ -414,7 +475,8 @@ async def sync_offline_records(
             except IntegrityError:
                 db.rollback()
                 duplicates.append(item.client_uuid)
-    return schemas.EHRSyncResult(synced=synced, duplicates=duplicates)
+    return schemas.EHRSyncResult(synced=synced, duplicates=duplicates,
+                                 rejected=rejected)
 
 
 class VitalsPayload(BaseModel):

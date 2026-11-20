@@ -19,12 +19,31 @@ import 'encrypted_boxes.dart';
 /// Read path: [pullRemote] refreshes the local box with the caller's
 /// server-side records (doctor-issued prescriptions etc.), keyed by server
 /// id so re-pulls update rather than duplicate.
+///
+/// Three corrections from Experiment A
+/// (docs/research/experiments/exp_a/results.md):
+///
+///  * [pushUnsynced] sends the queue in slices of [syncBatchLimit]. It used
+///    to post every unsynced record in ONE request while the server caps the
+///    list at 100, so a queue over 100 was rejected 422 on every attempt and
+///    could never drain. Measured: 100 records synced; 101 persisted nothing
+///    and stayed queued forever (finding F-A1).
+///  * The server now reports permanently refused records in `rejected`.
+///    Those stop being retried and are NOT marked synced (finding F-A2).
+///  * [pullRemote] updates a cached server record instead of skipping it, so
+///    a server-side correction reaches the device (finding F-A5).
 class SyncService {
   static final SyncService _instance = SyncService._internal();
   factory SyncService() => _instance;
   SyncService._internal();
 
   static const walletBoxName = 'health_wallet';
+
+  /// Must not exceed the server's cap on `POST /ehr/sync` (the `records`
+  /// list is validated with max_length=100). Sending more is rejected 422
+  /// with nothing persisted, and the whole queue stalls behind it.
+  static const syncBatchLimit = 100;
+
   final _uuid = const Uuid();
 
   Future<Box<HealthRecord>> _wallet() =>
@@ -40,6 +59,7 @@ class SyncService {
     int? familyProfileId,
     String? doctorName,
     String severity = 'INFO',
+    Map<String, dynamic>? payload,
   }) async {
     final box = await _wallet();
     final record = HealthRecord(
@@ -53,6 +73,7 @@ class SyncService {
       doctorName: doctorName,
       clientUuid: _uuid.v4(),
       synced: false,
+      payload: payload,
     );
     await box.add(record);
     // Fire-and-forget attempt; failures simply leave it queued.
@@ -60,46 +81,79 @@ class SyncService {
     return record;
   }
 
-  /// Push every unsynced local record to the server in one idempotent batch.
+  /// Push every unsynced local record to the server in idempotent batches.
+  ///
+  /// Slices the queue into [syncBatchLimit]-record requests. Each slice is
+  /// acknowledged on its own, so a long offline stretch drains steadily
+  /// instead of failing as one oversized request.
   Future<void> pushUnsynced() async {
     final box = await _wallet();
     final unsynced = box.values
-        .where((r) => !r.synced && r.clientUuid != null)
+        .where((r) => !r.synced && !r.syncRejected && r.clientUuid != null)
         .toList();
     if (unsynced.isEmpty) return;
 
-    try {
-      final res = await ApiService().client.post('/ehr/sync', data: {
-        'records': unsynced
-            .map((r) => {
-                  'client_uuid': r.clientUuid,
-                  'record_type': r.recordType,
-                  'title': r.title,
-                  'content': r.content,
-                  'doctor_name': r.doctorName,
-                  'family_profile_id': r.familyProfileId,
-                  'record_date': r.timestamp.toIso8601String(),
-                })
-            .toList(),
-      });
+    var acknowledgedTotal = 0;
+    var rejectedTotal = 0;
 
-      final acknowledged = <String>{
-        ...List<String>.from(res.data['synced'] as List? ?? const []),
-        ...List<String>.from(res.data['duplicates'] as List? ?? const []),
-      };
-      for (final record in unsynced) {
-        if (acknowledged.contains(record.clientUuid)) {
-          record.synced = true;
-          await record.save();
+    for (var start = 0; start < unsynced.length; start += syncBatchLimit) {
+      final end = (start + syncBatchLimit) > unsynced.length
+          ? unsynced.length
+          : start + syncBatchLimit;
+      final slice = unsynced.sublist(start, end);
+
+      try {
+        final res = await ApiService().client.post('/ehr/sync', data: {
+          'records': slice
+              .map((r) => {
+                    'client_uuid': r.clientUuid,
+                    'record_type': r.recordType,
+                    'title': r.title,
+                    'content': r.content,
+                    'doctor_name': r.doctorName,
+                    'family_profile_id': r.familyProfileId,
+                    'record_date': r.timestamp.toIso8601String(),
+                    if (r.payload != null) 'payload': r.payload,
+                  })
+              .toList(),
+        });
+
+        final acknowledged = <String>{
+          ...List<String>.from(res.data['synced'] as List? ?? const []),
+          ...List<String>.from(res.data['duplicates'] as List? ?? const []),
+        };
+        // Permanently refused: stop retrying, but never claim it synced.
+        final refused = <String>{
+          for (final entry in (res.data['rejected'] as List? ?? const []))
+            (entry as Map)['client_uuid'] as String,
+        };
+
+        for (final record in slice) {
+          if (acknowledged.contains(record.clientUuid)) {
+            record.synced = true;
+            await record.save();
+          } else if (refused.contains(record.clientUuid)) {
+            record.syncRejected = true;
+            await record.save();
+          }
         }
+        acknowledgedTotal += acknowledged.length;
+        rejectedTotal += refused.length;
+      } on DioException catch (e) {
+        // Offline or server unavailable. This slice and everything after it
+        // stay queued; stop rather than hammering the rest against a
+        // connection that has just failed.
+        debugPrint('Sync deferred (${e.type}) after $acknowledgedTotal '
+            'record(s). Remaining records stay queued.');
+        return;
+      } catch (e) {
+        debugPrint('Unexpected sync error: $e');
+        return;
       }
-      debugPrint('Sync complete: ${acknowledged.length} record(s) acknowledged.');
-    } on DioException catch (e) {
-      // Offline or server unavailable — records stay queued for next time.
-      debugPrint('Sync deferred (${e.type}). Records remain queued.');
-    } catch (e) {
-      debugPrint('Unexpected sync error: $e');
     }
+
+    debugPrint('Sync complete: $acknowledgedTotal acknowledged, '
+        '$rejectedTotal permanently rejected.');
   }
 
   /// Pull the caller's server-side records into the local wallet cache so
@@ -114,7 +168,26 @@ class SyncService {
       for (final j in (res.data as List)) {
         final m = j as Map<String, dynamic>;
         final marker = 'srv-${m['id']}';
-        if (existingUuids.contains(marker)) continue;
+        if (existingUuids.contains(marker)) {
+          // Update in place rather than skipping. Skipping meant a
+          // server-side correction to an already-cached record never reached
+          // the device, leaving the local copy permanently stale
+          // (Experiment A, finding F-A5).
+          final cached = box.values.firstWhere((r) => r.clientUuid == marker);
+          cached.symptoms = m['content'] as String? ?? cached.symptoms;
+          cached.title = m['title'] as String? ?? cached.title;
+          cached.recordType = m['record_type'] as String? ?? cached.recordType;
+          cached.doctorName = m['doctor_name'] as String? ?? cached.doctorName;
+          cached.familyProfileId =
+              m['family_profile_id'] as int? ?? cached.familyProfileId;
+          if (m['payload'] is Map) {
+            cached.payload = Map<String, dynamic>.from(m['payload'] as Map);
+          }
+          final when = DateTime.tryParse(m['record_date'] as String? ?? '');
+          if (when != null) cached.timestamp = when;
+          await cached.save();
+          continue;
+        }
         await box.add(HealthRecord(
           patientName: patientName,
           symptoms: m['content'] as String? ?? '',
@@ -128,6 +201,9 @@ class SyncService {
           doctorName: m['doctor_name'] as String?,
           clientUuid: marker,
           synced: true,
+          payload: m['payload'] is Map
+              ? Map<String, dynamic>.from(m['payload'] as Map)
+              : null,
         ));
       }
     } on DioException catch (e) {

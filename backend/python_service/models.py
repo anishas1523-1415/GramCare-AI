@@ -398,6 +398,12 @@ class EHRRecord(Base):
     idempotent offline sync (planning doc: offline-first with cloud sync).
     """
     __tablename__ = "ehr_records"
+    __table_args__ = (
+        # The idempotency guarantee, enforced by the database and scoped to
+        # the patient. See the client_uuid comment below.
+        UniqueConstraint("patient_id", "client_uuid",
+                         name="uq_ehr_records_patient_client_uuid"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     patient_id = Column(Integer, ForeignKey("users.id"), index=True)
@@ -407,10 +413,20 @@ class EHRRecord(Base):
     content = Column(Text)                    # human-readable summary (also used for voice playback)
     payload = Column(JSON, nullable=True)     # structured data (e.g. parsed medicines)
     doctor_name = Column(String, nullable=True)
-    # Client-generated UUID for offline-created records. Unique so the sync
-    # endpoint is idempotent: re-sending the same queued record can never
-    # create a duplicate.
-    client_uuid = Column(String, unique=True, nullable=True, index=True)
+    # Client-generated UUID for offline-created records, making the sync
+    # endpoint idempotent: re-sending the same queued record cannot create a
+    # duplicate.
+    #
+    # Uniqueness is scoped to the PATIENT, not the whole table. It used to be
+    # a bare unique index on client_uuid alone, and Experiment A measured what
+    # that cost: if patient B submitted a client_uuid patient A had already
+    # used, the dedupe pre-check matched A's row, classified B's record a
+    # duplicate, and B's phone marked it synced. Nothing was stored for B and
+    # nobody was told. 30 of 30 trials, every time.
+    #
+    # Scoped this way, A's and B's records coexist and each patient's own
+    # retries still deduplicate correctly.
+    client_uuid = Column(String, nullable=True, index=True)
     record_date = Column(DateTime, default=_utcnow)
     created_at = Column(DateTime, default=_utcnow)
 
