@@ -429,9 +429,22 @@ async def refund_payment(
     current_user: models.User = Depends(get_current_user),
 ):
     """Refund a payment (planning doc: money returns to the patient if the
-    doctor never attends). Callable by the paying patient, the appointment's
-    doctor, or an admin; the appointments module calls this logic on
-    cancellation."""
+    doctor never attends).
+
+    A refund is a provider decision, so this endpoint is for the appointment's
+    DOCTOR and for ADMIN only.
+
+    The paying patient used to be authorised here as well, and that was a hole
+    worth money: consultations are pay-before-book, the appointment row is
+    created once the payment is CONSUMED, and nothing afterwards re-reads the
+    payment's status. So a patient could pay, book, then POST to this endpoint
+    and walk away with the money back AND a confirmed consultation. Found by
+    research/workflows/validate_workflows.py step G7.
+
+    Patients are not locked out of their money: they refund by CANCELLING the
+    appointment (PATCH /appointments/{id} with status=CANCELLED), which calls
+    _do_refund() below and frees the slot in the same transaction. That is the
+    route that keeps the money and the service in step."""
     payment = (
         db.query(models.Payment)
         .filter(models.Payment.order_id == order_id)
@@ -443,7 +456,6 @@ async def refund_payment(
 
     authorized = (
         current_user.role == "ADMIN"
-        or payment.patient_id == current_user.id
         or (
             current_user.role == "DOCTOR"
             and db.query(models.Appointment)
@@ -455,6 +467,18 @@ async def refund_payment(
         )
     )
     if not authorized:
+        if payment.patient_id == current_user.id:
+            # Tell the payer where their money actually is rather than a bare
+            # "not authorized", which reads like the platform keeping the fee.
+            raise HTTPException(
+                status_code=403,
+                detail=(
+                    "Cancel the appointment instead — cancelling refunds this "
+                    "payment and frees the slot in one step. A refund on its "
+                    "own would leave you holding a consultation you had not "
+                    "paid for."
+                ),
+            )
         raise HTTPException(status_code=403, detail="Not authorized to refund this payment.")
 
     return _do_refund(payment, db)
@@ -482,6 +506,35 @@ def _do_refund(payment: models.Payment, db: Session) -> models.Payment:
         except Exception as e:
             logger.error(f"Razorpay refund failed for {payment.order_id}: {e}")
             raise HTTPException(status_code=502, detail="Gateway refund failed; try again later.")
+
+    # Money and service have to move together. The appointment-cancellation
+    # path already cancels first and refunds second, so this is for every OTHER
+    # caller — a doctor or admin refunding directly — and stops a refund from
+    # leaving a live, now-unpaid appointment behind. Guarded by the same row
+    # lock the caller holds on `payment`.
+    freed = (
+        db.query(models.Appointment)
+        .filter(
+            models.Appointment.payment_id == payment.id,
+            models.Appointment.status.notin_(("CANCELLED", "COMPLETED")),
+        )
+        .all()
+    )
+    for appt in freed:
+        appt.status = "CANCELLED"
+        slot = (
+            db.query(models.AvailabilitySlot)
+            .filter(models.AvailabilitySlot.appointment_id == appt.id)
+            .first()
+        )
+        if slot:
+            slot.is_booked = False
+            slot.appointment_id = None
+    if freed:
+        logger.info(
+            "Refund of %s cancelled %d appointment(s) it had paid for: %s",
+            payment.order_id, len(freed), [a.id for a in freed],
+        )
 
     payment.status = "REFUNDED"
     db.commit()

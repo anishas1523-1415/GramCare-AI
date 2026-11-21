@@ -57,6 +57,11 @@ function BookingFlow() {
   // Set only when a payment was captured but POST /appointments/book then
   // failed - the one state where the patient has paid and has nothing.
   const [paidOrderId, setPaidOrderId] = useState<string | null>(null);
+  // True when the appointment was confirmed WITHOUT money changing hands,
+  // because the payment gateway refused the order. The confirmation screen has
+  // to say so; a patient who pressed a "Pay" button and then saw a plain
+  // "Appointment confirmed" would reasonably assume the fee was charged.
+  const [feeNotCollected, setFeeNotCollected] = useState(false);
 
   // Registration never asks a PATIENT for a phone number (deliberately
   // low-friction), so anyone who registered before SMS reminders existed
@@ -337,7 +342,10 @@ function BookingFlow() {
               {doctor.consultation_fee > 0 ? (
                 <RazorpayCheckout
                   amount={doctor.consultation_fee}
-                  onSuccess={(orderId) => bookWithPayment(orderId)}
+                  onSuccess={(orderId, feeNotCollected) => {
+                    setFeeNotCollected(feeNotCollected);
+                    bookWithPayment(orderId);
+                  }}
                   onError={(msg) => setError(msg)}
                 />
               ) : (
@@ -359,6 +367,20 @@ function BookingFlow() {
               <p className="text-gray-500">
                 {doctor.full_name} · {new Date(slot.start_time).toLocaleString()}
               </p>
+              {feeNotCollected && (
+                <div
+                  role="alert"
+                  className="mt-5 mx-auto max-w-md p-4 rounded-xl border border-amber-400/60 bg-amber-50 text-amber-900 dark:bg-amber-950/40 dark:text-amber-200 text-sm text-left"
+                >
+                  <p className="font-bold mb-1">No payment was taken</p>
+                  <p>
+                    Online payment was unavailable, so the ₹
+                    {doctor.consultation_fee.toFixed(0)} consultation fee has{' '}
+                    <strong>not</strong> been charged. Please pay it at the
+                    consultation.
+                  </p>
+                </div>
+              )}
               <p className="text-sm text-gray-400 mt-4">
                 {t('join_video_consult_prefix')}{" "}
                 <a href="/appointments" className="text-indigo-500 font-semibold hover:underline">{t('my_appointments_link')}</a> {t('join_video_consult_suffix')}

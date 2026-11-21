@@ -162,6 +162,12 @@ export interface PaymentOrder {
   amount: number;
   currency: string;
   is_mock: boolean;
+  /** True when the real gateway WAS configured but refused the credentials or
+   * was unreachable, so this order is a mock one and no money can be taken.
+   * Distinct from is_mock, which is also true when no gateway is configured at
+   * all (ordinary development). Never imply a charge happened when this is
+   * set. */
+  gateway_unavailable?: boolean;
 }
 
 /** Mirrors schemas.PaymentResponse — one row of GET /payments/my history or

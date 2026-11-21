@@ -54,9 +54,9 @@ services:
   #
   # The only surface the LAB role has: login/onboarding, the test catalog,
   # bookings, and report upload (frontend/lab_portal). It was never declared
-  # here, and gramcare-lab.onrender.com does not respond — so labs currently
-  # have no way in at all, even though the app itself is complete and the
-  # backend's /lab endpoints are live.
+  # here, which is why it was missing for so long; declaring it fixed that and
+  # https://gramcare-lab.onrender.com now answers 200 (verified 2026-11-21,
+  # 33 s cold start on the free plan).
   #
   # NOTE: the patient web portal and the pharmacist dashboard are
   # deliberately NOT declared here — those are already deployed and

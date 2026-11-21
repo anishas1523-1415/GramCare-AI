@@ -49,8 +49,13 @@ function errorDetail(err: unknown): string | undefined {
 interface RazorpayCheckoutProps {
   amount: number; // in INR
   /** Called with the ORDER id after successful verification — the booking
-   * API requires this order id as proof of payment (server-enforced). */
-  onSuccess: (orderId: string) => void;
+   * API requires this order id as proof of payment (server-enforced).
+   *
+   * `feeNotCollected` is true when the order completed WITHOUT any money
+   * moving, because the gateway refused us or was unreachable. The caller must
+   * say so on its confirmation screen rather than let the patient come away
+   * believing they paid. */
+  onSuccess: (orderId: string, feeNotCollected: boolean) => void;
   onError: (error: string) => void;
 }
 
@@ -64,7 +69,36 @@ export default function RazorpayCheckout({ amount, onSuccess, onError }: Razorpa
   // create a second order/Payment row for the same booking attempt.
   const [modalOpen, setModalOpen] = useState(false);
   const [isScriptLoaded, setIsScriptLoaded] = useState(false);
+  // Holds the mock order created when the real gateway refused us. The patient
+  // is told, in as many words, that no money can be taken, and has to confirm
+  // again before the booking goes through. Auto-completing here would be the
+  // dishonest option: they would have pressed a button reading "Pay securely"
+  // and come away believing the fee had been charged.
+  const [unpayableOrder, setUnpayableOrder] = useState<string | null>(null);
   const { user } = useAuth();
+
+  /** Complete a mock order. The backend requires a signature derived from the
+   * order id (it no longer accepts a bare "mock_sig_valid" for any order —
+   * see modules/payments/router.py verify_payment). */
+  const completeMock = async (orderId: string, feeNotCollected: boolean) => {
+    setLoading(true);
+    try {
+      const { data: verifyData } = await api.post('/payments/verify', {
+        razorpay_order_id: orderId,
+        razorpay_payment_id: "mock_pay_" + Math.random().toString(36).substring(7),
+        razorpay_signature: `mock_sig_${orderId}_valid`,
+      });
+      if (verifyData.status === "SUCCESS") {
+        onSuccess(orderId, feeNotCollected);
+      } else {
+        onError("Mock verification failed");
+      }
+    } catch (err) {
+      onError(errorDetail(err) || "Could not confirm the booking.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handlePayment = async () => {
     if (!isScriptLoaded) {
@@ -79,23 +113,20 @@ export default function RazorpayCheckout({ amount, onSuccess, onError }: Razorpa
       // the old client-supplied patient_id field was an impersonation hole)
       const { data: order } = await api.post('/payments/create-order', { amount });
 
-      if (order.is_mock) {
-        // Handle mock payment directly without opening Razorpay modal.
-        // The mock signature must now be derived from the order id (backend
-        // no longer accepts a bare "mock_sig_valid" for any order — see
-        // apps/backend_service/modules/payments/router.py verify_payment).
-        const { data: verifyData } = await api.post('/payments/verify', {
-          razorpay_order_id: order.order_id,
-          razorpay_payment_id: "mock_pay_" + Math.random().toString(36).substring(7),
-          razorpay_signature: `mock_sig_${order.order_id}_valid`
-        });
-        
-        if (verifyData.status === "SUCCESS") {
-          onSuccess(order.order_id);
-        } else {
-          onError("Mock verification failed");
-        }
+      if (order.gateway_unavailable) {
+        // The gateway WAS configured and refused us (rejected key, outage).
+        // Booking deliberately stays possible — the backend degrades to a
+        // mock order instead of the 502 that used to make consultations
+        // unbookable — but the patient must be told the fee was not taken,
+        // and must confirm.
+        setUnpayableOrder(order.order_id);
         setLoading(false);
+        return;
+      }
+
+      if (order.is_mock) {
+        // No gateway configured at all: ordinary development/demo mode.
+        await completeMock(order.order_id, false);
         return;
       }
 
@@ -118,7 +149,7 @@ export default function RazorpayCheckout({ amount, onSuccess, onError }: Razorpa
             });
 
             if (verifyData.status === "SUCCESS") {
-              onSuccess(response.razorpay_order_id);
+              onSuccess(response.razorpay_order_id, false);
             } else {
               onError("Payment verification failed.");
             }
@@ -192,13 +223,49 @@ export default function RazorpayCheckout({ amount, onSuccess, onError }: Razorpa
         src="https://checkout.razorpay.com/v1/checkout.js"
         onLoad={() => setIsScriptLoaded(true)}
       />
-      <button
-        onClick={handlePayment}
-        disabled={loading || modalOpen || !isScriptLoaded}
-        className="neu-button w-full py-3 bg-teal-500 text-white font-bold rounded-xl disabled:opacity-50"
-      >
-        {loading ? "Processing..." : modalOpen ? "Waiting for payment…" : `Pay ₹${amount} securely`}
-      </button>
+      {unpayableOrder ? (
+        <div className="space-y-3">
+          <div
+            role="alert"
+            className="p-4 rounded-xl border border-amber-400/60 bg-amber-50 text-amber-900 dark:bg-amber-950/40 dark:text-amber-200 text-sm"
+          >
+            <p className="font-bold mb-1">Online payment is unavailable right now</p>
+            <p>
+              Our payment provider did not accept the request, so{" "}
+              <strong>no money has been taken, and none can be taken now.</strong>{" "}
+              You can still confirm this appointment — the ₹{amount} fee will be
+              collected at the consultation instead.
+            </p>
+          </div>
+          <button
+            onClick={() => completeMock(unpayableOrder, true)}
+            disabled={loading}
+            className="neu-button w-full py-3 bg-teal-500 text-white font-bold rounded-xl disabled:opacity-50"
+          >
+            {loading
+              ? "Confirming..."
+              : `Confirm appointment — ₹${amount} to pay at the visit`}
+          </button>
+          <button
+            onClick={() => {
+              setUnpayableOrder(null);
+              onError("Payment was not completed. You have not been charged.");
+            }}
+            disabled={loading}
+            className="w-full py-2 text-sm text-gray-500 hover:text-teal-500 disabled:opacity-50"
+          >
+            Cancel
+          </button>
+        </div>
+      ) : (
+        <button
+          onClick={handlePayment}
+          disabled={loading || modalOpen || !isScriptLoaded}
+          className="neu-button w-full py-3 bg-teal-500 text-white font-bold rounded-xl disabled:opacity-50"
+        >
+          {loading ? "Processing..." : modalOpen ? "Waiting for payment…" : `Pay ₹${amount} securely`}
+        </button>
+      )}
     </>
   );
 }
