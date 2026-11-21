@@ -21,9 +21,25 @@ bare naive-datetime-shaped string — a single, global, source-of-truth fix
 that requires no schema or model changes anywhere.
 """
 import re
+from datetime import datetime, timezone
 from typing import Any
 
 from fastapi.responses import JSONResponse
+
+
+def utcnow() -> datetime:
+    """Current UTC instant as a *naive* datetime, matching how this codebase
+    stores time.
+
+    This is the drop-in replacement for `datetime.utcnow()`, which Python has
+    deprecated and scheduled for removal. It deliberately returns a naive value
+    rather than an aware one: the Postgres columns are plain `TIMESTAMP`, so
+    values read back out are naive, and a naive/aware comparison raises
+    `TypeError` at runtime rather than failing a test. Changing these call
+    sites to aware datetimes is a separate migration that has to move the
+    columns to `TIMESTAMPTZ` at the same time.
+    """
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 # Matches "YYYY-MM-DDTHH:MM:SS" or "YYYY-MM-DDTHH:MM:SS.ffffff" with no
 # trailing 'Z' or +HH:MM/-HH:MM offset (a fully-qualified string is left

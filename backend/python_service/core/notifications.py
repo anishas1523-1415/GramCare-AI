@@ -11,6 +11,18 @@ import models
 
 logger = logging.getLogger("gramcare.notifications")
 
+
+def _redact_token(token: Optional[str]) -> str:
+    """Render an FCM token safe to write to a log.
+
+    Keeps the last 6 characters so two log lines about the same device can still
+    be correlated during debugging, and discards the rest, which is the part
+    that would let a reader actually push to the handset.
+    """
+    if not token:
+        return "<none>"
+    return f"...{token[-6:]}" if len(token) > 6 else "<short>"
+
 # Android notification channel per message type — must match the channel ids
 # created client-side in apps/mobile_app/lib/services/firebase_notification_
 # service.dart. This is what actually determines which channel a background/
@@ -92,7 +104,15 @@ class NotificationService:
         success_count = 0
         for token_record in tokens:
             if not _firebase_initialized:
-                logger.info(f"[MOCK FCM] Sending to {token_record.fcm_token}: {title} - {body}")
+                # An FCM registration token is a device credential: anyone holding
+                # it can push notifications to that handset. Log only enough to
+                # correlate entries, never the whole token, because application
+                # logs are retained, shipped to third parties and read by people
+                # who have no business being able to address a patient's phone.
+                logger.info(
+                    "[MOCK FCM] Sending to token %s for user %s: %s - %s",
+                    _redact_token(token_record.fcm_token), user_id, title, body,
+                )
                 success_count += 1
                 continue
 

@@ -14,6 +14,8 @@ the app.
 Status lifecycle: PENDING -> ACCEPTED -> COMPLETED, or PENDING -> DECLINED.
 """
 from datetime import datetime
+
+from core.timezone_json import utcnow
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -239,7 +241,7 @@ async def decline_referral(
     result = db.execute(
         sa_update(models.Referral)
         .where(models.Referral.id == referral.id, models.Referral.status == "PENDING")
-        .values(status="DECLINED", resolved_at=datetime.utcnow())
+        .values(status="DECLINED", resolved_at=utcnow())
     )
     if result.rowcount != 1:
         db.rollback()
@@ -282,7 +284,7 @@ async def complete_referral(
     if referral.status != "ACCEPTED":
         raise HTTPException(status_code=400, detail="Only an accepted referral can be marked complete")
     referral.status = "COMPLETED"
-    referral.resolved_at = datetime.utcnow()
+    referral.resolved_at = utcnow()
     db.commit()
     db.refresh(referral)
     return referral

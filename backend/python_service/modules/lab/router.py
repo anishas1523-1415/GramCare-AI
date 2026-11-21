@@ -14,6 +14,8 @@ Planning-doc contract (standalone Laboratory web app, its own role, LAB):
 """
 import math
 from datetime import datetime
+
+from core.timezone_json import utcnow
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -253,7 +255,7 @@ async def submit_report(
         file_url = uploaded["url"]
 
     booking.report_payload = body.model_dump(exclude={"file_base64"}) | {"file_url": file_url}
-    booking.report_ready_at = datetime.utcnow()
+    booking.report_ready_at = utcnow()
     booking.status = "REPORT_READY"
 
     values_summary = "; ".join(

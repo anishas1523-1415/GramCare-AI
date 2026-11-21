@@ -27,6 +27,8 @@ from sqlalchemy.orm import Session
 
 from datetime import datetime, timedelta, timezone
 
+from core.timezone_json import utcnow
+
 import models
 import schemas
 from database import get_db
@@ -144,7 +146,7 @@ async def issue_prescription(
     # against whatever else this patient is currently, actively taking
     # (same start-date + duration logic as the AI Doctor Assistant's
     # patient-summary "active medicines" detection).
-    now = datetime.utcnow()
+    now = utcnow()
     other_rx = (
         db.query(models.Prescription)
         .filter(
@@ -555,7 +557,7 @@ async def vitals_history(
     """Recent vitals for the Health Vitals Tracker dashboard (graphs/trends),
     scoped to the caller and optionally to one family member."""
     resolve_owned_profile(family_profile_id, current_user, db)
-    cutoff = datetime.utcnow() - timedelta(days=days)
+    cutoff = utcnow() - timedelta(days=days)
     q = db.query(models.IoTVitals).filter(
         models.IoTVitals.patient_id == current_user.id,
         models.IoTVitals.timestamp >= cutoff,

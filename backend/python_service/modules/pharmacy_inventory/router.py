@@ -14,6 +14,8 @@ Planning-doc features implemented here:
 """
 import math
 from datetime import date, datetime, timedelta
+
+from core.timezone_json import utcnow
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -698,7 +700,7 @@ async def fulfill_preorder(
     if not preorder:
         raise HTTPException(status_code=404, detail="Pre-order not found")
     preorder.status = "FULFILLED"
-    preorder.fulfilled_at = datetime.utcnow()
+    preorder.fulfilled_at = utcnow()
     db.commit()
     db.refresh(preorder)
     return preorder

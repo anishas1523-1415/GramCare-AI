@@ -24,6 +24,8 @@ mapped onto the same INFO/WARNING/CRITICAL scale the new checks use
 severity vocabulary in this combined endpoint.
 """
 from datetime import datetime, timedelta
+
+from core.timezone_json import utcnow
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -124,7 +126,7 @@ async def run_cds_check(
     # a medicine counts as active if start date + parsed course duration
     # hasn't elapsed yet. Also doubles as this patient's prescription
     # history for the dosage-sanity check below.
-    now = datetime.utcnow()
+    now = utcnow()
     prior_rx = (
         db.query(models.Prescription)
         .filter(models.Prescription.patient_id == body.patient_id)
