@@ -55,3 +55,8 @@ package-lock.json
 
 # Office lock files
 ~$*
+
+# Claude-generated deliverables for the user (decks, manuscripts) plus a
+# DEMO_ACCOUNTS.txt that holds live demo credentials. Deliverables, not source,
+# and the credentials file must never land in the repo.
+Claude outputs/
