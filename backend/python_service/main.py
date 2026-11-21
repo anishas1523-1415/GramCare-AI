@@ -128,12 +128,25 @@ async def lifespan(app: FastAPI):
         task.cancel()
 
 
+# Interactive API docs are a development tool, not a public one. Left on, /docs
+# and /openapi.json hand an unauthenticated visitor the full shape of all 133
+# endpoints: every path, every request and response schema, every enum. That is
+# reconnaissance material for an API that carries health records, and it costs
+# nothing to withhold. They stay on everywhere except production, where
+# ENVIRONMENT is explicitly set; the same variable already gates the JWT secret
+# check in modules/auth/utils.py, so there is one notion of "production" here.
+_ENVIRONMENT = os.getenv("ENVIRONMENT", "development").lower()
+_IS_PRODUCTION = _ENVIRONMENT == "production"
+
 app = FastAPI(
     title="GramCare AI Backend",
     description="Central Nervous System for the Patient, Doctor, and Pharmacy Suites.",
     version="1.0.0",
     lifespan=lifespan,
     default_response_class=UtcJSONResponse,
+    docs_url=None if _IS_PRODUCTION else "/docs",
+    redoc_url=None if _IS_PRODUCTION else "/redoc",
+    openapi_url=None if _IS_PRODUCTION else "/openapi.json",
 )
 
 # Configure CORS
@@ -235,6 +248,37 @@ def health():
     }
 
 
+def _payments_health():
+    """Payments health reflects what the gateway is DOING, not what is set.
+
+    This used to report "Razorpay live" whenever the two environment variables
+    were present. Production had present-but-rejected credentials, so the
+    endpoint said live while every order creation failed and appointments were
+    unbookable. Key presence is not liveness.
+    """
+    from modules.payments.router import gateway_health
+
+    gh = gateway_health()
+    if not gh["configured"]:
+        return {"live": False,
+                "detail": "mock mode - orders are not real payments"}
+    if gh["last_error"]:
+        return {
+            "live": False,
+            "detail": (
+                "Razorpay credentials are configured but the gateway REJECTED "
+                "the last order creation, so orders fall back to mock mode and "
+                "are NOT real payments. Last error at %s: %s"
+                % (gh["last_error_at"], gh["last_error"])
+            ),
+        }
+    return {
+        "live": True,
+        "detail": "Razorpay configured; no gateway error observed since boot. "
+                  "Reflects the last attempt, not a live probe.",
+    }
+
+
 @app.get("/health/integrations", tags=["System"])
 def integrations_health():
     """Which external integrations are actually live.
@@ -306,11 +350,7 @@ def integrations_health():
                      "(422) for everyone else."
             ),
         },
-        "payments": {
-            "live": bool(os.getenv("RAZORPAY_KEY_ID") and os.getenv("RAZORPAY_KEY_SECRET")),
-            "detail": "Razorpay live" if os.getenv("RAZORPAY_KEY_ID") and os.getenv("RAZORPAY_KEY_SECRET")
-            else "mock mode — orders are not real",
-        },
+        "payments": _payments_health(),
         "file_storage": {
             "live": True,
             "detail": "Cloudinary" if cloudinary_client.configured

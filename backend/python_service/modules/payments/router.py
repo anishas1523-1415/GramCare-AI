@@ -23,6 +23,7 @@ Reliability notes (why the extra endpoints/locking below exist):
 import os
 import time
 import uuid
+from datetime import datetime, timezone
 import json
 import logging
 from typing import List, Optional
@@ -88,6 +89,10 @@ class OrderCreateRequest(BaseModel):
     idempotency_key: Optional[str] = Field(None, max_length=100)
 
 class OrderResponse(BaseModel):
+    # True when the real gateway was configured but refused or was
+    # unreachable, so this order is a mock one. Distinct from is_mock, which is
+    # also true when no gateway is configured at all.
+    gateway_unavailable: bool = False
     order_id: str
     amount: int  # paise
     currency: str
@@ -101,6 +106,22 @@ class VerifyPaymentRequest(BaseModel):
 class VerifyPaymentResponse(BaseModel):
     status: str
     message: str
+
+
+# Set when the real gateway rejects or is unreachable, cleared on the next
+# success. /health/integrations reports it, so "payments: live" stops meaning
+# merely "keys are present in the environment".
+LAST_GATEWAY_ERROR = {"at": None, "error": None}
+
+
+def gateway_health():
+    """What the payment gateway is actually doing, not what is configured."""
+    configured = bool(razorpay_client)
+    return {
+        "configured": configured,
+        "last_error_at": LAST_GATEWAY_ERROR["at"],
+        "last_error": LAST_GATEWAY_ERROR["error"],
+    }
 
 # ============================================================
 # Endpoints
@@ -136,6 +157,7 @@ async def create_order(
             )
 
     amount_in_paise = int(request.amount * 100)
+    degraded = False
 
     if razorpay_client:
         try:
@@ -148,8 +170,28 @@ async def create_order(
             order_id = order["id"]
             gateway = "razorpay"
         except Exception as e:
-            logger.error(f"Razorpay order creation failed: {e}")
-            raise HTTPException(status_code=502, detail="Payment gateway error.")
+            # A gateway failure used to raise 502 here, which killed the whole
+            # booking journey: consultations are pay-before-book, so a rejected
+            # or expired Razorpay credential made appointments unbookable.
+            #
+            # Note that an UNCONFIGURED gateway already falls through to mock
+            # mode below and books fine, so a bad credential was strictly worse
+            # than no credential. Both now behave the same way, and the
+            # response says so: is_mock=true plus gateway_unavailable=true, so
+            # a client can show "test mode - gateway unreachable" rather than
+            # implying money moved.
+            logger.error(
+                "Razorpay order creation failed (%s: %s) - falling back to mock "
+                "mode so booking stays usable. Orders created now are NOT real "
+                "payments.", type(e).__name__, e)
+            LAST_GATEWAY_ERROR["at"] = datetime.now(timezone.utc).isoformat()
+            LAST_GATEWAY_ERROR["error"] = "%s: %s" % (type(e).__name__, str(e)[:200])
+            order_id = f"order_{uuid.uuid4().hex[:14]}"
+            gateway = "mock"
+            degraded = True
+        else:
+            LAST_GATEWAY_ERROR["at"] = None
+            LAST_GATEWAY_ERROR["error"] = None
     else:
         time.sleep(0.3)
         order_id = f"order_{uuid.uuid4().hex[:14]}"
@@ -194,6 +236,7 @@ async def create_order(
         amount=amount_in_paise,
         currency=request.currency,
         is_mock=(gateway == "mock"),
+        gateway_unavailable=degraded,
     )
 
 
